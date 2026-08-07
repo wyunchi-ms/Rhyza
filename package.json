@@ -1,0 +1,60 @@
+{
+  "name": "pigraph",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist-electron/electron/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "electron:compile": "tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",
+    "electron:dev": "npm run electron:compile && run-p dev electron:dev:main",
+    "electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron dist-electron/electron/main/index.js",
+    "electron:start": "npm run electron:compile && electron dist-electron/electron/main/index.js",
+    "build": "tsc && vite build && npm run electron:compile",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "smoke:ipc": "tsx scripts/ipc-smoke.ts",
+    "electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wyunchi-ms/PiGraph.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wyunchi-ms/PiGraph/issues"
+  },
+  "homepage": "https://github.com/wyunchi-ms/PiGraph#readme",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.83.0",
+    "@tanstack/react-query": "^5.101.4",
+    "clsx": "^2.1.1",
+    "cross-env": "7.0.3",
+    "dagre": "^0.8.5",
+    "framer-motion": "^13.0.0-alpha.0",
+    "lucide-react": "^1.28.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-icons": "^5.7.0",
+    "react-router-dom": "^7.18.2",
+    "reactflow": "^11.11.4",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "autoprefixer": "^10.5.4",
+    "electron": "44.0.0-alpha.7",
+    "npm-run-all": "4.1.5",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
+    "tsx": "4.23.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0-beta.0"
+  }
+}
