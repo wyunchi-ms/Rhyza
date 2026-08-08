@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -9,13 +10,29 @@ const defaultSettings: PersistedSettings = { workspacePath: null };
 
 export class SettingsStore {
 	private readonly settingsPath: string;
+	private readonly legacySettingsPath?: string;
 
-	constructor(userDataPath: string) {
-		this.settingsPath = path.join(userDataPath, "knowbranch-settings.json");
+	constructor(dataRoot: string, legacyUserDataPath?: string) {
+		this.settingsPath = path.join(dataRoot, "settings.json");
+		this.legacySettingsPath = legacyUserDataPath
+			? path.join(legacyUserDataPath, "knowbranch-settings.json")
+			: undefined;
 	}
 
 	async getWorkspacePath(): Promise<string | null> {
 		return (await this.readSettings()).workspacePath;
+	}
+
+	getWorkspacePathSync(): string | null {
+		for (const settingsPath of [this.settingsPath, this.legacySettingsPath]) {
+			if (!settingsPath) continue;
+			try {
+				return parseSettings(readFileSync(settingsPath, "utf8")).workspacePath;
+			} catch (error) {
+				if (!isMissingFileError(error)) throw error;
+			}
+		}
+		return null;
 	}
 
 	async setWorkspacePath(workspacePath: string | null): Promise<void> {
@@ -35,25 +52,30 @@ export class SettingsStore {
 	}
 
 	private async readSettings(): Promise<PersistedSettings> {
-		try {
-			const raw = await readFile(this.settingsPath, "utf8");
-			const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
-			return {
-				workspacePath:
-					typeof parsed.workspacePath === "string" ? parsed.workspacePath : null,
-			};
-		} catch (error) {
-			if (isMissingFileError(error)) {
-				return defaultSettings;
+		for (const [index, settingsPath] of [this.settingsPath, this.legacySettingsPath].entries()) {
+			if (!settingsPath) continue;
+			try {
+				const settings = parseSettings(await readFile(settingsPath, "utf8"));
+				if (index > 0) await this.writeSettings(settings);
+				return settings;
+			} catch (error) {
+				if (!isMissingFileError(error)) throw error;
 			}
-			throw error;
 		}
+		return defaultSettings;
 	}
 
 	private async writeSettings(settings: PersistedSettings): Promise<void> {
 		await mkdir(path.dirname(this.settingsPath), { recursive: true });
 		await writeFile(this.settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 	}
+}
+
+function parseSettings(raw: string): PersistedSettings {
+	const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
+	return {
+		workspacePath: typeof parsed.workspacePath === "string" ? parsed.workspacePath : null,
+	};
 }
 
 export async function canonicalizeWorkspacePath(workspacePath: string): Promise<string> {

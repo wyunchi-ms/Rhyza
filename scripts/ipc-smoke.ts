@@ -6,17 +6,39 @@ import {
 	validateAgentPromptRequest,
 	validateModelCatalogRequest,
 	validateProviderStatusRequest,
+	validateSummaryRequest,
+	validateKnowledgeExtractionRequest,
+	validateOpenExternalRequest,
+	validateAppStateSaveRequest,
 } from "../src/shared/ipc.js";
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "knowbranch-ipc-smoke-"));
 
 try {
-	const service = new PiService(tempRoot);
+	const service = new PiService(
+		tempRoot,
+		undefined,
+		undefined,
+		path.join(tempRoot, "pi-agent"),
+	);
 
 	assertThrows(() => validateProviderStatusRequest({ providerId: "openai" }));
 	assertThrows(() => validateAgentPromptRequest({ prompt: "missing workspace" }));
 	validateProviderStatusRequest({ providerId: "github-copilot" });
 	validateModelCatalogRequest({ providerId: "github-copilot", refresh: false });
+	validateSummaryRequest({ text: "How does the session tree work?" });
+	assertThrows(() => validateSummaryRequest({ text: "" }));
+	validateKnowledgeExtractionRequest({
+		question: "What is a worktree?",
+		answer: "A worktree is an additional checkout.",
+		existingEntities: [],
+		existingDiagrams: [],
+	});
+	assertThrows(() => validateKnowledgeExtractionRequest({ question: "", answer: "x", existingEntities: [], existingDiagrams: [] }));
+	validateOpenExternalRequest({ url: "https://github.com/login/device" });
+	assertThrows(() => validateOpenExternalRequest({ url: "file:///etc/passwd" }));
+	validateAppStateSaveRequest({ value: "{}", workspacePath: tempRoot });
+	assertThrows(() => validateAppStateSaveRequest({ value: "{}" }));
 
 	const status = await service.getProviderStatus("github-copilot");
 	if (status.providerId !== "github-copilot") {

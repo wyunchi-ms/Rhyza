@@ -24,8 +24,20 @@ const bridge: KnowbranchBridge = {
 		ipcRenderer.invoke(ipcChannels.modelCatalog, request),
 	getWorkspace: () => ipcRenderer.invoke(ipcChannels.getWorkspace),
 	selectWorkspace: () => ipcRenderer.invoke(ipcChannels.selectWorkspace),
+	sourceList: () => ipcRenderer.invoke(ipcChannels.sourceList),
+	sourceAdd: () => ipcRenderer.invoke(ipcChannels.sourceAdd),
+	sourceRefresh: (request) => ipcRenderer.invoke(ipcChannels.sourceRefresh, request),
+	sourceArchive: (request) => ipcRenderer.invoke(ipcChannels.sourceArchive, request),
+	sourceSearch: (request) => ipcRenderer.invoke(ipcChannels.sourceSearch, request),
+	workspaceDiff: (request) => ipcRenderer.invoke(ipcChannels.workspaceDiff, request),
+	workspaceExportPatch: (request) => ipcRenderer.invoke(ipcChannels.workspaceExportPatch, request),
 	agentPrompt: (request: AgentPromptRequest) =>
 		ipcRenderer.invoke(ipcChannels.agentPrompt, request),
+	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
+	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
+	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
+	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
+	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	onAuthEvent: (listener: (event: AuthBridgeEvent) => void) => {
 		const wrapped = (_event: Electron.IpcRendererEvent, payload: AuthBridgeEvent) =>
 			listener(payload);

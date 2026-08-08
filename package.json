@@ -5,15 +5,17 @@
   "main": "dist-electron/electron/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+		"dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "electron:compile": "tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",
     "electron:dev": "npm run electron:compile && run-p dev electron:dev:main",
-    "electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron dist-electron/electron/main/index.js",
+		"electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron dist-electron/electron/main/index.js",
     "electron:start": "npm run electron:compile && electron dist-electron/electron/main/index.js",
     "build": "tsc && vite build && npm run electron:compile",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "smoke:ipc": "tsx scripts/ipc-smoke.ts",
+    "smoke:mvp": "tsx scripts/mvp-smoke.ts",
+		"smoke:state-store": "tsx scripts/app-state-store-smoke.ts",
     "electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
   },
   "repository": {
@@ -28,6 +30,7 @@
   },
   "homepage": "https://github.com/wyunchi-ms/PiGraph#readme",
   "dependencies": {
+    "@earendil-works/pi-ai": "^0.83.0",
     "@earendil-works/pi-coding-agent": "0.83.0",
     "@tanstack/react-query": "^5.101.4",
     "clsx": "^2.1.1",
@@ -35,16 +38,20 @@
     "dagre": "^0.8.5",
     "framer-motion": "^13.0.0-alpha.0",
     "lucide-react": "^1.28.0",
+    "mermaid": "^11.16.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-icons": "^5.7.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.2",
     "reactflow": "^11.11.4",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.9.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",

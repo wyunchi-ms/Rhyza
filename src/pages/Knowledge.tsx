@@ -1,157 +1,82 @@
-import { Database, Filter, Link as LinkIcon, Search, X } from "lucide-react";
-import type React from "react";
-import { useState } from "react";
+import { Database, Network, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { DiagramViewer } from "../components/DiagramViewer";
+import { MermaidDiagram } from "../components/MermaidDiagram";
 import { useAppStore } from "../store";
-import type { Entity } from "../types";
+import type { Diagram, Entity } from "../types";
 
-const Knowledge: React.FC = () => {
-	const { entities } = useAppStore();
+const Knowledge = () => {
+	const store = useAppStore();
+	const [mode, setMode] = useState<"entities" | "diagrams">("entities");
 	const [search, setSearch] = useState("");
-	const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
-
-	const filteredEntities = entities.filter(
-		(e) =>
-			e.name.toLowerCase().includes(search.toLowerCase()) ||
-			e.summary.toLowerCase().includes(search.toLowerCase()) ||
-			e.type.toLowerCase().includes(search.toLowerCase()),
-	);
+	const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
+	const activeEntities = store.entities.filter((entity) => !entity.deletedAt);
+	const activeDiagrams = store.diagrams.filter((diagram) => !diagram.deletedAt);
+	const selected = activeEntities.find((entity) => entity.id === store.selectedEntityId) ?? null;
+	const filtered = activeEntities.filter((entity) => `${entity.name} ${entity.aliases.join(" ")} ${entity.type} ${entity.summary}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+	const diagram = activeDiagrams.find((item) => item.id === selectedDiagramId) ?? activeDiagrams[0] ?? null;
+	useEffect(() => {
+		if (diagram && diagram.id !== selectedDiagramId) setSelectedDiagramId(diagram.id);
+	}, [diagram, selectedDiagramId]);
 
 	return (
-		<div className="flex-1 flex bg-white overflow-hidden relative w-full">
-			<div className="flex-1 flex flex-col p-8 max-w-7xl mx-auto w-full h-full overflow-hidden">
-				<div className="flex items-center justify-between mb-8 shrink-0">
-					<div>
-						<h1 className="text-3xl font-black tracking-tight text-primary">
-							Knowledge Base
-						</h1>
-						<p className="text-secondary mt-2 text-lg">
-							Entities, Relations, and Diagrams across all sessions.
-						</p>
-					</div>
-					<div className="flex gap-2">
-						<div className="relative">
-							<Search
-								className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-								size={18}
-							/>
-							<input
-								type="text"
-								placeholder="Search knowledge..."
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm w-64"
-							/>
-						</div>
-						<button
-							type="button"
-							className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-secondary transition-colors"
-						>
-							<Filter size={18} />
-						</button>
-					</div>
-				</div>
-
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto pb-8 content-start h-full">
-					{filteredEntities.map((entity) => (
-						<button
-							type="button"
-							key={entity.id}
-							onClick={() => setSelectedEntity(entity)}
-							className="p-6 text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-lg transition-all group cursor-pointer h-48 flex flex-col"
-						>
-							<div className="flex items-start justify-between mb-4">
-								<div className="flex items-center gap-2">
-									<div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-colors">
-										<Database size={20} />
-									</div>
-									<div>
-										<h3 className="font-bold text-primary text-lg">
-											{entity.name}
-										</h3>
-										<span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-											{entity.type}
-										</span>
-									</div>
-								</div>
-							</div>
-							<p className="text-sm text-secondary leading-relaxed flex-1 line-clamp-2">
-								{entity.summary}
-							</p>
-							<div className="flex items-center justify-between border-t border-gray-100 pt-4 shrink-0">
-								<div className="flex gap-4 text-xs font-medium text-gray-500">
-									<span className="flex items-center gap-1">
-										<LinkIcon size={14} className="text-gray-400" /> Relations
-									</span>
-									<span>v{entity.version}</span>
-								</div>
-								<span
-									className={`px-2.5 py-1 rounded text-xs font-bold ${entity.confidence === "confirmed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-								>
-									{entity.confidence}
-								</span>
-							</div>
-						</button>
-					))}
-					{filteredEntities.length === 0 && (
-						<div className="col-span-3 py-12 text-center text-secondary">
-							No entities found matching "{search}"
-						</div>
-					)}
-				</div>
-			</div>
-
-			{selectedEntity && (
-				<div className="absolute inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 flex flex-col animate-in slide-in-from-right-8 duration-200 z-20">
-					<div className="p-6 border-b border-gray-100 flex justify-between items-start bg-gray-50">
-						<div>
-							<span className="text-xs font-semibold text-accent uppercase tracking-wider mb-1 block">
-								{selectedEntity.type}
-							</span>
-							<h2 className="text-2xl font-black text-primary">
-								{selectedEntity.name}
-							</h2>
-						</div>
-						<button
-							type="button"
-							onClick={() => setSelectedEntity(null)}
-							className="p-1 hover:bg-gray-200 rounded-md text-gray-500"
-						>
-							<X size={20} />
-						</button>
-					</div>
-					<div className="p-6 flex-1 overflow-y-auto">
-						<h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">
-							Summary
-						</h4>
-						<p className="text-secondary leading-relaxed mb-6">
-							{selectedEntity.summary}
-						</p>
-
-						<h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">
-							Content
-						</h4>
-						<p className="text-secondary leading-relaxed mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm whitespace-pre-wrap">
-							{selectedEntity.content}
-						</p>
-
-						<h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">
-							Metadata
-						</h4>
-						<div className="flex flex-col gap-2 text-sm text-secondary">
-							<div className="flex justify-between py-2 border-b border-gray-50">
-								<span className="font-medium text-gray-400">Confidence</span>
-								<span className="font-bold">{selectedEntity.confidence}</span>
-							</div>
-							<div className="flex justify-between py-2 border-b border-gray-50">
-								<span className="font-medium text-gray-400">Version</span>
-								<span className="font-bold">v{selectedEntity.version}</span>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
+		<div className="knowledge-layout flex-1 grid grid-cols-[220px_minmax(0,1fr)_320px] bg-white overflow-hidden relative">
+			<aside className="border-r border-gray-200 p-4 overflow-y-auto">
+				<h1 className="text-lg font-semibold text-primary mb-4">Knowledge</h1>
+				<div className="segmented mb-4"><button type="button" className={mode === "entities" ? "active" : ""} onClick={() => setMode("entities")}><Database size={14} /> Entities</button><button type="button" className={mode === "diagrams" ? "active" : ""} onClick={() => setMode("diagrams")}><Network size={14} /> Diagrams</button></div>
+				<div className="relative mb-4"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="field field-with-icon" placeholder="Search" /></div>
+				{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={`w-full text-left px-3 py-2 rounded-md mb-1 ${selected?.id === entity.id ? "bg-accent/10 text-accent" : "hover:bg-gray-50"}`}><span className="block text-sm font-semibold truncate">{entity.name}</span><span className="block text-xs text-secondary">{entity.type} / v{entity.version}</span></button>) : activeDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={`w-full text-left px-3 py-2 rounded-md mb-1 ${diagram?.id === item.id ? "bg-accent/10 text-accent" : "hover:bg-gray-50"}`}><span className="block text-sm font-semibold truncate">{item.name}</span><span className="block text-xs font-normal">{item.type} / v{item.version}</span></button>)}
+			</aside>
+			<main className="min-w-0 min-h-0 overflow-hidden">
+				{mode === "diagrams" && diagram ? <DiagramViewer diagram={diagram} /> : mode === "diagrams" ? <div className="empty-state h-full">Mermaid diagrams from agent responses will appear here.</div> : <EntityOverview entities={filtered} onSelect={store.setSelectedEntity} />}
+			</main>
+			<aside className={`entity-detail-pane border-l border-gray-200 overflow-y-auto ${(mode === "diagrams" ? diagram : selected) ? "is-open" : ""}`}>{mode === "diagrams" ? diagram ? <DiagramEditor diagram={diagram} onDeleted={() => setSelectedDiagramId(null)} /> : <div className="empty-state h-full">Select a diagram to edit it.</div> : selected ? <EntityEditor entity={selected} /> : <div className="empty-state h-full">Select an entity to inspect sources, relations, and history.</div>}</aside>
 		</div>
 	);
 };
+
+function EntityOverview({ entities, onSelect }: { entities: Entity[]; onSelect: (id: string) => void }) {
+	return <div className="p-6 overflow-y-auto h-full"><div className="entity-grid">{entities.map((entity) => <button type="button" key={entity.id} onClick={() => onSelect(entity.id)} className="entity-row"><div className="flex justify-between gap-3"><h2 className="font-semibold text-primary truncate">{entity.name}</h2><span className="status-badge status-progress">{entity.confidence}</span></div><p className="text-sm text-secondary mt-2 line-clamp-2">{entity.summary}</p><p className="text-xs text-gray-400 mt-3">{entity.type} · {entity.sourceRefs.length} sources</p></button>)}</div>{entities.length === 0 && <div className="empty-state h-full">No entities yet. Complete a chat turn or create one manually.</div>}</div>;
+}
+
+function EntityEditor({ entity }: { entity: Entity }) {
+	const { saveEntity, softDeleteEntity, saveRelation, softDeleteRelation, relations, entities, changesets } = useAppStore();
+	const [draft, setDraft] = useState(entity);
+	const [relationTarget, setRelationTarget] = useState("");
+	const [relationType, setRelationType] = useState("related_to");
+	const [relationDescription, setRelationDescription] = useState("");
+	useEffect(() => setDraft(entity), [entity]);
+	const entityRelations = relations.filter((relation) => !relation.deletedAt && (relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id));
+	const history = changesets.filter((change) => change.operations.some((operation) => operation.objectId === entity.id));
+	return <form className="p-5 space-y-5" onSubmit={(event) => { event.preventDefault(); saveEntity(draft); }}>
+		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">{entity.type}</span><h2 className="text-xl font-black text-primary truncate">{entity.name}</h2></div><button type="button" title="Archive entity" onClick={() => { if (window.confirm(`Archive “${entity.name}” and its relations?`)) softDeleteEntity(entity.id); }} className="secondary-button shrink-0 text-red-600"><Trash2 size={14} /> Archive</button></div>
+		<label className="form-label">Name<input className="field mt-1" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+		<label className="form-label">Type<input className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} /></label>
+		<label className="form-label">Confidence<select className="field mt-1" value={draft.confidence} onChange={(event) => setDraft({ ...draft, confidence: event.target.value as Entity["confidence"] })}><option value="confirmed">Confirmed</option><option value="inferred">Inferred</option><option value="disputed">Disputed</option></select></label>
+		<label className="form-label">Aliases<input className="field mt-1" value={draft.aliases.join(", ")} onChange={(event) => setDraft({ ...draft, aliases: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
+		<label className="form-label">Summary<textarea className="field mt-1 min-h-20" value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} /></label>
+		<label className="form-label">Content<textarea className="field mt-1 min-h-32" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
+		<button type="submit" className="command-button w-full justify-center">Save with diff</button>
+		<section><h3 className="section-label">Relations</h3>{entityRelations.map((relation) => { const outgoing = relation.sourceEntityId === entity.id; const otherId = outgoing ? relation.targetEntityId : relation.sourceEntityId; const other = entities.find((item) => item.id === otherId); return <div key={relation.id} className="flex items-start gap-2 border-b border-gray-100 py-2 text-sm"><div className="min-w-0 flex-1"><p><span className="font-semibold">{outgoing ? relation.type : `← ${relation.type}`}</span> {other?.name ?? otherId}</p>{relation.description && <p className="mt-1 text-xs text-secondary">{relation.description}</p>}</div><button type="button" className="icon-button" title="Archive relation" aria-label="Archive relation" onClick={() => softDeleteRelation(relation.id)}><Trash2 size={13} /></button></div>; })}{entityRelations.length === 0 && <p className="text-xs text-secondary">No relations.</p>}<div className="mt-3 space-y-2 rounded-md border border-gray-200 p-3"><select className="field" value={relationTarget} onChange={(event) => setRelationTarget(event.target.value)}><option value="">Target entity</option>{entities.filter((item) => !item.deletedAt && item.id !== entity.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input className="field" value={relationType} onChange={(event) => setRelationType(event.target.value)} placeholder="Relation type" /><input className="field" value={relationDescription} onChange={(event) => setRelationDescription(event.target.value)} placeholder="Description" /><button type="button" className="secondary-button" disabled={!relationTarget || !relationType.trim()} onClick={() => { saveRelation({ id: `relation_${crypto.randomUUID()}`, sourceEntityId: entity.id, targetEntityId: relationTarget, type: relationType.trim(), description: relationDescription.trim(), confidence: "confirmed", sourceRefs: [], version: 0 }); setRelationTarget(""); setRelationDescription(""); }}><Plus size={14} /> Add relation</button></div></section>
+		<section><h3 className="section-label">Sources</h3>{entity.sourceRefs.map((source, index) => <div key={`${source.turnId}-${index}`} className="text-xs text-secondary py-1">{source.path ?? `Session ${source.sessionId}`} {source.turnId ? `/ Turn ${source.turnId.slice(0, 8)}` : ""}</div>)}</section>
+		<section><h3 className="section-label">History</h3>{history.map((change) => <div key={change.id} className="text-xs text-secondary py-1">{change.title} / {new Date(change.timestamp).toLocaleString()}</div>)}</section>
+	</form>;
+}
+
+function DiagramEditor({ diagram, onDeleted }: { diagram: Diagram; onDeleted: () => void }) {
+	const { saveDiagram, softDeleteDiagram } = useAppStore();
+	const [draft, setDraft] = useState(diagram);
+	useEffect(() => setDraft(diagram), [diagram]);
+	return <form className="p-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.mermaidSource.trim()) saveDiagram(draft); }}>
+		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">Diagram</span><h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2></div><button type="button" title="Archive diagram" className="secondary-button shrink-0 text-red-600" onClick={() => { if (window.confirm(`Archive diagram “${diagram.name}”?`)) { softDeleteDiagram(diagram.id); onDeleted(); } }}><Trash2 size={14} /> Archive</button></div>
+		<label className="form-label">Name<input className="field mt-1" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+		<label className="form-label">Type<select className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}><option value="architecture">Architecture</option><option value="structure">Structure</option><option value="flowchart">Flowchart</option><option value="sequence">Sequence</option><option value="swimlane">Swimlane</option><option value="dependency">Dependency</option></select></label>
+		<label className="form-label">Mermaid source<textarea required spellCheck={false} className="field mt-1 min-h-52 font-mono text-xs" value={draft.mermaidSource} onChange={(event) => setDraft({ ...draft, mermaidSource: event.target.value })} /></label>
+		<section><h3 className="section-label">Preview</h3><div className="border border-gray-200 rounded-md overflow-auto p-3 min-h-40 bg-white"><MermaidDiagram source={draft.mermaidSource} /></div></section>
+		<p className="text-xs text-secondary">{draft.nodes.length} indexed nodes · {draft.edges.length} indexed edges</p>
+		<section><h3 className="section-label">Version diff</h3><div className="space-y-2">{[...diagram.versions].reverse().map((version) => <div key={version.version} className="rounded-md border border-gray-200 bg-white p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">Version {version.version}</span><span className="text-[10px] text-gray-400">{new Date(version.timestamp).toLocaleString()}</span></div><div className="mt-2 flex flex-wrap gap-1"><span className="change-add">+{version.addedNodeIds.length} nodes</span><span className="change-add">+{version.addedEdgeIds.length} edges</span><span className="change-delete">-{version.removedNodeIds.length} nodes</span><span className="change-delete">-{version.removedEdgeIds.length} edges</span></div></div>)}</div></section>
+		<button type="submit" className="command-button w-full justify-center" disabled={!draft.mermaidSource.trim()}>Save Mermaid diagram</button>
+	</form>;
+}
 
 export default Knowledge;

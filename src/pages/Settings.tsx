@@ -1,22 +1,21 @@
 import clsx from "clsx";
-import { Cloud, Settings2 } from "lucide-react";
+import { Accessibility, Brain, Cloud, Copy, ExternalLink, Settings2 } from "lucide-react";
 import type React from "react";
 import {
 	githubCopilotProviderId,
 	getKnowbranchBridge,
 	useElectronProviderState,
 } from "../hooks/useKnowbranchBridge";
-import { useAppStore } from "../store";
+import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
+import type { AuthBridgeEvent } from "../shared/ipc";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
 	const electron = useElectronProviderState();
 	const providerLabel = electron.isElectron
 		? "GitHub Copilot"
-		: `${settings.provider} (browser demo fallback)`;
-	const selectedModel = electron.isElectron
-		? settings.defaultModel
-		: settings.defaultModel;
+		: settings.provider;
+	const selectedModel = settings.defaultModel;
 
 	const handleLogin = async () => {
 		const bridge = getKnowbranchBridge();
@@ -47,21 +46,24 @@ const Settings: React.FC = () => {
 	const handleSelectWorkspace = async () => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
-		electron.setWorkspace(await bridge.selectWorkspace());
+		const workspace = await bridge.selectWorkspace();
+		setWorkspacePersistencePath(workspace.path);
+		electron.setWorkspace(workspace);
+		loadWorkspaceState(bridge.appStateLoad());
 	};
 
 	return (
-		<div className="flex-1 flex flex-col bg-white overflow-hidden p-8 max-w-3xl mx-auto w-full">
-			<div className="mb-8">
-				<h1 className="text-3xl font-black tracking-tight text-primary">
+		<div className="settings-page page-scroll">
+			<div className="page-header">
+				<h1 className="page-title">
 					Settings
 				</h1>
-				<p className="text-secondary mt-2 text-lg">
+				<p className="page-subtitle">
 					Configure providers, models, and workspace preferences.
 				</p>
 			</div>
 
-			<div className="space-y-8">
+			<div className="settings-sections">
 				<section>
 					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
 						<Cloud size={16} /> AI Provider
@@ -77,7 +79,7 @@ const Settings: React.FC = () => {
 										? electron.providerStatus?.configured
 											? `Configured via ${electron.providerStatus.source ?? "Pi SDK"}.`
 											: "Not signed in. OAuth/device flow progress appears below."
-										: "Browser demo fallback: provider and model behavior is mocked."}
+										: "Provider controls require the Electron desktop runtime."}
 								</p>
 								{electron.error && (
 									<p className="text-xs text-red-500 mt-1">{electron.error}</p>
@@ -95,16 +97,14 @@ const Settings: React.FC = () => {
 									? electron.providerStatus?.configured
 										? "Sign Out"
 										: "Sign In"
-									: "Sign Out (demo mock)"}
+									: "Desktop required"}
 							</button>
 						</div>
 
 						{electron.authEvents.length > 0 && (
 							<div className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1">
 								{electron.authEvents.map((event, index) => (
-									<div key={`${event.type}-${index}`}>
-										{formatAuthEvent(event)}
-									</div>
+									<AuthEventItem key={`${event.type}-${index}`} event={event} />
 								))}
 							</div>
 						)}
@@ -124,6 +124,7 @@ const Settings: React.FC = () => {
 								}
 								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
 							>
+								<option value="">Use provider default</option>
 								{electron.isElectron ? (
 									electron.models.map((model) => (
 										<option key={model.id} value={model.id}>
@@ -153,7 +154,7 @@ const Settings: React.FC = () => {
 								<p className="text-sm text-secondary break-all">
 									{electron.isElectron
 										? electron.workspace.path ?? "No workspace selected."
-										: "Browser demo fallback: no real filesystem workspace is selected."}
+										: "Workspace selection requires the Electron desktop runtime."}
 								</p>
 							</div>
 							<button
@@ -196,29 +197,31 @@ const Settings: React.FC = () => {
 
 						<div className="flex justify-between items-center">
 							<div>
-								<h3 className="font-bold text-primary">Strict Conflict Mode (Mock)</h3>
+								<h3 className="font-bold text-primary">Worktree isolation</h3>
 								<p className="text-sm text-secondary">
-									Prevent concurrent writes in the same Git Worktree. (Prototype only)
+									Run writable sessions in separate Git worktrees.
 								</p>
 							</div>
-							<button
-								type="button"
-								onClick={() =>
-									updateSettings({ strictConflict: !settings.strictConflict })
-								}
-								className={clsx(
-									"w-12 h-6 rounded-full relative cursor-pointer transition-colors",
-									settings.strictConflict ? "bg-accent" : "bg-gray-300",
-								)}
-							>
-								<div
-									className={clsx(
-										"absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-										settings.strictConflict ? "right-1" : "left-1",
-									)}
-								/>
-							</button>
+							<span className="status-badge status-success">Required for Git</span>
 						</div>
+					</div>
+				</section>
+
+				<section>
+					<h2 className="text-sm font-bold uppercase text-gray-400 mb-4 flex items-center gap-2"><Brain size={16} /> Knowledge policy</h2>
+					<div className="border border-gray-200 rounded-lg p-6 bg-white space-y-5">
+						<label className="form-label">Write mode<select className="field mt-1" value={settings.knowledgeMode} onChange={(event) => updateSettings({ knowledgeMode: event.target.value as typeof settings.knowledgeMode })}><option value="suggest">Suggest changes</option><option value="automatic">Automatic</option><option value="hybrid">Hybrid</option><option value="read_only">Read only</option></select></label>
+						<label className="form-label">Thinking level<select className="field mt-1" value={settings.thinkingLevel} onChange={(event) => updateSettings({ thinkingLevel: event.target.value as typeof settings.thinkingLevel })}><option value="off">Off</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+						<label className="form-label">Confidence threshold: {Math.round(settings.confidenceThreshold * 100)}%<input type="range" min="0" max="1" step="0.05" value={settings.confidenceThreshold} onChange={(event) => updateSettings({ confidenceThreshold: Number(event.target.value) })} className="w-full mt-2" /></label>
+					</div>
+				</section>
+
+				<section>
+					<h2 className="text-sm font-bold uppercase text-gray-400 mb-4 flex items-center gap-2"><Accessibility size={16} /> Accessibility</h2>
+					<div className="border border-gray-200 rounded-lg p-6 bg-white space-y-4">
+						<label className="flex justify-between items-center text-sm font-semibold">Reduce motion<input type="checkbox" checked={settings.reduceMotion} onChange={(event) => updateSettings({ reduceMotion: event.target.checked })} /></label>
+						<label className="flex justify-between items-center text-sm font-semibold">High contrast<input type="checkbox" checked={settings.highContrast} onChange={(event) => updateSettings({ highContrast: event.target.checked })} /></label>
+						<label className="form-label">Font scale: {Math.round(settings.fontScale * 100)}%<input type="range" min="0.85" max="1.35" step="0.05" value={settings.fontScale} onChange={(event) => updateSettings({ fontScale: Number(event.target.value) })} className="w-full mt-2" /></label>
 					</div>
 				</section>
 			</div>
@@ -226,17 +229,17 @@ const Settings: React.FC = () => {
 	);
 };
 
-function formatAuthEvent(event: { type: string } & Record<string, unknown>) {
+function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 	if (event.type === "device_code") {
-		return `Device code: ${event.userCode} at ${event.verificationUri}`;
+		return <div><p>Device code: <strong className="font-mono">{event.userCode}</strong></p><div className="flex gap-2 mt-2"><button type="button" className="secondary-button" onClick={() => void navigator.clipboard.writeText(event.userCode)}><Copy size={13} /> Copy code</button><button type="button" className="secondary-button" onClick={() => void getKnowbranchBridge()?.openExternal({ url: event.verificationUri })}><ExternalLink size={13} /> Open sign-in</button></div></div>;
 	}
 	if (event.type === "auth_url") {
-		return `Open authentication URL: ${event.url}`;
+		return <button type="button" className="secondary-button" onClick={() => void getKnowbranchBridge()?.openExternal({ url: event.url })}><ExternalLink size={13} /> Open authentication page</button>;
 	}
-	if (typeof event.message === "string") {
-		return event.message;
+	if (event.type === "info") {
+		return <div><p>{event.message}</p>{event.links?.map((link) => <button type="button" key={link.url} className="secondary-button mt-2" onClick={() => void getKnowbranchBridge()?.openExternal({ url: link.url })}><ExternalLink size={13} /> {link.label ?? "Open link"}</button>)}</div>;
 	}
-	return event.type;
+	return <p>{event.message}</p>;
 }
 
 export default Settings;

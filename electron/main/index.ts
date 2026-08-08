@@ -1,8 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
+import { setDefaultResultOrder } from "node:dns";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PiService } from "./pi-service.js";
 import { SettingsStore } from "./settings-store.js";
+import { SourceService } from "./source-service.js";
 import {
 	ipcChannels,
 	validateAgentPromptRequest,
@@ -10,39 +13,67 @@ import {
 	validateProviderLoginRequest,
 	validateProviderLogoutRequest,
 	validateProviderStatusRequest,
+	validateIdRequest,
+	validateSourceSearchRequest,
+	validateWorkspaceDiffRequest,
+	validateSummaryRequest,
+	validateKnowledgeExtractionRequest,
+	validateOpenExternalRequest,
+	validateAppStateSaveRequest,
 } from "../../src/shared/ipc.js";
+import { AppStateStore } from "./app-state-store.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined;
 const isSmoke = process.env.KNOWBRANCH_ELECTRON_SMOKE === "1";
+setDefaultResultOrder("ipv4first");
+
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173";
 const smokeTimeoutMs = 15_000;
+const legacyUserDataPath = app.getPath("userData");
+const dataRootPath = path.join(app.getPath("home"), ".pi-graph");
 const smokeUserDataPath = isSmoke
 	? path.join(app.getPath("temp"), `knowbranch-electron-smoke-${process.pid}`)
 	: undefined;
-
-if (smokeUserDataPath) {
-	app.setPath("userData", smokeUserDataPath);
-}
+app.setName("PiGraph");
+app.setPath("userData", smokeUserDataPath ?? path.join(app.getPath("appData"), "PiGraph"));
+const ownsSingleInstanceLock = isSmoke || app.requestSingleInstanceLock();
 
 interface ElectronSmokeEvidence {
 	title: string;
 	bodyText: string;
 	isElectron: boolean;
 	bridgeKeys: string[];
+	stateBytes: number;
+	stateSessions: number;
+	stateTurns: number;
+	knowledgeReferenceCount: number;
 }
 
 let mainWindow: BrowserWindow | undefined;
 let settingsStore: SettingsStore;
 let piService: PiService;
+let sourceService: SourceService;
+let appStateStore: AppStateStore;
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
+
+if (!ownsSingleInstanceLock) {
+	app.quit();
+} else if (!isSmoke) {
+	app.on("second-instance", () => {
+		if (!mainWindow) return;
+		if (mainWindow.isMinimized()) mainWindow.restore();
+		mainWindow.show();
+		mainWindow.focus();
+	});
+}
 
 async function createWindow(): Promise<void> {
 	mainWindow = new BrowserWindow({
 		width: 1280,
 		height: 860,
-		minWidth: 960,
+		minWidth: 760,
 		minHeight: 640,
 		show: false,
 		webPreferences: {
@@ -88,6 +119,30 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
+	ipcMain.on(ipcChannels.appStateLoad, (event) => {
+		// This synchronous read can arrive before Electron has attached senderFrame.
+		// The preload is scoped to our BrowserWindow, so validate its webContents instead.
+		if (!mainWindow || event.sender.id !== mainWindow.webContents.id) {
+			event.returnValue = null;
+			return;
+		}
+		const workspacePath = settingsStore.getWorkspacePathSync();
+		const value = appStateStore.load(workspacePath);
+		if (process.env.KNOWBRANCH_STATE_DEBUG === "1") {
+			console.log("APP_STATE_LOAD", { workspacePath, bytes: value?.length ?? 0 });
+		}
+		event.returnValue = value;
+	});
+	ipcMain.handle(ipcChannels.appStateSave, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateAppStateSaveRequest(payload);
+			if (process.env.KNOWBRANCH_STATE_DEBUG === "1") {
+				console.log("APP_STATE_SAVE", { workspacePath: request.workspacePath, bytes: request.value.length });
+			}
+			await appStateStore.save(request.workspacePath, request.value);
+			return { ok: true as const };
+		}),
+	);
 	ipcMain.handle(ipcChannels.providerStatus, async (event, payload) =>
 		withValidSender(event, () =>
 			piService.getProviderStatus(validateProviderStatusRequest(payload).providerId),
@@ -125,6 +180,45 @@ function registerIpcHandlers(): void {
 			return { path: await settingsStore.getWorkspacePath() };
 		}),
 	);
+	ipcMain.handle(ipcChannels.sourceList, async (event) =>
+		withValidSender(event, () => sourceService.list()),
+	);
+	ipcMain.handle(ipcChannels.sourceAdd, async (event) =>
+		withValidSender(event, async () => {
+			const selection = await dialog.showOpenDialog(mainWindow!, {
+				properties: ["openDirectory", "multiSelections"],
+				title: "Add code or documentation sources",
+			});
+			return selection.canceled ? [] : sourceService.add(selection.filePaths);
+		}),
+	);
+	ipcMain.handle(ipcChannels.sourceRefresh, async (event, payload) =>
+		withValidSender(event, () => sourceService.refresh(validateIdRequest(payload).id)),
+	);
+	ipcMain.handle(ipcChannels.sourceArchive, async (event, payload) =>
+		withValidSender(event, () => sourceService.archive(validateIdRequest(payload).id)),
+	);
+	ipcMain.handle(ipcChannels.sourceSearch, async (event, payload) =>
+		withValidSender(event, () => sourceService.search(validateSourceSearchRequest(payload))),
+	);
+	ipcMain.handle(ipcChannels.workspaceDiff, async (event, payload) =>
+		withValidSender(event, () =>
+			piService.getWorkspaceDiff(validateWorkspaceDiffRequest(payload).frontendSessionId),
+		),
+	);
+	ipcMain.handle(ipcChannels.workspaceExportPatch, async (event, payload) =>
+		withValidSender(event, async () => {
+			const diff = await piService.getWorkspaceDiff(validateWorkspaceDiffRequest(payload).frontendSessionId);
+			const selection = await dialog.showSaveDialog(mainWindow!, {
+				title: "Export session patch",
+				defaultPath: "knowbranch-session.patch",
+				filters: [{ name: "Git patch", extensions: ["patch", "diff"] }],
+			});
+			if (selection.canceled || !selection.filePath) return { canceled: true };
+			await writeFile(selection.filePath, diff.diff, "utf8");
+			return { canceled: false, path: selection.filePath };
+		}),
+	);
 	ipcMain.handle(ipcChannels.agentPrompt, async (event, payload) =>
 		withValidSender(event, async () =>
 			piService.promptAgent(
@@ -132,6 +226,28 @@ function registerIpcHandlers(): void {
 				await settingsStore.requireWorkspacePath(),
 			),
 		),
+	);
+	ipcMain.handle(ipcChannels.generateSummary, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.generateSummary(
+				validateSummaryRequest(payload),
+				await settingsStore.requireWorkspacePath(),
+			),
+		),
+	);
+	ipcMain.handle(ipcChannels.extractKnowledge, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.extractKnowledge(
+				validateKnowledgeExtractionRequest(payload),
+				await settingsStore.requireWorkspacePath(),
+			),
+		),
+	);
+	ipcMain.handle(ipcChannels.openExternal, async (event, payload) =>
+		withValidSender(event, async () => {
+			await shell.openExternal(validateOpenExternalRequest(payload).url);
+			return { ok: true as const };
+		}),
 	);
 }
 
@@ -159,18 +275,25 @@ function isAllowedRendererUrl(url: string): boolean {
 }
 
 app.whenReady().then(async () => {
+	if (!ownsSingleInstanceLock) return;
 	if (isSmoke) {
 		smokeTimeout = setTimeout(() => {
 			console.error("ELECTRON_SMOKE timeout waiting for renderer load");
 			app.exit(1);
 		}, smokeTimeoutMs).unref();
 	}
-	settingsStore = new SettingsStore(app.getPath("userData"));
+	settingsStore = new SettingsStore(dataRootPath, legacyUserDataPath);
+	appStateStore = new AppStateStore(dataRootPath);
+	await appStateStore.migrateLegacyState(
+		await settingsStore.getWorkspacePath(),
+		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),
+	);
 	piService = new PiService(
-		app.getPath("userData"),
+		dataRootPath,
 		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
 	);
+	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
 	registerIpcHandlers();
 	await createWindow();
 
@@ -208,22 +331,25 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 		const evidence = (await window.webContents.executeJavaScript(
 			`(async () => {
 				const deadline = Date.now() + ${smokeTimeoutMs - 1_000};
+				let evidence;
 				while (Date.now() < deadline) {
-					const evidence = {
+					const serializedState = window.knowbranch?.appStateLoad?.() ?? null;
+					let parsedState = {};
+					try { parsedState = serializedState ? (JSON.parse(serializedState).state ?? {}) : {}; } catch {}
+					evidence = {
 						title: document.title,
 						bodyText: document.body?.innerText?.slice(0, 200) ?? '',
 						isElectron: window.knowbranch?.isElectron === true,
 						bridgeKeys: Object.keys(window.knowbranch ?? {}).sort(),
+						stateBytes: serializedState?.length ?? 0,
+						stateSessions: Array.isArray(parsedState.sessions) ? parsedState.sessions.length : 0,
+						stateTurns: Array.isArray(parsedState.turns) ? parsedState.turns.length : 0,
+						knowledgeReferenceCount: document.querySelectorAll('a[href^="#knowledge/"]').length,
 					};
 					if (evidence.bodyText.trim() && evidence.isElectron) return evidence;
 					await new Promise((resolve) => setTimeout(resolve, 100));
 				}
-				return {
-					title: document.title,
-					bodyText: document.body?.innerText?.slice(0, 200) ?? '',
-					isElectron: window.knowbranch?.isElectron === true,
-					bridgeKeys: Object.keys(window.knowbranch ?? {}).sort(),
-				};
+				return evidence;
 			})()`,
 			true,
 		)) as ElectronSmokeEvidence;
