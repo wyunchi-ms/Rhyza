@@ -288,12 +288,14 @@ app.whenReady().then(async () => {
 		await settingsStore.getWorkspacePath(),
 		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),
 	);
+	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
 	piService = new PiService(
 		dataRootPath,
 		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
+		undefined,
+		sourceService,
 	);
-	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
 	registerIpcHandlers();
 	await createWindow();
 

@@ -42,8 +42,8 @@ export const KnowledgePane = () => {
 				{selectedDiagram && (
 					<section className="knowledge-selection">
 						<p className="section-label">Selected diagram</p>
-						<div className="h-80 min-h-0 border border-gray-200 rounded-md overflow-hidden bg-white">
-							<DiagramViewer diagram={selectedDiagram} />
+						<div className="knowledge-diagram-preview border border-gray-200 rounded-md bg-white">
+							<DiagramViewer diagram={selectedDiagram} compact />
 						</div>
 						<Link to="/knowledge" className="text-xs text-accent mt-3 flex items-center gap-1">Open details <ExternalLink size={12} /></Link>
 					</section>

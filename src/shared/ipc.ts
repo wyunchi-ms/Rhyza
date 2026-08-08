@@ -130,6 +130,13 @@ export interface AgentPromptResponse {
 	error?: string;
 	workspacePath?: string;
 	isolated?: boolean;
+	sourceRefs?: Array<{
+		sourceId: string;
+		path: string;
+		revision?: string;
+		lineStart?: number;
+		lineEnd?: number;
+	}>;
 }
 
 export interface SummaryRequest {

@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
 	createAgentSession,
+	defineTool,
 	DefaultResourceLoader,
 	getAgentDir,
 	ModelRuntime,
@@ -10,6 +11,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type {
 	AgentBridgeEvent,
 	AgentPromptRequest,
@@ -32,6 +34,7 @@ import type {
 	WorkspaceDiffResponse,
 } from "../../src/shared/ipc.js";
 import { WorktreeService } from "./worktree-service.js";
+import type { SourceService } from "./source-service.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -44,7 +47,10 @@ interface ActiveSession {
 	frontendSessionId: string;
 	modelKey?: string;
 	unsubscribe: () => void;
+	sourceRefs: Map<string, SourceReference>;
 }
+
+type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
 
 export class PiService {
 	private readonly agentDir: string;
@@ -57,6 +63,7 @@ export class PiService {
 		private readonly emitAuthEvent: (event: AuthBridgeEvent) => void = () => {},
 		private readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
 		agentDir: string = getAgentDir(),
+		private readonly sourceService?: SourceService,
 	) {
 		this.agentDir = agentDir;
 		this.worktreeService = new WorktreeService(userDataPath);
@@ -178,6 +185,7 @@ export class PiService {
 				}
 			}
 			const active = await this.getSession(workspacePath, request, model);
+			active.sourceRefs.clear();
 			const session = active.session;
 			this.emitAgentEvent({
 				type: "prompt_start",
@@ -196,6 +204,7 @@ export class PiService {
 				reasoningText: getLastAssistantReasoning(session),
 				workspacePath: active.workspacePath,
 				isolated: active.isolated,
+				sourceRefs: [...active.sourceRefs.values()],
 			};
 		} catch (error) {
 			return { ok: false, error: errorToMessage(error) };
@@ -270,7 +279,12 @@ export class PiService {
 				session.dispose();
 			}
 		} catch (error) {
-			return { entities: [], relations: [], diagrams: [], error: errorToMessage(error) };
+			return {
+				entities: [],
+				relations: [],
+				diagrams: extractMermaidDiagramCandidates(request),
+				error: errorToMessage(error),
+			};
 		}
 	}
 
@@ -316,11 +330,17 @@ export class PiService {
 			appendSystemPromptOverride: (base) => [
 				...base,
 				workspaceExplorationGuidance,
+				...(this.sourceService ? [sourceRetrievalGuidance] : []),
 				responsePresentationGuidance,
 			],
 		});
 		await resourceLoader.reload();
 		const sessionManager = this.createBranchSessionManager(sessionWorkspace.path, request);
+		const sourceRefs = new Map<string, SourceReference>();
+		const customTools = this.createSourceTools(sourceRefs, workspacePath);
+		const builtInTools = request.writable && sessionWorkspace.isolated
+			? ["read", "grep", "find", "ls", "edit", "write", "bash"]
+			: ["read", "grep", "find", "ls"];
 		const { session } = await createAgentSession({
 			cwd: sessionWorkspace.path,
 			agentDir: this.agentDir,
@@ -329,9 +349,8 @@ export class PiService {
 			thinkingLevel: request.thinkingLevel ?? "medium",
 			sessionManager,
 			resourceLoader,
-			tools: request.writable && sessionWorkspace.isolated
-				? ["read", "grep", "find", "ls", "edit", "write", "bash"]
-				: ["read", "grep", "find", "ls"],
+			tools: [...builtInTools, ...customTools.map((tool) => tool.name)],
+			customTools,
 		});
 		const unsubscribe = session.subscribe((event) =>
 			this.emitAgentEvent(toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event)),
@@ -344,9 +363,71 @@ export class PiService {
 			frontendSessionId: request.frontendSessionId,
 			modelKey,
 			unsubscribe,
+			sourceRefs,
 		};
 		this.activeSessions.set(request.frontendSessionId, created);
 		return created;
+	}
+
+	private createSourceTools(sourceRefs: Map<string, SourceReference>, workspacePath: string) {
+		if (!this.sourceService) return [];
+		const searchSources = defineTool({
+			name: "search_sources",
+			label: "Search sources",
+			description: "Search repositories and documentation attached to this workspace, including material outside the current working directory.",
+			parameters: Type.Object({
+				query: Type.String({ description: "Terms, symbol names, or concepts to search for" }),
+				sourceId: Type.Optional(Type.String({ description: "Optional source id to restrict the search" })),
+				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30, description: "Maximum number of matches" })),
+			}),
+			execute: async (_toolCallId, params) => {
+				const hits = await this.sourceService!.search({
+					query: params.query,
+					sourceId: params.sourceId,
+					limit: params.limit ?? 12,
+				}, workspacePath);
+				const sources = new Map((await this.sourceService!.list(workspacePath)).map((source) => [source.id, source]));
+				const references: SourceReference[] = hits.map((hit) => ({
+					sourceId: hit.sourceId,
+					path: hit.path,
+					revision: sources.get(hit.sourceId)?.revision,
+					lineStart: hit.line,
+					lineEnd: hit.line,
+				}));
+				for (const reference of references) recordSourceReference(sourceRefs, reference);
+				const text = hits.length
+					? hits.map((hit, index) => `${index + 1}. [${hit.sourceId}] ${hit.path}:${hit.line}\n${hit.preview}`).join("\n\n")
+					: "No source matches found.";
+				return { content: [{ type: "text" as const, text }], details: { references } };
+			},
+		});
+		const readSource = defineTool({
+			name: "read_source",
+			label: "Read source",
+			description: "Read a line range from a file returned by search_sources. Paths are relative to the selected source.",
+			parameters: Type.Object({
+				sourceId: Type.String({ description: "Source id returned by search_sources" }),
+				path: Type.String({ description: "Relative file path returned by search_sources" }),
+				lineStart: Type.Optional(Type.Integer({ minimum: 1, description: "First line to read" })),
+				lineEnd: Type.Optional(Type.Integer({ minimum: 1, description: "Last line to read, capped to 200 lines" })),
+			}),
+			execute: async (_toolCallId, params) => {
+				const result = await this.sourceService!.read(params.sourceId, params.path, params.lineStart, params.lineEnd, workspacePath);
+				const reference: SourceReference = {
+					sourceId: result.sourceId,
+					path: result.path,
+					revision: result.revision,
+					lineStart: result.lineStart,
+					lineEnd: result.lineEnd,
+				};
+				recordSourceReference(sourceRefs, reference);
+				return {
+					content: [{ type: "text" as const, text: `[${result.sourceId}] ${result.path}:${result.lineStart}-${result.lineEnd}\n${result.content}` }],
+					details: { references: [reference] },
+				};
+			},
+		});
+		return [searchSources, readSource];
 	}
 
 	private createBranchSessionManager(
@@ -472,11 +553,23 @@ const workspaceExplorationGuidance = `## Workspace exploration
 - Start with directory discovery when the user does not provide exact file paths. Do not claim that file paths are required unless workspace discovery tools have actually failed.
 - Read-only tools may be used freely for analysis. Modify files only when edit, write, or bash tools are available and the user requested a change.`;
 
+const sourceRetrievalGuidance = `## Attached sources
+- search_sources and read_source access repositories and documentation attached to this workspace but outside the current working directory.
+- Use them when the question refers to an attached source, when supplied source matches are insufficient, or when comparing the workspace with external implementations.
+- Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
+
 const responsePresentationGuidance = `## Response presentation
 - When the answer explains a process, call chain, sequence, architecture, state transition, decision path, or relationship graph, prefer a concise Mermaid diagram over an ASCII diagram or arrow-filled code block.
 - Use a fenced \`\`\`mermaid block with valid Mermaid syntax. Choose the diagram type that best matches the information, such as flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, or erDiagram.
+- Design diagrams for a narrow reading pane. Prefer top-to-bottom flowcharts (flowchart TD or TB) and compact vertical grouping; avoid flowchart LR/RL and wide single-row chains unless horizontal order is essential.
+- When a sequence would require many participants across one row, use a vertical flowchart or split it into smaller diagrams instead of producing an extremely wide sequence diagram.
 - Add only the prose needed to explain the diagram. Do not add a diagram when plain text or executable source code is clearer.
 - Keep node labels short. Quote labels that contain punctuation, parentheses, or other syntax-sensitive characters.`;
+
+function recordSourceReference(sourceRefs: Map<string, SourceReference>, reference: SourceReference): void {
+	const key = [reference.sourceId, reference.revision, reference.path, reference.lineStart, reference.lineEnd].join(":");
+	sourceRefs.set(key, reference);
+}
 
 function extractStreamDelta(
 	event: AgentSessionEvent,
@@ -555,7 +648,12 @@ Decide whether the USER'S QUESTION demonstrates that the user does not understan
 Rules:
 - Return zero entities for broad project summaries, status requests, task commands, or questions that merely mention technologies the user already appears to know.
 - Do not create entities just because a term appears in the answer.
-- A direct "what is X / explain X" question is explicit evidence. Infer uncertainty only when the wording strongly indicates confusion or a prerequisite is essential to understand the requested answer.
+- A direct "what is X / explain X" question is evidence that the user may not know X, but it is NOT evidence that X qualifies as an entity. Apply the durable-identity test below first.
+- Durable-identity test: an entity must denote one independently referenceable, stable thing whose identity survives rephrasing and future conversations. Valid examples include a named product, library, protocol, source module, class, file, established technical concept, or established design pattern.
+- Do not create entities for answer sections, explanatory views, or ad-hoc composites such as "OpenCode architecture", "Core and Legacy service boundary", "request flow", "login call chain", "top-level structure", "protocol adaptation layer", "execution loop", or "how X works". Store architecture/structure/flow/call-chain/layering material as diagrams, and store supported connections as relations.
+- A phrase ending in architecture, structure, flow, call chain, execution chain, boundary, layering, layout, path, overview, explanation, mechanism, or lifecycle is normally a view/topic rather than an entity. Only keep it when it is a widely established named concept independent of this project, such as Hexagonal Architecture.
+- Do not turn a full question, heading, Mermaid title, or sentence fragment into an entity name. Do not combine multiple objects with "and", "与", "到", arrows, or versus into one entity.
+- For a project architecture question, prefer zero entities plus diagrams/relations. If the named project itself is a genuine learning gap and is not already present, its entity name is the project name (for example "OpenCode"), never "OpenCode architecture".
 - Prefer zero entities when uncertain. Return at most 3.
 - Return a new entity only when the question demonstrates a learning gap. When the answer materially corrects or extends an existing entity, return it with existingEntityId and a complete updated summary/content. Otherwise do not return it.
 - Never overwrite an existing entity with a generic restatement. Preserve useful existing details and user-authored specificity.
@@ -618,6 +716,7 @@ function parseKnowledgeCandidates(
 		let content = cleanCandidateText(candidate.content, 2_000);
 		if (!name || !type || !summary || !content) return [];
 		const key = name.toLocaleLowerCase();
+		if (!isDurableKnowledgeEntityCandidate(name, type)) return [];
 		const existingEntityId = typeof candidate.existingEntityId === "string" && existingIds.has(candidate.existingEntityId)
 			? candidate.existingEntityId
 			: undefined;
@@ -636,6 +735,20 @@ function parseKnowledgeCandidates(
 			confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
 		}];
 	});
+}
+
+export function isDurableKnowledgeEntityCandidate(name: string, type: string): boolean {
+	const normalizedName = name.trim().replace(/\s+/g, " ");
+	const normalizedType = type.trim().toLocaleLowerCase();
+	if (!normalizedName || normalizedName.length > 80) return false;
+	if (!/^(?:concept|component|pattern|technology|file)$/i.test(normalizedType)) return false;
+	if (/[?？。!！:]$/.test(normalizedName) || /(?:是什么|怎么工作|如何工作|how\s+.+\s+works?)$/i.test(normalizedName)) return false;
+	if (/(?:\s|^)(?:vs\.?|versus)(?:\s|$)|(?:与|和|到|至|→|->)/i.test(normalizedName)) return false;
+	const establishedArchitecture = /^(?:hexagonal architecture|clean architecture|onion architecture|event-driven architecture|microservices?|六边形架构|整洁架构|洋葱架构|事件驱动架构|微服务架构)$/i.test(normalizedName);
+	const viewOrTopicSuffix = /(?:架构|结构|流程|调用链|执行链|服务边界|边界|适配层|分层|布局|路径|概述|总览|说明|机制|生命周期|architecture|structure|flow|call chain|execution chain|boundary|layering|layout|path|overview|mechanism|lifecycle)$/i;
+	if (!establishedArchitecture && viewOrTopicSuffix.test(normalizedName)) return false;
+	const genericViewNames = /^(?:架构|系统架构|整体架构|顶层结构|总体流程|执行流程|调用流程|实现方式|工作原理|architecture|system architecture|request flow|execution flow|implementation|overview)$/i;
+	return !genericViewNames.test(normalizedName);
 }
 
 function parseRelationCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeRelationCandidate[] {
@@ -661,11 +774,10 @@ function parseRelationCandidates(value: unknown, request: KnowledgeExtractionReq
 }
 
 function parseDiagramCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
-	if (!Array.isArray(value)) return [];
 	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map((match) => match[1].trim());
 	const existingIds = new Set(request.existingDiagrams.map((diagram) => diagram.id));
 	const diagramTypes = new Set<KnowledgeDiagramCandidate["type"]>(["architecture", "structure", "flowchart", "sequence", "swimlane", "dependency"]);
-	return value.slice(0, mermaidBlocks.length).flatMap((candidate): KnowledgeDiagramCandidate[] => {
+	const parsed = (Array.isArray(value) ? value : []).slice(0, mermaidBlocks.length).flatMap((candidate): KnowledgeDiagramCandidate[] => {
 		if (!isRecord(candidate) || !Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) return [];
 		const sourceIndex = typeof candidate.sourceIndex === "number" ? Math.trunc(candidate.sourceIndex) : -1;
 		const mermaidSource = mermaidBlocks[sourceIndex];
@@ -694,6 +806,94 @@ function parseDiagramCandidates(value: unknown, request: KnowledgeExtractionRequ
 			: undefined;
 		return [{ name, type, existingDiagramId, mermaidSource, nodes, edges }];
 	});
+	const parsedSources = new Set(parsed.map((candidate) => candidate.mermaidSource.trim()));
+	return [
+		...parsed,
+		...extractMermaidDiagramCandidates(request).filter(
+			(candidate) => !parsedSources.has(candidate.mermaidSource.trim()),
+		),
+	];
+}
+
+export function extractMermaidDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+	const matches = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)];
+	return matches.flatMap((match, index) => {
+		const mermaidSource = match[1].trim();
+		if (!mermaidSource) return [];
+		const parsed = parseMermaidStructure(mermaidSource);
+		if (parsed.nodes.length === 0) return [];
+		const heading = nearestMarkdownHeading(request.answer, match.index ?? 0);
+		return [{
+			name: heading || `Diagram ${index + 1}`,
+			type: parsed.type,
+			mermaidSource,
+			nodes: parsed.nodes,
+			edges: parsed.edges,
+		}];
+	});
+}
+
+function parseMermaidStructure(source: string): Pick<KnowledgeDiagramCandidate, "type" | "nodes" | "edges"> {
+	const firstLine = source.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !line.startsWith("%%")) ?? "";
+	const type: KnowledgeDiagramCandidate["type"] = /^sequenceDiagram\b/i.test(firstLine)
+		? "sequence"
+		: /^(?:classDiagram|erDiagram)\b/i.test(firstLine)
+			? "dependency"
+			: /^architecture\b/i.test(firstLine)
+				? "architecture"
+				: "flowchart";
+	const labels = new Map<string, string>();
+	const edgeCandidates: Array<{ sourceKey: string; targetKey: string; label?: string }> = [];
+	for (const rawLine of source.split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith("%%")) continue;
+		const participant = line.match(/^(?:participant|actor)\s+([\w.-]+)(?:\s+as\s+(.+))?$/i);
+		if (participant) {
+			labels.set(participant[1], cleanMermaidLabel(participant[2] ?? participant[1]));
+			continue;
+		}
+		const sequenceEdge = line.match(/^([\w.-]+)\s*(?:--?>>?|--?x|--?\)|-\)|x--?>|\)--)\s*([\w.-]+)\s*:\s*(.+)$/);
+		if (sequenceEdge) {
+			labels.set(sequenceEdge[1], labels.get(sequenceEdge[1]) ?? sequenceEdge[1]);
+			labels.set(sequenceEdge[2], labels.get(sequenceEdge[2]) ?? sequenceEdge[2]);
+			edgeCandidates.push({ sourceKey: sequenceEdge[1], targetKey: sequenceEdge[2], label: cleanMermaidLabel(sequenceEdge[3]) });
+			continue;
+		}
+		let normalized = line.replace(
+			/([A-Za-z_][\w.-]*)\s*(\[\[[^\]]*\]\]|\[[^\]]*\]|\(\([^)]*\)\)|\([^)]*\)|\{\{[^}]*\}\}|\{[^}]*\}|>[^\]]*\])/g,
+			(_whole, key: string, shape: string) => {
+				labels.set(key, cleanMermaidLabel(shape));
+				return key;
+			},
+		);
+		normalized = normalized.replace(/\|([^|]+)\|/g, "|$1|");
+		const graphEdge = normalized.match(/([A-Za-z_][\w.-]*)\s*(?:-->|---|-.->|==>|--x|--o|o--|x--)\s*(?:\|([^|]+)\|\s*)?([A-Za-z_][\w.-]*)/);
+		if (graphEdge) {
+			labels.set(graphEdge[1], labels.get(graphEdge[1]) ?? graphEdge[1]);
+			labels.set(graphEdge[3], labels.get(graphEdge[3]) ?? graphEdge[3]);
+			edgeCandidates.push({ sourceKey: graphEdge[1], targetKey: graphEdge[3], label: cleanMermaidLabel(graphEdge[2] ?? "") || undefined });
+		}
+		const classDeclaration = line.match(/^class\s+([A-Za-z_][\w.-]*)/i);
+		if (classDeclaration) labels.set(classDeclaration[1], labels.get(classDeclaration[1]) ?? classDeclaration[1]);
+	}
+	const nodes = [...labels].slice(0, 100).map(([key, label]) => ({ key, label }));
+	const keys = new Set(nodes.map((node) => node.key));
+	const edges = edgeCandidates.filter((edge) => keys.has(edge.sourceKey) && keys.has(edge.targetKey)).slice(0, 200);
+	return { type, nodes, edges };
+}
+
+function nearestMarkdownHeading(markdown: string, end: number): string {
+	const headings = [...markdown.slice(0, end).matchAll(/^#{1,6}\s+(.+?)\s*$/gm)];
+	return cleanCandidateText(headings.at(-1)?.[1], 160);
+}
+
+function cleanMermaidLabel(value: string): string {
+	return value
+		.replace(/^[\[({>{]+|[\])}>}]+$/g, "")
+		.replace(/^['"]|['"]$/g, "")
+		.replace(/<br\s*\/?\s*>/gi, " ")
+		.trim()
+		.slice(0, 160);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

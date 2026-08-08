@@ -77,6 +77,23 @@ assert(useAppStore.getState().turns[0]?.status === "interrupted", "A stale runni
 assert(useAppStore.getState().turns[0]?.tools?.[0]?.status === "error", "A running tool must recover as interrupted instead of staying active.");
 
 useAppStore.setState({
+	sources: [
+		{ id: "source-a", name: "A", path: "/a", fileCount: 1, status: "indexed", type: "docs", revision: "a1" },
+		{ id: "source-b", name: "B", path: "/b", fileCount: 2, status: "indexed", type: "repo", revision: "b1" },
+		{ id: "source-c", name: "C", path: "/c", fileCount: 3, status: "indexed", type: "docs", revision: "c1" },
+	],
+});
+useAppStore.getState().upsertSources([
+	{ id: "source-b", name: "B", path: "/b", fileCount: 4, status: "indexed", type: "repo", revision: "b2" },
+]);
+assert(useAppStore.getState().sources.map((source) => source.id).join(",") === "source-a,source-b,source-c", "Refreshing a source must preserve list order.");
+assert(useAppStore.getState().sources[1]?.fileCount === 4, "Refreshing a source must update it in place.");
+useAppStore.getState().upsertSources([
+	{ id: "source-d", name: "D", path: "/d", fileCount: 1, status: "indexed", type: "docs" },
+]);
+assert(useAppStore.getState().sources.at(-1)?.id === "source-d", "A new source must be appended after existing sources.");
+
+useAppStore.setState({
 	sessions: [{ id: "diagram-session", parentId: null, title: "Diagram", isRoot: true, status: "idle" }],
 	activeSessionId: "diagram-session",
 	turns: [{ id: "diagram-turn", sessionId: "diagram-session", role: "assistant", content: "", status: "finalizing", createdAt: timestamp }],

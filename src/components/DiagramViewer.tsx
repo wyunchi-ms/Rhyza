@@ -1,30 +1,55 @@
-import { Download, FileCode2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Download, FileCode2, FileImage, Image as ImageIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Diagram } from "../types";
 import { MermaidDiagram } from "./MermaidDiagram";
 
-export function DiagramViewer({ diagram }: { diagram: Diagram }) {
-	const [renderedSvg, setRenderedSvg] = useState("");
-	useEffect(() => setRenderedSvg(""), [diagram.mermaidSource]);
+export function DiagramViewer({ diagram, compact = false }: { diagram: Diagram; compact?: boolean }) {
+	const [rendered, setRendered] = useState<{ source: string; svg: string }>({ source: "", svg: "" });
+	const [exportOpen, setExportOpen] = useState(false);
+	const exportMenuRef = useRef<HTMLDivElement | null>(null);
+	const displaySource = compact ? preferVerticalFlowchart(diagram.mermaidSource) : diagram.mermaidSource;
+	const renderedSvg = rendered.source === displaySource ? rendered.svg : "";
+	const handleSvgRendered = useCallback((svg: string) => {
+		setRendered({ source: displaySource, svg });
+	}, [displaySource]);
+	useEffect(() => {
+		if (!exportOpen) return;
+		const close = (event: MouseEvent | KeyboardEvent) => {
+			if (event instanceof KeyboardEvent && event.key === "Escape") setExportOpen(false);
+			if (event instanceof MouseEvent && !exportMenuRef.current?.contains(event.target as Node)) setExportOpen(false);
+		};
+		document.addEventListener("mousedown", close);
+		document.addEventListener("keydown", close);
+		return () => {
+			document.removeEventListener("mousedown", close);
+			document.removeEventListener("keydown", close);
+		};
+	}, [exportOpen]);
 	return (
-		<div className="h-full min-h-0 flex flex-col">
+		<div className={compact ? "diagram-viewer diagram-viewer-compact" : "diagram-viewer h-full min-h-0 flex flex-col"}>
 			<div className="h-12 border-b border-gray-100 flex items-center justify-between px-4">
 				<div><span className="font-bold text-primary">{diagram.name}</span><span className="ml-2 text-xs text-secondary">v{diagram.version} / {diagram.type}</span></div>
-				<div className="flex gap-1">
-					<ExportButton diagram={diagram} format="mermaid" content={diagram.mermaidSource} />
-					<ExportButton diagram={diagram} format="svg" content={renderedSvg} />
-					<ExportButton diagram={diagram} format="png" content={renderedSvg} />
+				<div ref={exportMenuRef} className="diagram-export">
+					<button type="button" onClick={() => setExportOpen((open) => !open)} aria-haspopup="menu" aria-expanded={exportOpen} title="Download diagram" aria-label="Download diagram" className="icon-button"><Download size={16} /></button>
+					{exportOpen && <div className="diagram-export-menu" role="menu">
+						<ExportOption diagram={diagram} format="mermaid" content={diagram.mermaidSource} onExported={() => setExportOpen(false)} />
+						<ExportOption diagram={diagram} format="svg" content={renderedSvg} onExported={() => setExportOpen(false)} />
+						<ExportOption diagram={diagram} format="png" content={renderedSvg} onExported={() => setExportOpen(false)} />
+					</div>}
 				</div>
 			</div>
-			<div className="flex-1 min-h-0 overflow-auto p-4" data-diagram-id={diagram.id}>
-				<MermaidDiagram source={diagram.mermaidSource} onSvgRendered={setRenderedSvg} />
+			<div className={compact ? "diagram-viewer-content" : "flex-1 min-h-0 overflow-auto p-4"} data-diagram-id={diagram.id}>
+				<MermaidDiagram source={displaySource} onSvgRendered={handleSvgRendered} />
 			</div>
-			<div className="px-4 py-2 border-t border-gray-100 text-xs text-secondary">Mermaid source / {diagram.nodes.length} indexed nodes / {diagram.edges.length} indexed edges</div>
 		</div>
 	);
 }
 
-function ExportButton({ diagram, format, content }: { diagram: Diagram; format: "mermaid" | "svg" | "png"; content: string }) {
+export function preferVerticalFlowchart(source: string): string {
+	return source.replace(/^(\s*(?:flowchart|graph))\s+(?:LR|RL)\b/im, "$1 TD");
+}
+
+function ExportOption({ diagram, format, content, onExported }: { diagram: Diagram; format: "mermaid" | "svg" | "png"; content: string; onExported: () => void }) {
 	const exportDiagram = async () => {
 		if (!content) return;
 		const extension = format === "mermaid" ? "mmd" : format;
@@ -35,8 +60,11 @@ function ExportButton({ diagram, format, content }: { diagram: Diagram; format: 
 		anchor.download = `${diagram.name.replace(/[^a-z0-9]+/gi, "-").toLocaleLowerCase()}.${extension}`;
 		anchor.click();
 		URL.revokeObjectURL(url);
+		onExported();
 	};
-	return <button type="button" onClick={() => void exportDiagram()} disabled={!content} title={`Export ${format}`} aria-label={`Export ${format}`} className="icon-button">{format === "mermaid" ? <FileCode2 size={16} /> : <Download size={16} />}</button>;
+	const Icon = format === "mermaid" ? FileCode2 : format === "svg" ? ImageIcon : FileImage;
+	const label = format === "mermaid" ? "Mermaid source" : format.toUpperCase();
+	return <button type="button" role="menuitem" onClick={() => void exportDiagram()} disabled={!content} className="diagram-export-option"><Icon size={16} /><span>{label}</span><small>.{format === "mermaid" ? "mmd" : format}</small></button>;
 }
 
 async function svgToPng(svg: string): Promise<Blob> {

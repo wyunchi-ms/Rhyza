@@ -163,10 +163,11 @@ export const ChatPane: React.FC = () => {
 				})
 				: { entities: [], relations: [], diagrams: [] };
 			const currentSources = useAppStore.getState().sources;
-			const sourceRefs = sourceHits.map((hit) => {
+			const prefetchedSourceRefs = sourceHits.map((hit) => {
 				const source = currentSources.find((item) => item.id === hit.sourceId);
 				return { sourceId: hit.sourceId, path: hit.path, revision: source?.revision, lineStart: hit.line, lineEnd: hit.line };
 			});
+			const sourceRefs = result.sourceRefs?.length ? result.sourceRefs : prefetchedSourceRefs;
 			store.finalizeTurn(activeSessionId, assistantTurnId, response, extraction.entities, extraction.relations, extraction.diagrams, sourceRefs);
 			const generatedSummary = await summaryPromise;
 			if (generatedSummary.summary) {

@@ -401,8 +401,13 @@ export const useAppStore = create<AppState>()(
 						return previous?.revision && source.revision && previous.revision !== source.revision ? [[source.id, source.revision] as const] : [];
 					}));
 					const markRefs = (refs: SourceRef[] = []) => refs.map((ref) => changedRevisions.has(ref.sourceId ?? "") && ref.revision !== changedRevisions.get(ref.sourceId ?? "") ? { ...ref, stale: true } : ref);
+					const updates = new Map(sources.map((source) => [source.id, source]));
+					const existingIds = new Set(state.sources.map((source) => source.id));
 					return {
-						sources: [...state.sources.filter((source) => !sources.some((item) => item.id === source.id)), ...sources],
+						sources: [
+							...state.sources.map((source) => updates.get(source.id) ?? source),
+							...sources.filter((source) => !existingIds.has(source.id)),
+						],
 						entities: changedRevisions.size ? state.entities.map((entity) => ({ ...entity, sourceRefs: markRefs(entity.sourceRefs) })) : state.entities,
 						relations: changedRevisions.size ? state.relations.map((relation) => ({ ...relation, sourceRefs: markRefs(relation.sourceRefs) })) : state.relations,
 						diagrams: changedRevisions.size ? state.diagrams.map((diagram) => ({ ...diagram, sourceRefs: markRefs(diagram.sourceRefs) })) : state.diagrams,

@@ -11,6 +11,15 @@ const textExtensions = new Set([".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h",
 
 interface PersistedSource extends SourceInfo { files: string[] }
 
+export interface SourceReadResult {
+	sourceId: string;
+	path: string;
+	lineStart: number;
+	lineEnd: number;
+	content: string;
+	revision?: string;
+}
+
 export class SourceService {
 	private readonly catalogDirectory: string;
 	private readonly sourcePromises = new Map<string, Promise<PersistedSource[]>>();
@@ -19,8 +28,8 @@ export class SourceService {
 		this.catalogDirectory = path.join(dataRoot, "sources");
 	}
 
-	async list(): Promise<SourceInfo[]> {
-		return (await this.load()).sources.map(stripFiles);
+	async list(workspacePath?: string): Promise<SourceInfo[]> {
+		return (await this.load(workspacePath)).sources.map(stripFiles);
 	}
 
 	async add(sourcePaths: string[]): Promise<SourceInfo[]> {
@@ -71,12 +80,12 @@ export class SourceService {
 		return stripFiles(source);
 	}
 
-	async search(request: SourceSearchRequest): Promise<SourceSearchHit[]> {
+	async search(request: SourceSearchRequest, workspacePath?: string): Promise<SourceSearchHit[]> {
 		if (!request.query) return [];
 		const terms = request.query.toLocaleLowerCase().split(/[^\p{L}\p{N}_.-]+/u).filter((term) => term.length >= 2).slice(0, 12);
 		if (terms.length === 0) return [];
 		const limit = request.limit ?? 30;
-		const sources = (await this.load()).sources.filter(
+		const sources = (await this.load(workspacePath)).sources.filter(
 			(source) => source.status === "indexed" && (!request.sourceId || source.id === request.sourceId),
 		);
 		const hits: SourceSearchHit[] = [];
@@ -100,6 +109,30 @@ export class SourceService {
 		return hits;
 	}
 
+	async read(sourceId: string, relativePath: string, lineStart = 1, lineEnd?: number, workspacePath?: string): Promise<SourceReadResult> {
+		const source = (await this.load(workspacePath)).sources.find(
+			(item) => item.id === sourceId && item.status === "indexed",
+		);
+		if (!source) throw new Error("Indexed source not found.");
+		if (path.isAbsolute(relativePath) || relativePath.split(/[\\/]+/).includes("..")) {
+			throw new Error("Source paths must be relative and cannot leave the source directory.");
+		}
+		const indexedPath = source.files.find((candidate) => sameRelativePath(candidate, relativePath));
+		if (!indexedPath) throw new Error("File is not part of the indexed source.");
+		const content = await readFile(path.join(source.path, indexedPath), "utf8");
+		const lines = content.split(/\r?\n/);
+		const start = Math.max(1, Math.floor(lineStart));
+		const end = Math.min(lines.length, Math.max(start, Math.floor(lineEnd ?? start + 119)), start + 199);
+		return {
+			sourceId: source.id,
+			path: indexedPath,
+			lineStart: start,
+			lineEnd: end,
+			content: lines.slice(start - 1, end).join("\n").slice(0, 32_000),
+			revision: source.revision,
+		};
+	}
+
 	private async indexSource(source: PersistedSource): Promise<Partial<PersistedSource>> {
 		try {
 			const files = await collectTextFiles(source.path);
@@ -116,8 +149,8 @@ export class SourceService {
 		}
 	}
 
-	private async load(): Promise<{ catalogPath: string; sources: PersistedSource[] }> {
-		const workspacePath = await this.getWorkspacePath();
+	private async load(workspacePathOverride?: string): Promise<{ catalogPath: string; sources: PersistedSource[] }> {
+		const workspacePath = workspacePathOverride ?? await this.getWorkspacePath();
 		const catalogPath = path.join(this.catalogDirectory, `${workspaceId(workspacePath)}.json`);
 		let sourcesPromise = this.sourcePromises.get(catalogPath);
 		if (!sourcesPromise) {
@@ -188,4 +221,12 @@ async function gitRevision(directory: string): Promise<string | undefined> {
 function stripFiles(source: PersistedSource): SourceInfo {
 	const { files: _files, ...info } = source;
 	return info;
+}
+
+function sameRelativePath(left: string, right: string): boolean {
+	const normalizedLeft = path.normalize(left);
+	const normalizedRight = path.normalize(right);
+	return process.platform === "win32"
+		? normalizedLeft.toLocaleLowerCase() === normalizedRight.toLocaleLowerCase()
+		: normalizedLeft === normalizedRight;
 }

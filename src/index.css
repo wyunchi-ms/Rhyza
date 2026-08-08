@@ -207,7 +207,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .markdown-body hr { margin: 1rem 0; border: 0; border-top: 1px solid #e2e8f0; }
 .markdown-compact { color: #64748b; font-size: 0.82rem; line-height: 1.55; }
 .mermaid-diagram { position: relative; margin: 0.9rem 0; overflow: hidden; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; }
+.mermaid-diagram-interactive { cursor: zoom-in; }
+.mermaid-diagram-interactive:focus-visible { outline: 2px solid #10a37f; outline-offset: 2px; }
 .mermaid-diagram-label { position: absolute; left: 0.7rem; top: 0.55rem; z-index: 1; color: #94a3b8; font-size: 0.65rem; font-weight: 700; line-height: 1; text-transform: uppercase; }
+.mermaid-diagram-expand { position: absolute; right: 0.65rem; top: 0.5rem; z-index: 1; color: #64748b; opacity: 0; transition: opacity 140ms ease; }
+.mermaid-diagram-interactive:hover .mermaid-diagram-expand, .mermaid-diagram-interactive:focus-visible .mermaid-diagram-expand { opacity: 1; }
 .mermaid-diagram-canvas { min-height: 9rem; overflow: auto; padding: 2.25rem 1rem 1rem; text-align: center; }
 .mermaid-diagram-canvas svg { display: block; width: auto; min-width: min(100%, 32rem); max-width: none; height: auto; min-height: 7rem; margin: 0 auto; }
 .mermaid-diagram-state { display: flex; min-height: 9rem; align-items: center; justify-content: center; gap: 0.5rem; color: #64748b; font-size: 0.78rem; }
@@ -216,6 +220,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .mermaid-diagram-error details { margin-top: 0.6rem; color: #64748b; }
 .mermaid-diagram-error summary { cursor: pointer; }
 .mermaid-diagram-error pre { margin-bottom: 0; }
+.diagram-viewer-compact .h-12 { min-height: 3rem; height: auto; padding-block: 0.55rem; }
+.diagram-viewer-content { overflow: auto; padding: 0.75rem; }
+.diagram-viewer-content .mermaid-diagram { margin: 0; }
+.diagram-export { position: relative; }
+.diagram-export-menu { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 80; width: 12rem; overflow: hidden; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; padding: 0.3rem; box-shadow: 0 12px 30px rgb(15 23 42 / 16%); }
+.diagram-export-option { display: grid; width: 100%; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; border-radius: 4px; padding: 0.5rem 0.55rem; color: #334155; text-align: left; }
+.diagram-export-option:hover { background: #f1f5f9; }
+.diagram-export-option:disabled { cursor: not-allowed; opacity: 0.4; }
+.diagram-export-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; font-weight: 650; }
+.diagram-export-option small { color: #94a3b8; font-size: 0.65rem; }
+.knowledge-diagram-preview .mermaid-diagram-canvas { min-height: 8rem; max-height: min(55vh, 36rem); }
+.knowledge-diagram-preview .mermaid-diagram-canvas svg { min-width: 100%; }
+.mermaid-preview-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgb(15 23 42 / 58%); padding: clamp(0.75rem, 3vw, 2rem); }
+.mermaid-preview-dialog { display: flex; width: min(96vw, 96rem); height: min(92vh, 64rem); flex-direction: column; overflow: hidden; border: 1px solid #dbe2ea; border-radius: 8px; background: #fff; box-shadow: 0 24px 70px rgb(15 23 42 / 30%); }
+.mermaid-preview-toolbar { display: flex; min-height: 3.25rem; flex: none; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 0.5rem 0.75rem 0.5rem 1rem; }
+.mermaid-preview-scale { width: 3.5rem; height: 2rem; border-radius: 5px; color: #475569; font-size: 0.75rem; font-weight: 650; }
+.mermaid-preview-scale:hover { background: #f1f5f9; }
+.mermaid-preview-scroll { flex: 1; overflow: auto; background: #f8fafc; padding: 1.5rem; }
+.mermaid-preview-canvas { display: flex; width: max-content; min-width: 100%; min-height: 100%; align-items: flex-start; justify-content: center; transform-origin: top left; }
+.mermaid-preview-canvas svg { display: block; width: auto; min-width: min(100%, 64rem); max-width: none; height: auto; margin: 0 auto; }
 
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 .high-contrast { --color-primary: #0f172a; --color-secondary: #334155; --color-text: #020617; }

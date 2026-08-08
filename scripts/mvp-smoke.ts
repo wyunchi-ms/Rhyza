@@ -30,6 +30,11 @@ try {
 	assert(indexed.every((source) => source.status === "indexed"), "Every source must be indexed.");
 	const hits = await sources.search({ query: "shared knowledge", limit: 10 });
 	assert(hits.some((hit) => hit.path === "design.md"), "Full-text search did not find the docs source.");
+	const docsSource = indexed.find((source) => source.path === docs);
+	assert(docsSource, "Indexed docs source was not returned.");
+	const excerpt = await sources.read(docsSource.id, "design.md", 1, 20);
+	assert(excerpt.content.includes("Context Pack"), "Indexed source excerpt was not readable.");
+	await assertRejects(() => sources.read(docsSource.id, "../README.md"), "Source traversal was not rejected.");
 
 	const stateStore = new AppStateStore(userData);
 	await stateStore.save(repository, JSON.stringify({ state: { sessions: [{ id: "repo" }] }, version: 2 }));
@@ -59,4 +64,13 @@ async function git(directory: string, ...args: string[]) {
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
+}
+
+async function assertRejects(action: () => Promise<unknown>, message: string): Promise<void> {
+	try {
+		await action();
+	} catch {
+		return;
+	}
+	throw new Error(message);
 }
