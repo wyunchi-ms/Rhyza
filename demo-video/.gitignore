@@ -1,0 +1,21 @@
+# Keep the final delivery, but exclude intermediate renders and visual QA frames.
+renders/*
+!renders/Rhyza-mini-hackathon-demo-v4.1.mp4
+snapshots/
+snapshots-v2/
+snapshots-v3/
+snapshots-v4/
+snapshots-v4-stable/
+snapshots-v4-brand/
+
+# Superseded storyboard assets and narration iterations.
+assets/agent-loop.png
+assets/architecture-answer.png
+assets/architecture-diagram.png
+assets/architecture-knowledge.png
+assets/diagram-preview.png
+assets/session-status.png
+assets/captions.json
+assets/narration-azure.json
+assets/narration.mp3
+assets/narration.vtt

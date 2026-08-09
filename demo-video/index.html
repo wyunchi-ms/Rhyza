@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <script src="assets/three.min.js"></script>
+    <style>
+      @font-face { font-family: "Segoe UI Variable"; src: local("Segoe UI Variable"); }
+      @font-face { font-family: "Microsoft YaHei UI"; src: local("Microsoft YaHei UI"); }
+      @font-face { font-family: "Cascadia Mono"; src: local("Cascadia Mono"); }
+      * { box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
+      body { background: #f7f7f5; color: #212121; font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #f7f7f5; }
+      .scene { position: absolute; inset: 0; overflow: hidden; background: #f7f7f5; }
+      #scene-2, #scene-3, #scene-4, #scene-5, #scene-6, #scene-7 { opacity: 0; }
+      .scene-content { display: flex; width: 100%; height: 100%; flex-direction: column; gap: 24px; padding: 62px 86px 146px; }
+      .scene-rule { position: absolute; left: 0; right: 0; z-index: 3; height: 1px; background: #d8dee6; opacity: .72; }
+      .scene-rule.top { top: 32px; }
+      .scene-rule.bottom { bottom: 112px; }
+      .scene-index { position: absolute; top: 49px; right: 72px; z-index: 4; color: #64748b; font: 650 17px/1 "Cascadia Mono", Consolas, monospace; }
+      .eyebrow { color: #0e9674; font-size: 20px; font-weight: 780; text-transform: uppercase; }
+      h1, h2, h3, p { margin: 0; letter-spacing: 0; }
+      h1 { max-width: 1500px; font-size: 77px; line-height: 1.08; font-weight: 800; }
+      h2 { max-width: 1380px; font-size: 52px; line-height: 1.12; font-weight: 780; }
+      h3 { font-size: 25px; line-height: 1.25; }
+      .subhead { max-width: 1320px; color: #64748b; font-size: 27px; line-height: 1.42; }
+      .mono { font-family: "Cascadia Mono", Consolas, monospace; }
+      .accent { color: #0e9674; }
+      .surface { border: 1px solid #d8dee6; border-radius: 8px; background: #fff; box-shadow: 0 18px 42px rgba(15,23,42,.08); }
+      .window-bar { display: flex; height: 36px; align-items: center; gap: 7px; border-bottom: 1px solid #e7eaee; padding: 0 14px; background: #fbfbfa; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+      .status-dot { width: 11px; height: 11px; border-radius: 50%; background: #94a3b8; }
+      .status-dot.done { background: #0e9674; }
+      .status-dot.pending { background: #d89a16; }
+      .badge { display: inline-flex; min-height: 34px; align-items: center; border: 1px solid #d8dee6; border-radius: 5px; background: #fff; padding: 6px 11px; font-size: 17px; font-weight: 680; }
+      .badge.accent { border-color: rgba(14,150,116,.35); background: #e8f7f2; color: #08745a; }
+      .badge.warn { border-color: rgba(216,154,22,.36); background: #fff7df; color: #8a5b00; }
+
+      /* Scene 1: question explosion */
+      #scene-1 .scene-content { padding-top: 54px; gap: 17px; }
+      #scene-1 h2 { max-width: 940px; font-size: 46px; }
+      .problem-stage { display: grid; min-height: 0; flex: 1; grid-template-columns: 430px 1fr; gap: 34px; }
+      .project-panel { display: flex; min-height: 0; flex-direction: column; justify-content: center; gap: 20px; padding: 30px; }
+      .project-icon { display: grid; width: 82px; height: 82px; place-items: center; border-radius: 7px; background: #212121; color: #fff; font: 800 34px/1 "Cascadia Mono", monospace; }
+      .project-title { font-size: 33px; font-weight: 780; }
+      .unknown-grid { display: flex; flex-wrap: wrap; gap: 9px; }
+      .unknown { border-left: 3px solid #d89a16; border-radius: 4px; background: #fff7df; padding: 9px 11px; color: #6b4b0d; font-size: 17px; font-weight: 650; }
+      .chat-canvas { position: relative; min-height: 0; overflow: hidden; padding: 26px; }
+      .chat-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; color: #64748b; font: 650 17px/1 "Cascadia Mono", monospace; }
+      .question-card { width: 430px; margin-left: auto; border-radius: 22px; background: #f0f0ee; padding: 14px 20px; font-size: 21px; }
+      .answer-card { width: 760px; margin-top: 14px; border-left: 4px solid #0e9674; padding: 15px 18px; background: #f8fbfa; font-size: 19px; line-height: 1.45; }
+      .followups { display: grid; width: 800px; margin-top: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+      .followup { min-height: 48px; border: 1px solid #d8dee6; border-radius: 6px; background: #fff; padding: 11px 13px; color: #475569; font-size: 17px; font-weight: 650; }
+      .followup.selected { border-color: #0e9674; box-shadow: inset 4px 0 #0e9674; color: #212121; }
+      .followup.forgotten { border-color: #e4bc64; background: #fffaf0; }
+      .child-row { display: flex; margin: 12px 0 0 130px; gap: 10px; }
+      .child-question { width: 215px; min-height: 45px; border: 1px solid #d8dee6; border-radius: 5px; background: #f7f7f5; padding: 10px 12px; color: #64748b; font-size: 16px; }
+      .duplicate { position: absolute; right: 28px; bottom: 92px; width: 385px; border: 2px solid #b45359; border-radius: 7px; background: #fff6f6; padding: 13px 16px; color: #7f1d1d; font-size: 18px; font-weight: 700; }
+      .duplicate-line { position: absolute; right: 205px; bottom: 155px; width: 3px; height: 130px; background: repeating-linear-gradient(to bottom, #b45359 0 8px, transparent 8px 15px); }
+      .problem-metrics { position: absolute; left: 26px; bottom: 24px; display: flex; gap: 10px; }
+      .metric-card { min-width: 142px; border: 1px solid #d8dee6; border-radius: 6px; background: #fff; padding: 10px 13px; }
+      .metric-number { font: 800 27px/1 "Cascadia Mono", monospace; }
+      .metric-label { margin-top: 5px; color: #64748b; font-size: 15px; }
+      .metric-card.warn .metric-number { color: #9a6500; }
+      .metric-card.repeat .metric-number { color: #9f3138; }
+      #question-graph-canvas { position: absolute; inset: 0; z-index: 0; width: 1920px; height: 1080px; }
+      #scene-1 .scene-content.graph-overlay { position: relative; z-index: 2; padding: 58px 86px 146px; pointer-events: none; }
+      .graph-copy { max-width: 930px; }
+      .graph-copy .subhead { max-width: 710px; margin-top: 12px; }
+      .graph-key { position: absolute; top: 175px; right: 90px; display: flex; gap: 10px; }
+      .graph-metrics { position: absolute; right: 90px; bottom: 150px; display: flex; gap: 12px; }
+      .graph-metrics .metric-card { min-width: 210px; box-shadow: 0 14px 34px rgba(15,23,42,.1); }
+      .graph-axis { position: absolute; left: 90px; bottom: 155px; display: flex; align-items: center; gap: 12px; color: #63738a; font: 700 17px/1 "Cascadia Mono", monospace; }
+      .axis-line { width: 190px; height: 2px; background: #0e9674; transform-origin: left center; }
+
+      /* Scene 2: purpose */
+      #scene-2 .scene-content { justify-content: center; padding-left: 130px; padding-right: 130px; }
+      .purpose-top { display: flex; align-items: center; gap: 26px; }
+      .logo { display: grid; width: 82px; height: 82px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #212121; color: #fff; font-size: 37px; font-weight: 820; }
+      .purpose-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 24px; }
+      .purpose-column { min-height: 230px; padding: 28px; }
+      .purpose-label { color: #64748b; font: 700 17px/1 "Cascadia Mono", monospace; }
+      .purpose-value { margin-top: 22px; font-size: 35px; font-weight: 780; }
+      .purpose-column.known { border-top: 5px solid #0e9674; }
+      .purpose-column.unknown { border-top: 5px solid #d89a16; }
+      .purpose-column.next { border-top: 5px solid #212121; }
+
+      /* Scene 3: sources */
+      .heading-row { display: flex; align-items: end; justify-content: space-between; gap: 30px; }
+      .source-types { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 680px; }
+      .sources-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 380px; gap: 25px; }
+      .screenshot { position: relative; min-height: 0; overflow: hidden; }
+      .screenshot img { position: absolute; display: block; max-width: none; user-select: none; }
+      #sources-shot img { left: 0; top: 36px; width: 1330px; height: 666px; object-fit: cover; object-position: left top; }
+      #sources-shot .shot-rebrand { position: absolute; left: 0; top: 36px; z-index: 2; display: flex; width: 106px; height: 34px; align-items: center; gap: 7px; background: #fbfbfa; padding-left: 6px; color: #151515; font-size: 13px; font-weight: 720; }
+      #sources-shot .shot-rebrand-mark { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: #252525; color: #fff; font-size: 10px; font-weight: 780; }
+      .agent-tools { display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 25px; }
+      .tool { display: flex; align-items: center; gap: 13px; border-bottom: 1px solid #e7eaee; padding: 16px 0; font-size: 20px; font-weight: 700; }
+      .tool-code { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 5px; background: #e8f7f2; color: #0e9674; font: 800 16px/1 "Cascadia Mono", monospace; }
+      .local-note { color: #64748b; font-size: 18px; line-height: 1.45; }
+
+      /* Scene 4: branch and status */
+      .branch-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 520px; gap: 28px; }
+      #branch-shot img { left: 0; top: 36px; width: 1150px; height: 710px; object-fit: cover; object-position: left top; }
+      .branch-overlay { position: absolute; left: 10px; top: 65px; width: 225px; height: 175px; border: 3px solid #0e9674; border-radius: 6px; box-shadow: 0 0 0 6px rgba(14,150,116,.12); }
+      .branch-side { display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+      .status-card { display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 16px 18px; }
+      .status-copy { display: flex; flex: 1; flex-direction: column; gap: 4px; }
+      .status-copy strong { font-size: 20px; }
+      .status-copy span { color: #64748b; font-size: 16px; }
+      .fork-line { width: 42px; height: 2px; background: #0e9674; transform-origin: left center; }
+
+      /* Scene 5: focused context */
+      .context-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 1fr; gap: 24px; }
+      .context-panel { display: flex; min-height: 0; flex-direction: column; gap: 16px; padding: 24px; }
+      .context-title { display: flex; align-items: center; justify-content: space-between; font-size: 24px; font-weight: 780; }
+      .context-stack { display: flex; min-height: 0; flex: 1; flex-direction: column; justify-content: center; gap: 8px; }
+      .context-block { display: flex; min-height: 42px; align-items: center; border: 1px solid #d8dee6; border-radius: 5px; padding: 8px 12px; color: #64748b; font-size: 16px; }
+      .context-block.active { border-color: #0e9674; background: #e8f7f2; color: #075c48; font-weight: 700; }
+      .context-block.noise { background: #f1f3f5; }
+      .context-agent { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 58px; border-top: 1px solid #d8dee6; padding-top: 14px; font-size: 20px; font-weight: 780; }
+      .agent-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: #212121; color: #fff; }
+      .context-meter { height: 16px; overflow: hidden; border-radius: 3px; background: #e4e8ed; }
+      .context-fill { height: 100%; transform-origin: left center; background: #64748b; }
+      .context-fill.focused { width: 43%; background: #0e9674; }
+      .tree-path { display: grid; grid-template-columns: 1fr 42px 1fr; align-items: center; gap: 10px; }
+      .tree-arrow { color: #0e9674; text-align: center; font-size: 25px; }
+      .value-strip { display: flex; justify-content: center; gap: 10px; }
+
+      /* Scene 6: return and knowledge */
+      .knowledge-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 430px 1fr; gap: 28px; }
+      .resume-panel { display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 25px; }
+      .resume-node { display: flex; align-items: center; gap: 12px; min-height: 62px; border-left: 3px solid #d8dee6; padding: 10px 14px; font-size: 18px; }
+      .resume-node.pending { border-left-color: #d89a16; background: #fffaf0; }
+      #knowledge-shot img { left: 0; top: 36px; width: 1100px; height: 737px; object-fit: cover; object-position: left top; }
+      .entity-focus { position: absolute; left: 112px; top: 96px; width: 100px; height: 44px; border: 3px solid #0e9674; border-radius: 5px; box-shadow: 0 0 0 5px rgba(14,150,116,.12); }
+      .knowledge-flow { position: absolute; right: 26px; bottom: 28px; display: flex; align-items: center; gap: 9px; }
+
+      /* Scene 7: payoff */
+      #scene-7 .scene-content { justify-content: center; padding-left: 130px; padding-right: 130px; }
+      .closing-top { display: flex; align-items: center; gap: 18px; }
+      .closing-name { font-size: 30px; font-weight: 800; }
+      .closing-layout { display: grid; grid-template-columns: 1.1fr .9fr; gap: 50px; align-items: center; }
+      .efficiency-map { position: relative; height: 430px; }
+      .map-node { position: absolute; min-width: 180px; border: 1px solid #d8dee6; border-radius: 6px; background: #fff; padding: 14px 18px; font-size: 18px; font-weight: 700; box-shadow: 0 8px 18px rgba(15,23,42,.06); }
+      .map-node.root { left: 0; top: 170px; }
+      .map-node.a { left: 280px; top: 60px; }
+      .map-node.b { left: 280px; top: 168px; border-color: #0e9674; background: #e8f7f2; }
+      .map-node.c { left: 280px; top: 278px; }
+      .map-node.goal { right: 0; top: 168px; background: #212121; color: #fff; }
+      .map-line { position: absolute; height: 2px; background: #b7c1ce; transform-origin: left center; }
+      .map-line.one { left: 165px; top: 197px; width: 150px; transform: rotate(-35deg); }
+      .map-line.two { left: 165px; top: 199px; width: 120px; }
+      .map-line.three { left: 165px; top: 203px; width: 150px; transform: rotate(35deg); }
+      .map-line.goal { left: 455px; top: 199px; width: 250px; background: #0e9674; }
+      .payoff-row { display: flex; gap: 10px; margin-top: 28px; }
+
+      /* Captions */
+      #captions { position: absolute; inset: 0; z-index: 100; pointer-events: none; }
+      .caption { position: absolute; left: 90px; right: 90px; bottom: 28px; display: flex; min-height: 70px; align-items: center; justify-content: center; visibility: hidden; border-radius: 7px; background: rgba(15,23,42,.94); padding: 10px 28px; color: #fff; font-size: 29px; font-weight: 540; line-height: 1.35; text-align: center; box-shadow: 0 7px 24px rgba(15,23,42,.18); }
+      .caption em { color: #63d9b7; font-style: normal; font-weight: 780; }
+      .scene-index, .subhead, .chat-title, .followup, .child-question, .metric-label, .purpose-label, .local-note, .context-block, .status-copy span { color: #63738a; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="120" data-width="1920" data-height="1080">
+      <audio id="narration" data-start="1.5" data-duration="115.2" data-track-index="20" data-volume="1" src="assets/narration-v4.mp3"></audio>
+
+      <section id="scene-1" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>01 / QUESTION EXPLOSION</div>
+        <canvas id="question-graph-canvas" aria-label="Animated question graph"></canvas>
+        <div class="scene-content graph-overlay">
+          <div class="graph-copy"><div class="eyebrow">A new project. Too many unknowns.</div><h2>One answer creates five more questions.</h2><p class="subhead">A linear chat hides the shape of your work.</p></div>
+          <div class="graph-key"><span class="badge accent">Handled</span><span class="badge warn">Still open</span><span class="badge" style="border-color:#b45359;color:#8f252c">Repeated</span></div>
+          <div class="graph-axis"><span>1 QUESTION</span><span class="axis-line"></span><span>11 DIRECTIONS</span></div>
+          <div class="graph-metrics"><div class="metric-card warn"><div class="metric-number">3</div><div class="metric-label">MISSED QUESTIONS</div></div><div class="metric-card repeat"><div class="metric-number">1</div><div class="metric-label">REPEATED QUESTION</div></div></div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>02 / PURPOSE</div>
+        <div class="scene-content">
+          <div class="purpose-top"><div class="logo">R</div><div><div class="eyebrow">Rhyza</div><h1>Turn questions into working knowledge.</h1></div></div>
+          <p class="subhead">See what is understood, what remains, and what should move forward next.</p>
+          <div class="purpose-grid">
+            <div class="purpose-column surface known"><div class="purpose-label">KNOWN</div><div class="purpose-value">What I understand</div></div>
+            <div class="purpose-column surface unknown"><div class="purpose-label">UNKNOWN</div><div class="purpose-value">What remains open</div></div>
+            <div class="purpose-column surface next"><div class="purpose-label">NEXT</div><div class="purpose-value">Where to continue</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>03 / SOURCES</div>
+        <div class="scene-content">
+          <div class="heading-row"><div><div class="eyebrow">Any local material</div><h2>Work from more than code.</h2></div><div class="source-types"><span class="badge">Code</span><span class="badge">Documents</span><span class="badge">Notes</span><span class="badge">Papers</span><span class="badge">Books</span></div></div>
+          <div class="sources-layout">
+            <div id="sources-shot" class="screenshot surface"><div class="window-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><img src="assets/sources.png" alt="Rhyza Sources" /><div class="shot-rebrand"><span class="shot-rebrand-mark">R</span><span>Rhyza</span></div></div>
+            <div class="agent-tools surface"><div class="eyebrow">Agent tools</div><div class="tool"><span class="tool-code">S</span>Search relevant text</div><div class="tool"><span class="tool-code">R</span>Read exact source</div><p class="local-note">The Agent searches the material you provide, then grounds its answer in the relevant content.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>04 / BRANCH + STATUS</div>
+        <div class="scene-content">
+          <div class="heading-row"><div><div class="eyebrow">Keep every direction visible</div><h2>Branch from any answer. Track what remains.</h2></div><span class="badge accent mono">INDEPENDENT CONTEXT</span></div>
+          <div class="branch-layout">
+            <div id="branch-shot" class="screenshot surface"><div class="window-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><img src="assets/session-branch.png" alt="Rhyza branch tree" /><div class="branch-overlay"></div></div>
+            <div class="branch-side">
+              <div class="status-card surface"><span class="status-dot done"></span><div class="status-copy"><strong>Token storage</strong><span>Completed</span></div><span class="fork-line"></span></div>
+              <div class="status-card surface"><span class="status-dot pending"></span><div class="status-copy"><strong>Session restore</strong><span>Still unanswered</span></div><span class="badge warn">PENDING</span></div>
+              <div class="status-card surface"><span class="status-dot"></span><div class="status-copy"><strong>Error handling</strong><span>Set aside for later</span></div><span class="badge">ON HOLD</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>05 / FOCUSED CONTEXT</div>
+        <div class="scene-content">
+          <div class="heading-row"><div><div class="eyebrow">Why branching improves efficiency</div><h2>Send the relevant path, not the entire transcript.</h2></div></div>
+          <div class="context-grid">
+            <div class="context-panel surface linear-context">
+              <div class="context-title"><span>Linear chat</span><span class="badge">ALL HISTORY</span></div>
+              <div class="context-stack"><div class="context-block active">Current question: Session restore</div><div class="context-block noise">UI layout discussion</div><div class="context-block noise">Provider model list</div><div class="context-block">Authentication overview</div><div class="context-block noise">Diagram export options</div><div class="context-block noise">Source indexing details</div></div>
+              <div class="context-meter"><div class="context-fill" style="width:94%"></div></div>
+              <div class="context-agent"><span class="agent-mark">A</span><span>Relevant context + unrelated history</span></div>
+            </div>
+            <div class="context-panel surface focused-context">
+              <div class="context-title"><span>Rhyza</span><span class="badge accent">ACTIVE PATH</span></div>
+              <div class="context-stack"><div class="tree-path"><div class="context-block active">Authentication</div><div class="tree-arrow">→</div><div class="context-block active">Session state</div></div><div class="tree-path"><div></div><div class="tree-arrow">↓</div><div class="context-block active">Session restore</div></div></div>
+              <div class="context-meter"><div class="context-fill focused"></div></div>
+              <div class="context-agent"><span class="agent-mark">A</span><span>Relevant branch only</span></div>
+              <div class="value-strip"><span class="badge accent">Less noise</span><span class="badge accent">More focused</span><span class="badge accent">Fewer tokens</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-6" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>06 / MEMORY</div>
+        <div class="scene-content">
+          <div class="heading-row"><div><div class="eyebrow">Resume and remember</div><h2>Return to open questions. Connect existing knowledge.</h2></div><span class="badge accent mono">ENTITY + RELATION + DIAGRAM</span></div>
+          <div class="knowledge-layout">
+            <div class="resume-panel surface"><div class="purpose-label">RETURN LATER</div><div class="resume-node"><span class="status-dot done"></span>Authentication overview</div><div class="resume-node pending"><span class="status-dot pending"></span>Session restore<div class="badge warn">NEXT</div></div><div class="resume-node"><span class="status-dot"></span>Error handling</div><p class="local-note">Open questions stay visible across sessions.</p></div>
+            <div id="knowledge-shot" class="screenshot surface"><div class="window-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><img src="assets/knowledge-links.png" alt="Rhyza linked knowledge" data-layout-allow-overflow /><div class="entity-focus"></div><div class="knowledge-flow"><span class="badge">Entity</span><span>→</span><span class="badge">Relation</span><span>→</span><span class="badge accent">Existing knowledge</span></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-7" class="scene">
+        <div class="scene-rule top"></div><div class="scene-rule bottom"></div><div class="scene-index" data-layout-allow-overlap>07 / EFFICIENCY</div>
+        <div class="scene-content">
+          <div class="closing-top"><div class="logo">R</div><span class="closing-name">Rhyza</span></div>
+          <div class="closing-layout">
+            <div><div class="eyebrow">Move work forward. Keep the knowledge.</div><h1>Turn conversations into a work map that compounds.</h1><p class="subhead">Track what remains, preserve useful context, and carry knowledge into analysis, decisions, and output.</p><div class="payoff-row"><span class="badge accent">Fewer missed questions</span><span class="badge accent">Reusable context</span><span class="badge accent">Higher efficiency</span></div></div>
+            <div class="efficiency-map"><div class="map-line one"></div><div class="map-line two"></div><div class="map-line three"></div><div class="map-line goal"></div><div class="map-node root">First question</div><div class="map-node a">Answered</div><div class="map-node b">Active path</div><div class="map-node c">Saved for later</div><div class="map-node goal">Working knowledge</div></div>
+          </div>
+        </div>
+      </section>
+
+      <div id="captions" aria-hidden="true"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true, defaults: { duration: 0.5, ease: "power2.out" } });
+      const scenes = ["#scene-1", "#scene-2", "#scene-3", "#scene-4", "#scene-5", "#scene-6", "#scene-7"];
+      tl.set(scenes.slice(1), { opacity: 0, x: 0 }, 0);
+
+      // Full-bleed Three.js question graph. All object motion is driven by the master GSAP timeline.
+      const graphCanvas = document.getElementById("question-graph-canvas");
+      const graphRenderer = new THREE.WebGLRenderer({ canvas: graphCanvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+      graphRenderer.setPixelRatio(1); graphRenderer.setSize(1920, 1080, false); graphRenderer.outputEncoding = THREE.sRGBEncoding;
+      const graphScene = new THREE.Scene();
+      const graphCamera = new THREE.PerspectiveCamera(46, 1920 / 1080, 1, 3000);
+      graphCamera.position.set(0, -20, 1250);
+      const graphNodes = {}; const graphLines = {}; const nodeMeta = [];
+
+      function roundedRect(ctx, x, y, w, h, r) {
+        ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+      }
+      function makeNode(id, label, x, y, z, tone) {
+        const canvas = document.createElement("canvas"); canvas.width = 600; canvas.height = 150; const ctx = canvas.getContext("2d");
+        const tones = { root:["#212121","#ffffff"], active:["#e8f7f2","#075c48"], open:["#fff7df","#6b4b0d"], child:["#ffffff","#334155"], repeat:["#fff1f2","#8f252c"] };
+        const pair = tones[tone]; roundedRect(ctx, 6, 6, 588, 138, 24); ctx.fillStyle = pair[0]; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = tone === "active" ? "#0e9674" : tone === "open" ? "#d89a16" : tone === "repeat" ? "#b45359" : "#cbd5e1"; ctx.stroke();
+        ctx.fillStyle = pair[1]; ctx.font = "700 38px 'Microsoft YaHei UI', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, 300, 76);
+        const texture = new THREE.CanvasTexture(canvas); texture.encoding = THREE.sRGBEncoding; texture.needsUpdate = true;
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 1, depthTest: false });
+        const sprite = new THREE.Sprite(material); sprite.position.set(x, y, z); sprite.scale.set(250, 62.5, 1); sprite.renderOrder = 2; graphScene.add(sprite);
+        graphNodes[id] = sprite; nodeMeta.push(sprite); return sprite;
+      }
+      function makeLine(id, from, to, color) {
+        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(from.x, from.y, from.z - 2), new THREE.Vector3(to.x, to.y, to.z - 2)]);
+        const material = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: .58, depthTest: false });
+        const line = new THREE.Line(geometry, material); line.renderOrder = 1; graphScene.add(line); graphLines[id] = line; return line;
+      }
+
+      const positions = {
+        root:{x:-540,y:30,z:0}, token:{x:-155,y:230,z:18}, device:{x:-155,y:125,z:-8}, session:{x:-155,y:20,z:28}, provider:{x:-155,y:-85,z:-16}, errors:{x:-155,y:-190,z:10},
+        refresh:{x:260,y:260,z:18}, result:{x:260,y:155,z:-10}, exit:{x:260,y:50,z:20}, retry:{x:260,y:-55,z:-12}, timeout:{x:260,y:-160,z:10}, duplicate:{x:520,y:-275,z:38}
+      };
+      makeNode("root","登录流程？",positions.root.x,positions.root.y,positions.root.z,"root");
+      makeNode("token","Token 存储",positions.token.x,positions.token.y,positions.token.z,"active"); makeNode("device","Device Flow",positions.device.x,positions.device.y,positions.device.z,"active");
+      makeNode("session","Session 恢复",positions.session.x,positions.session.y,positions.session.z,"open"); makeNode("provider","Provider 状态",positions.provider.x,positions.provider.y,positions.provider.z,"open"); makeNode("errors","错误处理",positions.errors.x,positions.errors.y,positions.errors.z,"open");
+      makeNode("refresh","刷新时机？",positions.refresh.x,positions.refresh.y,positions.refresh.z,"child"); makeNode("result","授权结果？",positions.result.x,positions.result.y,positions.result.z,"child"); makeNode("exit","进程退出？",positions.exit.x,positions.exit.y,positions.exit.z,"child"); makeNode("retry","重试策略？",positions.retry.x,positions.retry.y,positions.retry.z,"child"); makeNode("timeout","超时处理？",positions.timeout.x,positions.timeout.y,positions.timeout.z,"child"); makeNode("duplicate","Token 存储？",positions.duplicate.x,positions.duplicate.y,positions.duplicate.z,"repeat");
+      ["token","device","session","provider","errors"].forEach(function(id){ makeLine("root-"+id,positions.root,positions[id],0x94a3b8); });
+      makeLine("token-refresh",positions.token,positions.refresh,0x0e9674); makeLine("token-result",positions.token,positions.result,0x0e9674); makeLine("device-exit",positions.device,positions.exit,0x0e9674); makeLine("device-retry",positions.device,positions.retry,0x0e9674); makeLine("device-timeout",positions.device,positions.timeout,0x0e9674); makeLine("repeat",positions.token,positions.duplicate,0xb45359);
+      function renderGraph(){ graphRenderer.render(graphScene, graphCamera); }
+      Object.values(graphNodes).forEach(function(node){ node.scale.set(.001,.001,1); node.material.opacity = 0; });
+      Object.values(graphLines).forEach(function(line){ line.material.opacity = 0; });
+      renderGraph();
+
+      function pushTransition(outgoing, incoming, at) {
+        tl.to(outgoing, { x: -145, opacity: 0, duration: 0.44, ease: "power3.inOut" }, at);
+        tl.set(incoming, { opacity: 1, x: 0 }, at);
+        tl.from(incoming, { x: 165, filter: "blur(7px)", duration: 0.47, ease: "power3.inOut" }, at);
+      }
+
+      // Scene 1: establish one root question, multiply it, then expose missed and repeated work.
+      tl.from("#scene-1 .eyebrow", { y: 20, opacity: 0, duration: .42, ease: "power2.out" }, .25);
+      tl.from("#scene-1 h2", { x: -44, opacity: 0, duration: .62, ease: "expo.out" }, .42);
+      tl.from("#scene-1 .subhead", { y: 18, opacity: 0, duration: .48, ease: "sine.out" }, .82);
+      tl.from("#scene-1 .graph-key .badge", { y: -15, opacity: 0, stagger: .12, duration: .34, ease: "back.out(1.3)" }, 2.0);
+      tl.to(graphNodes.root.scale, { x:250, y:62.5, duration:.62, ease:"back.out(1.45)" }, 4.2); tl.to(graphNodes.root.material,{opacity:1,duration:.35},4.2);
+      ["token","device","session","provider","errors"].forEach(function(id,index){ tl.to(graphLines["root-"+id].material,{opacity:.58,duration:.35},8.6+index*.12); tl.to(graphNodes[id].scale,{x:250,y:62.5,duration:.5,ease:"back.out(1.35)"},8.8+index*.22); tl.to(graphNodes[id].material,{opacity:1,duration:.28},8.8+index*.22); });
+      ["refresh","result","exit","retry","timeout"].forEach(function(id,index){ const lineId=index<2?"token-"+id:"device-"+id; tl.to(graphLines[lineId].material,{opacity:.58,duration:.28},13.7+index*.14); tl.to(graphNodes[id].scale,{x:250,y:62.5,duration:.46,ease:"back.out(1.3)"},13.9+index*.2); tl.to(graphNodes[id].material,{opacity:1,duration:.26},13.9+index*.2); });
+      ["session","provider","errors"].forEach(function(id,index){ tl.to(graphNodes[id].position,{y:"-=75",z:"-=55",duration:.72,ease:"power2.inOut"},18.8+index*.1); tl.to(graphNodes[id].material,{opacity:.28,duration:.62},18.8+index*.1); tl.to(graphLines["root-"+id].material,{opacity:.16,duration:.62},18.8+index*.1); });
+      tl.to(graphLines.repeat.material,{opacity:.8,duration:.5},22.0); tl.to(graphNodes.duplicate.scale,{x:250,y:62.5,duration:.5,ease:"back.out(1.4)"},22.25); tl.to(graphNodes.duplicate.material,{opacity:1,duration:.3},22.25);
+      tl.from("#scene-1 .graph-axis", { x: -30, opacity: 0, duration: .5, ease: "power3.out" }, 24.6); tl.from("#scene-1 .axis-line", { scaleX: 0, duration: .55, ease: "circ.out" }, 24.7);
+      tl.from("#scene-1 .graph-metrics .metric-card", { y: 22, opacity: 0, stagger: .18, duration: .45, ease: "power3.out" }, 26.2);
+      tl.to(graphCamera.position,{x:35,y:-8,z:1160,duration:7.5,ease:"sine.inOut"},8.5);
+
+      pushTransition("#scene-1", "#scene-2", 27.45);
+      tl.from("#scene-2 .logo", { scale: .62, opacity: 0, rotation: -7, duration: .55, ease: "back.out(1.5)" }, 27.77);
+      tl.from("#scene-2 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 27.92);
+      tl.from("#scene-2 h1", { x: -46, opacity: 0, duration: .62, ease: "expo.out" }, 28.08);
+      tl.from("#scene-2 .subhead", { y: 25, opacity: 0, duration: .5, ease: "sine.out" }, 28.45);
+      tl.from("#scene-2 .purpose-column", { y: 45, opacity: 0, stagger: .18, duration: .55, ease: "power3.out" }, 29.3);
+      tl.from("#scene-2 .purpose-value", { x: -18, opacity: 0, stagger: .2, duration: .4, ease: "circ.out" }, 30.2);
+
+      pushTransition("#scene-2", "#scene-3", 41.4);
+      tl.from("#scene-3 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 41.7);
+      tl.from("#scene-3 h2", { x: -42, opacity: 0, duration: .55, ease: "expo.out" }, 41.81);
+      tl.from("#scene-3 .source-types .badge", { y: -18, opacity: 0, stagger: .1, duration: .34, ease: "back.out(1.3)" }, 42.05);
+      tl.from("#sources-shot", { y: 48, opacity: 0, duration: .62, ease: "power3.out" }, 42.15);
+      tl.from("#scene-3 .agent-tools", { x: 55, opacity: 0, duration: .58, ease: "circ.out" }, 42.65);
+      tl.from("#scene-3 .tool", { x: 25, opacity: 0, stagger: .16, duration: .4, ease: "power2.out" }, 43.45);
+
+      pushTransition("#scene-3", "#scene-4", 50.1);
+      tl.from("#scene-4 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 50.4);
+      tl.from("#scene-4 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 50.52);
+      tl.from("#scene-4 .heading-row > .badge", { scale: .88, opacity: 0, duration: .42, ease: "back.out(1.4)" }, 50.78);
+      tl.from("#branch-shot", { x: -55, opacity: 0, duration: .62, ease: "power3.out" }, 50.88);
+      tl.from("#scene-4 .branch-overlay", { scale: .9, opacity: 0, duration: .48, ease: "circ.out" }, 52.58);
+      tl.from("#scene-4 .status-card", { x: 55, opacity: 0, stagger: .2, duration: .5, ease: "power3.out" }, 53.28);
+      tl.from("#scene-4 .fork-line", { scaleX: 0, opacity: 0, duration: .44, ease: "power2.out" }, 55.48);
+
+      pushTransition("#scene-4", "#scene-5", 63.7);
+      tl.from("#scene-5 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 64.0);
+      tl.from("#scene-5 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 64.12);
+      tl.from("#scene-5 .linear-context", { x: -60, opacity: 0, duration: .62, ease: "power3.out" }, 64.4);
+      tl.from("#scene-5 .linear-context .context-block", { y: 15, opacity: 0, stagger: .09, duration: .34, ease: "circ.out" }, 65.0);
+      tl.from("#scene-5 .linear-context .context-fill", { scaleX: 0, duration: .68, ease: "power3.out" }, 65.8);
+      tl.to("#scene-5 .linear-context .context-block.noise", { x: 30, opacity: .52, stagger: .08, duration: .55, ease: "power2.inOut" }, 66.6);
+      tl.from("#scene-5 .focused-context", { x: 65, opacity: 0, duration: .62, ease: "power3.out" }, 67.8);
+      tl.from("#scene-5 .focused-context .context-block", { x: 22, opacity: 0, stagger: .15, duration: .4, ease: "back.out(1.25)" }, 68.4);
+      tl.from("#scene-5 .tree-arrow", { scale: .3, opacity: 0, stagger: .16, duration: .35, ease: "back.out(1.6)" }, 68.8);
+      tl.from("#scene-5 .focused-context .context-fill", { scaleX: 0, duration: .62, ease: "power3.out" }, 69.6);
+      tl.from("#scene-5 .value-strip .badge", { y: 16, opacity: 0, stagger: .16, duration: .38, ease: "back.out(1.35)" }, 70.8);
+
+      pushTransition("#scene-5", "#scene-6", 73.4);
+      tl.from("#scene-6 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 73.7);
+      tl.from("#scene-6 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 73.82);
+      tl.from("#scene-6 .heading-row > .badge", { scale: .88, opacity: 0, duration: .42, ease: "back.out(1.4)" }, 74.08);
+      tl.from("#scene-6 .resume-panel", { x: -55, opacity: 0, duration: .6, ease: "power3.out" }, 74.18);
+      tl.from("#scene-6 .resume-node", { y: 18, opacity: 0, stagger: .16, duration: .4, ease: "circ.out" }, 74.88);
+      tl.from("#knowledge-shot", { x: 65, opacity: 0, duration: .65, ease: "power3.out" }, 79.3);
+      tl.from("#scene-6 .entity-focus", { scale: .86, opacity: 0, duration: .48, ease: "back.out(1.35)" }, 85.9);
+      tl.from("#scene-6 .knowledge-flow > *", { y: 14, opacity: 0, stagger: .12, duration: .34, ease: "power2.out" }, 93.3);
+
+      pushTransition("#scene-6", "#scene-7", 98.35);
+      tl.from("#scene-7 .closing-top", { y: -22, opacity: 0, duration: .48, ease: "power2.out" }, 98.64);
+      tl.from("#scene-7 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "sine.out" }, 98.82);
+      tl.from("#scene-7 h1", { x: -48, opacity: 0, duration: .64, ease: "expo.out" }, 99.0);
+      tl.from("#scene-7 .subhead", { y: 24, opacity: 0, duration: .48, ease: "power2.out" }, 99.47);
+      tl.from("#scene-7 .map-line", { scaleX: 0, opacity: 0, stagger: .12, duration: .5, ease: "circ.out" }, 99.82);
+      tl.from("#scene-7 .map-node", { y: 20, scale: .95, opacity: 0, stagger: .15, duration: .42, ease: "back.out(1.35)" }, 100.27);
+      tl.from("#scene-7 .payoff-row .badge", { y: 16, opacity: 0, stagger: .16, duration: .38, ease: "power3.out" }, 103.02);
+      tl.to("#scene-7 .scene-content", { opacity: 0, duration: .8, ease: "power2.in" }, 118.8);
+
+      tl.eventCallback("onUpdate", renderGraph);
+
+      const CAPTIONS = [
+        [1.543,5.670,"想象一下，你刚接手一个项目，里面有太多陌生的概念。"],
+        [6.058,8.914,"你开始和 <em>Agent</em> 聊天：先问一个问题，"],
+        [8.914,13.062,"回答里又出现五个值得追问的方向。你追问其中两个，"],
+        [13.062,17.621,"它们又各自带来更多问题。几轮之后，<em>问题数量开始失控</em>。"],
+        [18.009,23.289,"有些想问的问题被淹没了；隔了几轮，你甚至又问了一遍之前问过的问题。"],
+        [23.677,27.384,"答案越来越多，你却越来越难判断<em>自己还不知道什么</em>。"],
+        [27.772,32.578,"<em>Rhyza</em> 把分散的对话组织成清晰的工作脉络，让用户直观看到："],
+        [32.578,37.955,"已经理解什么、还有哪些问题、下一步该推进什么，减少遗漏和重复，"],
+        [37.955,41.328,"提高<em>知识工作</em>的效率。材料不限定于代码。"],
+        [41.715,46.360,"<em>Sources</em> 可以加入代码、文档、笔记、论文，甚至一本书。"],
+        [46.748,50.035,"Agent 会搜索这些本地内容，再回答问题。"],
+        [50.422,55.013,"每次对话都是工作脉络中的节点。出现新的问题方向时，"],
+        [55.013,59.787,"可以从当前回答直接<em>分叉</em>。每条分支拥有独立上下文，"],
+        [59.787,63.623,"节点可以标记为待处理、进行中、已完成或搁置。"],
+        [64.011,68.677,"独立分支也会减少无关上下文，让 Agent 聚焦当前问题，"],
+        [68.677,73.332,"降低历史信息干扰，有助于提高回答精度并<em>减少 Token 消耗</em>。"],
+        [73.720,79.285,"这样，我能快速看到哪些问题仍待处理，也能在几天后回到原来的位置，"],
+        [79.323,85.519,"沿着原有上下文继续推进。回答中的实体、关系和图表会沉淀到<em>知识图谱</em>。"],
+        [85.907,91.192,"已有实体再次出现时，会自动链接到对应知识，帮助我识别重复问题，"],
+        [91.231,92.976,"并看到知识之间的关系。"],
+        [93.364,98.256,"这些结构化知识也能成为后续分析、决策和内容产出的上下文。"],
+        [98.644,102.330,"<em>Rhyza</em> 把分叉的问题转化为可管理的工作脉络，"],
+        [102.330,108.407,"把对话积累为可复用的知识。它让我少走重复的路，快速定位未完成的问题，"],
+        [108.407,111.662,"也为个人和团队后续的工作保留上下文。"],
+        [112.050,116.317,"最终，用更少的时间和 Token，<em>更高效地完成知识工作</em>。"]
+      ];
+      const captionRoot = document.getElementById("captions");
+      CAPTIONS.forEach(function (group, index) {
+        const el = document.createElement("div");
+        el.id = "caption-" + index; el.className = "caption"; el.innerHTML = group[2]; captionRoot.appendChild(el);
+        tl.set(el, { opacity: 0, visibility: "hidden", y: 12 }, 0);
+        tl.set(el, { visibility: "visible" }, group[0]);
+        tl.fromTo(el, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: .22, ease: "power2.out" }, group[0]);
+        tl.to(el, { opacity: 0, y: -6, duration: .14, ease: "power2.in" }, group[1] - .14);
+        tl.set(el, { opacity: 0, visibility: "hidden" }, group[1]);
+      });
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
