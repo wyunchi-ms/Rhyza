@@ -19,10 +19,12 @@ export interface BranchUsageAllocation {
 	total: TokenUsage;
 }
 
-// Every recorded model call belongs to exactly one bucket. For a session with
-// children, its earliest fork point separates shared history from its original path.
+// Each direct model call belongs to exactly one bucket. A node's displayed value
+// is then the recursive total of that node, its original continuation, and all
+// child branches. The overall total is accumulated from direct buckets so parent
+// subtree totals do not double-count descendants.
 export function allocateBranchUsage(sessions: SessionNode[], turns: Turn[]): BranchUsageAllocation {
-	const node = new Map<string, TokenUsage>();
+	const directNode = new Map<string, TokenUsage>();
 	const continuation = new Map<string, TokenUsage>();
 	let total = emptyUsage();
 
@@ -33,8 +35,8 @@ export function allocateBranchUsage(sessions: SessionNode[], turns: Turn[]): Bra
 			.map((child) => sessionTurns.findIndex((turn) => turn.id === child.forkedFromTurnId))
 			.filter((index) => index >= 0);
 		const splitIndex = forkIndexes.length ? Math.min(...forkIndexes) : Number.POSITIVE_INFINITY;
-		let before = addUsage(emptyUsage(), session.usage);
-		total = addUsage(total, session.usage);
+		let before = addUsage(emptyUsage(), session.titleUsage);
+		total = addUsage(total, session.titleUsage);
 		let after = emptyUsage();
 		sessionTurns.forEach((turn, index) => {
 			if (!turn.usage) return;
@@ -42,9 +44,34 @@ export function allocateBranchUsage(sessions: SessionNode[], turns: Turn[]): Bra
 			if (index <= splitIndex) before = addUsage(before, turn.usage);
 			else after = addUsage(after, turn.usage);
 		});
-		node.set(session.id, before);
-		if (forkIndexes.length) continuation.set(session.id, after);
+		directNode.set(session.id, before);
+		if (forkIndexes.length) {
+			after = addUsage(after, session.continuationTitleUsage);
+			total = addUsage(total, session.continuationTitleUsage);
+			continuation.set(session.id, after);
+		}
 	}
+
+	const children = new Map<string, SessionNode[]>();
+	for (const session of sessions) {
+		if (!session.parentId) continue;
+		children.set(session.parentId, [...(children.get(session.parentId) ?? []), session]);
+	}
+	const node = new Map<string, TokenUsage>();
+	const calculateSubtree = (sessionId: string, visiting = new Set<string>()): TokenUsage => {
+		const cached = node.get(sessionId);
+		if (cached) return cached;
+		if (visiting.has(sessionId)) return emptyUsage();
+		const nextVisiting = new Set(visiting).add(sessionId);
+		let subtree = addUsage(emptyUsage(), directNode.get(sessionId));
+		subtree = addUsage(subtree, continuation.get(sessionId));
+		for (const child of children.get(sessionId) ?? []) {
+			subtree = addUsage(subtree, calculateSubtree(child.id, nextVisiting));
+		}
+		node.set(sessionId, subtree);
+		return subtree;
+	};
+	for (const session of sessions) calculateSubtree(session.id);
 	return { node, continuation, total };
 }
 

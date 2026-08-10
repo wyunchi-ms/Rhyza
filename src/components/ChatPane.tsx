@@ -163,6 +163,7 @@ export const ChatPane: React.FC = () => {
 				model: selectedModel,
 				writable: true,
 			});
+			if (result.usage) store.updateTurn(assistantTurnId, { usage: result.usage });
 			if (!result.ok) throw new Error(result.error || "Pi SDK request failed.");
 			const response = result.assistantText || "Pi SDK completed without text output.";
 			const streamedReasoning = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId)?.reasoning;
@@ -240,8 +241,8 @@ export const ChatPane: React.FC = () => {
 			bridge.generateSummary({ text: forkText, model }),
 		]);
 		const current = useAppStore.getState();
-		current.addSessionUsage(result.originalSessionId, originalTitle.usage);
-		current.addSessionUsage(result.forkSessionId, forkTitle.usage);
+		current.addSessionTitleUsage(result.originalSessionId, originalTitle.usage, true);
+		current.addSessionTitleUsage(result.forkSessionId, forkTitle.usage);
 		current.renameContinuation(result.originalSessionId, originalTitle.summary ?? "Original path");
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
 	};
@@ -350,7 +351,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 
 function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {
 	const inherited = !turn.usage && Boolean(turn.inheritedUsage);
-	const usage = turn.usage ?? turn.inheritedUsage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	const usage = turn.usage ?? turn.inheritedUsage;
 	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date().toISOString()).getTime() - new Date(turn.createdAt).getTime());
 	const tools = Object.values((turn.tools ?? []).reduce<Record<string, { name: string; count: number; errors: number; durationMs: number }>>((groups, tool) => {
 		const group = groups[tool.name] ?? { name: tool.name, count: 0, errors: 0, durationMs: 0 };
@@ -364,13 +365,13 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 	return (
 		<div className="turn-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
 			<section className="turn-detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`turn-detail-title-${turn.id}`}>
-				<header><div><h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2><p>{inherited ? "Inherited shared history · excluded from this branch total" : "Usage for this assistant turn only"}</p></div><button type="button" onClick={onClose} title="Close" aria-label="Close turn details"><X size={17} /></button></header>
+				<header><div><h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2><p>{inherited ? "Inherited shared history · excluded from this branch total" : usage ? "Usage for this assistant turn only" : "Usage was not recorded for this turn"}</p></div><button type="button" onClick={onClose} title="Close" aria-label="Close turn details"><X size={17} /></button></header>
 				<div className="turn-detail-summary">
-					<DetailMetric label="Tokens" value={usageTokens(usage).toLocaleString()} />
+					<DetailMetric label="Tokens" value={usage ? usageTokens(usage).toLocaleString() : "Not recorded"} />
 					<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
-					<DetailMetric label="Cost" value={usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`} />
+					<DetailMetric label="Cost" value={usage ? (usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`) : "Not recorded"} />
 				</div>
-				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage.input} /><DetailRow label="Output" value={usage.output} /><DetailRow label="Cache read" value={usage.cacheRead} /><DetailRow label="Cache write" value={usage.cacheWrite} /></dl></div>
+				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage?.input} /><DetailRow label="Output" value={usage?.output} /><DetailRow label="Cache read" value={usage?.cacheRead} /><DetailRow label="Cache write" value={usage?.cacheWrite} /></dl></div>
 				<div className="turn-detail-section"><h3>Tool calls <span>{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}</span></h3>{tools.length ? <div className="turn-tool-list">{tools.map((tool) => <div key={tool.name}><strong>{tool.name}</strong><span>{tool.count} call{tool.count === 1 ? "" : "s"}{tool.errors ? ` · ${tool.errors} failed` : ""} · {formatDuration(tool.durationMs)}</span></div>)}</div> : <p className="turn-detail-empty">No tools were called.</p>}</div>
 			</section>
 		</div>
@@ -378,7 +379,7 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 }
 
 const DetailMetric = ({ label, value }: { label: string; value: string }) => <div><span>{label}</span><strong>{value}</strong></div>;
-const DetailRow = ({ label, value }: { label: string; value: number }) => <div><dt>{label}</dt><dd>{value.toLocaleString()}</dd></div>;
+const DetailRow = ({ label, value }: { label: string; value?: number }) => <div><dt>{label}</dt><dd>{value === undefined ? "—" : value.toLocaleString()}</dd></div>;
 
 function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 	return <div className="mb-3 space-y-2">{tools.map((tool) => <details key={tool.id} className="tool-card"><summary><span className="tool-card-icon">{tool.status === "running" ? <LoaderCircle size={14} className="animate-spin" /> : tool.status === "error" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small>{tool.durationMs === undefined ? tool.status : formatDuration(tool.durationMs)}</small><ChevronDown size={14} /></summary><div className="tool-card-details">Status: {tool.status}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</div></details>)}</div>;

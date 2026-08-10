@@ -16,7 +16,10 @@ export interface SessionNode {
 	isRoot: boolean;
 	status: "idle" | "running" | "error";
 	worktreePath?: string;
-	usage?: TokenUsage;
+	/** Model usage spent generating this node's title. */
+	titleUsage?: TokenUsage;
+	/** Model usage spent generating the original-path title below a fork point. */
+	continuationTitleUsage?: TokenUsage;
 }
 
 export interface Turn {

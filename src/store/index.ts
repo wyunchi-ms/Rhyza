@@ -43,7 +43,7 @@ interface AppState {
 	setSessionProgressStatus: (id: string, status?: SessionProgressStatus, continuation?: boolean) => void;
 	deleteSession: (id: string) => void;
 	setSessionStatus: (id: string, status: SessionNode["status"]) => void;
-	addSessionUsage: (id: string, usage?: import("../types").TokenUsage) => void;
+	addSessionTitleUsage: (id: string, usage?: import("../types").TokenUsage, continuation?: boolean) => void;
 	addTurnUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addManualTurn: (turn: Turn) => void;
 	updateTurn: (turnId: string, patch: Partial<Turn>) => void;
@@ -269,11 +269,13 @@ export const useAppStore = create<AppState>()(
 						session.id === id ? { ...session, status } : session,
 					),
 				})),
-			addSessionUsage: (id, usage) => {
+			addSessionTitleUsage: (id, usage, continuation = false) => {
 				if (!usage) return;
 				set((state) => ({
 					sessions: state.sessions.map((session) => session.id === id
-						? { ...session, usage: addTokenUsage(session.usage, usage) }
+						? continuation
+							? { ...session, continuationTitleUsage: addTokenUsage(session.continuationTitleUsage, usage) }
+							: { ...session, titleUsage: addTokenUsage(session.titleUsage, usage) }
 						: session),
 				}));
 			},
@@ -685,9 +687,21 @@ function addTokenUsage(left: import("../types").TokenUsage | undefined, right: i
 }
 
 function migrateForkTitles(sessions: SessionNode[]): SessionNode[] {
-	const parentIds = new Set(sessions.flatMap((session) => session.parentId ? [session.parentId] : []));
-	const byId = new Map(sessions.map((session) => [session.id, session]));
-	return sessions.map((session) => {
+	const cleanedSessions = sessions.map((session) => {
+		const cleaned = { ...session } as SessionNode & { usage?: import("../types").TokenUsage };
+		const legacyUsage = cleaned.usage;
+		delete cleaned.usage;
+		if (!legacyUsage) return cleaned;
+		// The former field mixed title usage into the session. Root sessions only
+		// received it for their original-path label; child sessions received it
+		// when their own branch title was generated.
+		return cleaned.parentId
+			? { ...cleaned, titleUsage: addTokenUsage(cleaned.titleUsage, legacyUsage) }
+			: { ...cleaned, continuationTitleUsage: addTokenUsage(cleaned.continuationTitleUsage, legacyUsage) };
+	});
+	const parentIds = new Set(cleanedSessions.flatMap((session) => session.parentId ? [session.parentId] : []));
+	const byId = new Map(cleanedSessions.map((session) => [session.id, session]));
+	return cleanedSessions.map((session) => {
 		if (parentIds.has(session.id) && !session.continuationTitle) {
 			return { ...session, continuationTitle: "Original path", continuationTitlePending: false };
 		}

@@ -14,6 +14,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type {
 	AgentBridgeEvent,
+	AgentUsage,
 	AgentPromptRequest,
 	AgentPromptResponse,
 	AgentTranscriptTurn,
@@ -173,6 +174,7 @@ export class PiService {
 		request: AgentPromptRequest,
 		workspacePath: string,
 	): Promise<AgentPromptResponse> {
+		const promptUsage = emptyAgentUsage();
 		try {
 			const runtime = await this.getModelRuntime();
 			let model: PiModel | undefined;
@@ -192,22 +194,35 @@ export class PiService {
 				sessionId: session.sessionId,
 				message: request.prompt,
 			});
-			await session.sendUserMessage(
-				request.knowledgeContext
-					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
-					: request.prompt,
-			);
+			const unsubscribeUsage = session.subscribe((event) => {
+				const usage = getEventUsage(event);
+				if (usage) addUsage(promptUsage, usage);
+			});
+			try {
+				await session.sendUserMessage(
+					request.knowledgeContext
+						? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
+						: request.prompt,
+				);
+			} finally {
+				unsubscribeUsage();
+			}
 			return {
 				ok: true,
 				sessionId: session.sessionId,
 				assistantText: getLastAssistantText(session),
 				reasoningText: getLastAssistantReasoning(session),
+				usage: hasUsage(promptUsage) ? promptUsage : undefined,
 				workspacePath: active.workspacePath,
 				isolated: active.isolated,
 				sourceRefs: [...active.sourceRefs.values()],
 			};
 		} catch (error) {
-			return { ok: false, error: errorToMessage(error) };
+			return {
+				ok: false,
+				error: errorToMessage(error),
+				usage: hasUsage(promptUsage) ? promptUsage : undefined,
+			};
 		}
 	}
 
@@ -538,15 +553,7 @@ function toAgentBridgeEvent(
 	event: AgentSessionEvent,
 ): AgentBridgeEvent {
 	const stream = extractStreamDelta(event);
-	const usage = event.type === "message_end"
-		&& "message" in event
-		&& typeof event.message === "object"
-		&& event.message !== null
-		&& "role" in event.message
-		&& event.message.role === "assistant"
-		&& "usage" in event.message
-		? event.message.usage
-		: undefined;
+	const usage = getEventUsage(event);
 	return {
 		type: event.type,
 		sessionId,
@@ -554,14 +561,49 @@ function toAgentBridgeEvent(
 		message: stream?.message ?? extractEventMessage(event),
 		streamKind: stream?.kind,
 		payload: sanitizeForRenderer(event),
-		usage: usage ? {
+		usage: usage && hasUsage(usage) ? {
 			input: usage.input,
 			output: usage.output,
 			cacheRead: usage.cacheRead,
 			cacheWrite: usage.cacheWrite,
-			cost: usage.cost.total,
+			cost: usage.cost,
 		} : undefined,
 	};
+}
+
+function getEventUsage(event: AgentSessionEvent): AgentUsage | undefined {
+	if (
+		event.type !== "message_end"
+		|| !("message" in event)
+		|| typeof event.message !== "object"
+		|| event.message === null
+		|| !("role" in event.message)
+		|| event.message.role !== "assistant"
+		|| !("usage" in event.message)
+	) return undefined;
+	return {
+		input: event.message.usage.input,
+		output: event.message.usage.output,
+		cacheRead: event.message.usage.cacheRead,
+		cacheWrite: event.message.usage.cacheWrite,
+		cost: event.message.usage.cost.total,
+	};
+}
+
+function emptyAgentUsage(): AgentUsage {
+	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+}
+
+function addUsage(total: AgentUsage, usage: AgentUsage): void {
+	total.input += usage.input;
+	total.output += usage.output;
+	total.cacheRead += usage.cacheRead;
+	total.cacheWrite += usage.cacheWrite;
+	total.cost += usage.cost;
+}
+
+function hasUsage(usage: AgentUsage): boolean {
+	return usage.input + usage.output + usage.cacheRead + usage.cacheWrite > 0 || usage.cost > 0;
 }
 
 const workspaceExplorationGuidance = `## Workspace exploration

@@ -54,10 +54,10 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 			}),
 		]);
 		const current = useAppStore.getState();
-		current.addSessionUsage(parentId, original.usage);
+		current.addSessionTitleUsage(parentId, original.usage, true);
 		if (original.summary) current.renameContinuation(parentId, original.summary);
 		children.forEach((child, index) => {
-			current.addSessionUsage(child.id, branches[index]?.usage);
+			current.addSessionTitleUsage(child.id, branches[index]?.usage);
 			const title = branches[index]?.summary;
 			if (title) current.renameSession(child.id, title);
 		});

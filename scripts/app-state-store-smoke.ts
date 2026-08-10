@@ -7,6 +7,7 @@ import { AppStateStore } from "../electron/main/app-state-store.js";
 const dataRoot = await mkdtemp(path.join(os.tmpdir(), "pigraph-state-store-"));
 const workspacePath = path.join(dataRoot, "workspace");
 const otherWorkspacePath = path.join(dataRoot, "other-workspace");
+const recoveryWorkspacePath = path.join(dataRoot, "recovery-workspace");
 const populated = JSON.stringify({
 	workspacePath,
 	state: {
@@ -58,6 +59,22 @@ try {
 	const stateFile = Object.values(index.workspaces)[0]?.stateFile;
 	assert.ok(stateFile);
 	assert.equal(await readFile(path.join(dataRoot, `${stateFile}.backup`), "utf8"), populated);
+
+	const legacyUsage = { input: 100, output: 20, cacheRead: 30, cacheWrite: 40, cost: 0.002 };
+	const legacyState = JSON.stringify({
+		workspacePath: recoveryWorkspacePath,
+		state: { sessions: [{ id: "legacy-session", usage: legacyUsage }], turns: [] },
+	});
+	const strippedState = JSON.stringify({
+		workspacePath: recoveryWorkspacePath,
+		state: { sessions: [{ id: "legacy-session" }], turns: [] },
+	});
+	await store.save(recoveryWorkspacePath, legacyState);
+	await store.save(recoveryWorkspacePath, strippedState);
+	const recovered = JSON.parse(store.load(recoveryWorkspacePath) ?? "{}") as {
+		state?: { sessions?: Array<{ usage?: typeof legacyUsage }> };
+	};
+	assert.deepEqual(recovered.state?.sessions?.[0]?.usage, legacyUsage);
 	console.log("AppStateStore smoke passed.");
 } finally {
 	await rm(dataRoot, { recursive: true, force: true });

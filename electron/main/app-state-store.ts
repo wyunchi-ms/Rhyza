@@ -34,7 +34,14 @@ export class AppStateStore {
 		const entry = Object.entries(index.workspaces).find(([candidate]) => sameWorkspace(candidate, key))?.[1];
 		if (!entry) return null;
 		try {
-			return readFileSync(path.join(this.dataRoot, entry.stateFile), "utf8");
+			const statePath = path.join(this.dataRoot, entry.stateFile);
+			const current = readFileSync(statePath, "utf8");
+			try {
+				return restoreLegacySessionUsage(current, readFileSync(`${statePath}.backup`, "utf8"));
+			} catch (error) {
+				if (isMissingFileError(error)) return current;
+				throw error;
+			}
 		} catch (error) {
 			if (isMissingFileError(error)) return null;
 			throw error;
@@ -99,6 +106,49 @@ export class AppStateStore {
 			throw error;
 		}
 	}
+}
+
+function restoreLegacySessionUsage(currentRaw: string, backupRaw: string): string {
+	try {
+		const currentEnvelope = JSON.parse(currentRaw) as Record<string, unknown>;
+		const backupEnvelope = JSON.parse(backupRaw) as Record<string, unknown>;
+		const currentState = isRecord(currentEnvelope.state) ? currentEnvelope.state : currentEnvelope;
+		const backupState = isRecord(backupEnvelope.state) ? backupEnvelope.state : backupEnvelope;
+		if (!Array.isArray(currentState.sessions) || !Array.isArray(backupState.sessions)) return currentRaw;
+		const backupUsage = new Map<string, Record<string, unknown>>();
+		for (const candidate of backupState.sessions) {
+			if (!isRecord(candidate) || typeof candidate.id !== "string" || !isTokenUsage(candidate.usage)) continue;
+			backupUsage.set(candidate.id, candidate.usage);
+		}
+		let changed = false;
+		const sessions = currentState.sessions.map((candidate) => {
+			if (
+				!isRecord(candidate)
+				|| typeof candidate.id !== "string"
+				|| isTokenUsage(candidate.usage)
+				|| isTokenUsage(candidate.titleUsage)
+				|| isTokenUsage(candidate.continuationTitleUsage)
+			) return candidate;
+			const usage = backupUsage.get(candidate.id);
+			if (!usage) return candidate;
+			changed = true;
+			return { ...candidate, usage };
+		});
+		if (!changed) return currentRaw;
+		const nextState = { ...currentState, sessions };
+		const nextEnvelope = currentEnvelope.state
+			? { ...currentEnvelope, state: nextState }
+			: nextState;
+		return JSON.stringify(nextEnvelope);
+	} catch {
+		return currentRaw;
+	}
+}
+
+function isTokenUsage(value: unknown): value is Record<string, unknown> {
+	return isRecord(value)
+		&& ["input", "output", "cacheRead", "cacheWrite", "cost"]
+			.every((key) => typeof value[key] === "number" && Number.isFinite(value[key]));
 }
 
 function parseIndex(raw: string): WorkspaceIndex {

@@ -127,6 +127,7 @@ export interface AgentPromptResponse {
 	sessionId?: string;
 	assistantText?: string;
 	reasoningText?: string;
+	usage?: AgentUsage;
 	error?: string;
 	workspacePath?: string;
 	isolated?: boolean;
