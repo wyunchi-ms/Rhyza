@@ -43,6 +43,8 @@ interface AppState {
 	setSessionProgressStatus: (id: string, status?: SessionProgressStatus, continuation?: boolean) => void;
 	deleteSession: (id: string) => void;
 	setSessionStatus: (id: string, status: SessionNode["status"]) => void;
+	addSessionUsage: (id: string, usage?: import("../types").TokenUsage) => void;
+	addTurnUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addManualTurn: (turn: Turn) => void;
 	updateTurn: (turnId: string, patch: Partial<Turn>) => void;
 	finalizeTurn: (sessionId: string, turnId: string, content: string, candidates?: KnowledgeCandidate[], relationCandidates?: KnowledgeRelationCandidate[], diagramCandidates?: KnowledgeDiagramCandidate[], sourceRefs?: SourceRef[]) => void;
@@ -197,6 +199,8 @@ export const useAppStore = create<AppState>()(
 					id: createId("turn"),
 					sessionId: id,
 					changeSetId: undefined,
+					inheritedUsage: item.usage ?? item.inheritedUsage,
+					usage: undefined,
 				}));
 				set((current) => ({
 					sessions: [...current.sessions.map((session) => session.id === turn.sessionId ? {
@@ -265,6 +269,22 @@ export const useAppStore = create<AppState>()(
 						session.id === id ? { ...session, status } : session,
 					),
 				})),
+			addSessionUsage: (id, usage) => {
+				if (!usage) return;
+				set((state) => ({
+					sessions: state.sessions.map((session) => session.id === id
+						? { ...session, usage: addTokenUsage(session.usage, usage) }
+						: session),
+				}));
+			},
+			addTurnUsage: (id, usage) => {
+				if (!usage) return;
+				set((state) => ({
+					turns: state.turns.map((turn) => turn.id === id
+						? { ...turn, usage: addTokenUsage(turn.usage, usage) }
+						: turn),
+				}));
+			},
 			addManualTurn: (turn) => set((state) => ({ turns: [...state.turns, turn] })),
 			updateTurn: (turnId, patch) =>
 				set((state) => ({
@@ -276,7 +296,7 @@ export const useAppStore = create<AppState>()(
 			finalizeTurn: (sessionId, turnId, content, candidates = [], relationCandidates = [], diagramCandidates = [], sourceRefs = []) => {
 				const state = get();
 				if (!state.settings.autoExtract || state.settings.knowledgeMode === "read_only") {
-					get().updateTurn(turnId, { status: "complete" });
+					get().updateTurn(turnId, { status: "complete", completedAt: new Date().toISOString() });
 					return;
 				}
 				const timestamp = new Date().toISOString();
@@ -386,6 +406,7 @@ export const useAppStore = create<AppState>()(
 									...turn,
 									content,
 									status: "complete",
+									completedAt: timestamp,
 									entities: mentions,
 									changeSetId: operations.length ? changeSetId : undefined,
 								}
@@ -651,6 +672,16 @@ export function loadWorkspaceState(serialized: string | null): void {
 
 function createId(prefix: string): string {
 	return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function addTokenUsage(left: import("../types").TokenUsage | undefined, right: import("../types").TokenUsage) {
+	return {
+		input: (left?.input ?? 0) + right.input,
+		output: (left?.output ?? 0) + right.output,
+		cacheRead: (left?.cacheRead ?? 0) + right.cacheRead,
+		cacheWrite: (left?.cacheWrite ?? 0) + right.cacheWrite,
+		cost: (left?.cost ?? 0) + right.cost,
+	};
 }
 
 function migrateForkTitles(sessions: SessionNode[]): SessionNode[] {

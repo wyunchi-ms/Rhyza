@@ -147,6 +147,15 @@ export interface SummaryRequest {
 export interface SummaryResponse {
 	summary?: string;
 	error?: string;
+	usage?: AgentUsage;
+}
+
+export interface AgentUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	cost: number;
 }
 
 export interface KnowledgeCandidate {
@@ -190,6 +199,7 @@ export interface KnowledgeExtractionResponse {
 	relations: KnowledgeRelationCandidate[];
 	diagrams: KnowledgeDiagramCandidate[];
 	error?: string;
+	usage?: AgentUsage;
 }
 
 export interface OpenExternalRequest { url: string }
@@ -214,6 +224,7 @@ export interface AgentBridgeEvent {
 	message?: string;
 	streamKind?: "text" | "reasoning";
 	payload?: unknown;
+	usage?: AgentUsage;
 }
 
 export interface KnowbranchBridge {

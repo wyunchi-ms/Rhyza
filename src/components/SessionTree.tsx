@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
-import type { SessionNode, SessionProgressStatus } from "../types";
+import type { SessionNode, SessionProgressStatus, TokenUsage } from "../types";
+import { allocateBranchUsage, formatTokens, usageTokens } from "../utils/branchUsage";
 
 const progressOptions: Array<{
 	value?: SessionProgressStatus;
@@ -21,8 +22,9 @@ const progressOptions: Array<{
 ];
 
 export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
-	const { sessions, activeSessionId, setActiveSession, createRootSession, renameSession, renameContinuation, setSessionProgressStatus, deleteSession } =
+	const { sessions, turns, activeSessionId, setActiveSession, createRootSession, renameSession, renameContinuation, setSessionProgressStatus, deleteSession } =
 		useAppStore();
+	const usage = allocateBranchUsage(sessions, turns);
 	const navigate = useNavigate();
 	const selectSession = (id: string) => {
 		setActiveSession(id);
@@ -52,8 +54,10 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 			}),
 		]);
 		const current = useAppStore.getState();
+		current.addSessionUsage(parentId, original.usage);
 		if (original.summary) current.renameContinuation(parentId, original.summary);
 		children.forEach((child, index) => {
+			current.addSessionUsage(child.id, branches[index]?.usage);
 			const title = branches[index]?.summary;
 			if (title) current.renameSession(child.id, title);
 		});
@@ -62,7 +66,10 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 	return (
 		<div className={clsx("session-tree flex flex-col min-h-0", embedded ? "flex-1" : "w-64 h-full shrink-0 border-r border-gray-200")}>
 			<div className="session-tree-header">
-				<h2>Chats</h2>
+				<div>
+					<h2>Chats</h2>
+					<UsageLabel usage={usage.total} prefix="Total" />
+				</div>
 				<button
 					type="button"
 					onClick={createSession}
@@ -86,6 +93,7 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 						onSetProgress={setSessionProgressStatus}
 						onRegenerate={(id) => void regenerateBranchTitles(id)}
 						onDelete={deleteSession}
+						usage={usage}
 					/>
 				))}
 			</div>
@@ -103,6 +111,7 @@ const SessionGroup = ({
 	onSetProgress,
 	onRegenerate,
 	onDelete,
+	usage,
 }: {
 	root: SessionNode;
 	sessions: SessionNode[];
@@ -113,6 +122,7 @@ const SessionGroup = ({
 	onSetProgress: (id: string, status?: SessionProgressStatus, continuation?: boolean) => void;
 	onRegenerate: (id: string) => void;
 	onDelete: (id: string) => void;
+	usage: ReturnType<typeof allocateBranchUsage>;
 }) => {
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
 	const [contextMenu, setContextMenu] = useState<{
@@ -173,6 +183,7 @@ const SessionGroup = ({
 			<button type="button" className={clsx("session-node-button pr-10", isActive && "is-active")} onClick={() => onSelect(node.id)} onContextMenu={(event) => openStatusMenu(event, node.id, node.continuationProgressStatus, true)}>
 				<ProgressMarker status={node.continuationProgressStatus} active={isActive} />
 				<span className="truncate flex-1 font-medium">{title}</span>
+				<UsageLabel usage={usage.continuation.get(node.id)} />
 				{node.continuationTitlePending && <LoaderCircle size={12} className="animate-spin" aria-label="Generating title" />}
 			</button>
 			<div className={clsx("absolute right-1 top-1/2 -translate-y-1/2 flex opacity-0 group-hover:opacity-100 focus-within:opacity-100", isActive ? "text-white" : "text-secondary")}>
@@ -215,6 +226,7 @@ const SessionGroup = ({
 					)}
 					{isBranchPoint && <ProgressMarker status={node.progressStatus} active={isActive} />}
 					<span className="truncate flex-1 font-medium">{node.title}</span>
+					<UsageLabel usage={usage.node.get(node.id)} />
 					{!isBranchPoint && node.status === "running" && <LoaderCircle size={12} className="animate-spin" aria-label="Running" />}
 					{!isBranchPoint && node.status === "error" && <AlertCircle size={12} className="text-red-500" aria-label="Error" />}
 				</button>
@@ -280,6 +292,19 @@ const ProgressMarker = ({ status, active }: { status?: SessionProgressStatus; ac
 	return (
 		<span title={option.label} aria-label={`节点状态：${option.label}`} className={clsx("session-progress-marker", status && `status-${status}`, active && "is-active")}>
 			<Icon size={status ? 12 : 7} strokeWidth={status ? 2.25 : 3} />
+		</span>
+	);
+};
+
+const UsageLabel = ({ usage, prefix }: { usage?: TokenUsage; prefix?: string }) => {
+	if (!usage) return null;
+	const tokens = usageTokens(usage);
+	return (
+		<span
+			className="session-usage"
+			title={`Input ${usage.input.toLocaleString()} · Output ${usage.output.toLocaleString()} · Cache read ${usage.cacheRead.toLocaleString()} · Cache write ${usage.cacheWrite.toLocaleString()} · $${usage.cost.toFixed(6)}`}
+		>
+			{prefix ? `${prefix} ` : ""}{formatTokens(tokens)} · ${usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`}
 		</span>
 	);
 };

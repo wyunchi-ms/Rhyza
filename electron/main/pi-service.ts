@@ -240,7 +240,8 @@ export class PiService {
 					`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
 				);
 				const summary = getLastAssistantText(session)?.replace(/^["'“”]+|["'“”]+$/g, "").trim();
-				return summary ? { summary: summary.slice(0, 80) } : { error: "The model returned an empty title." };
+				const usage = getSessionUsage(session);
+				return summary ? { summary: summary.slice(0, 80), usage } : { error: "The model returned an empty title.", usage };
 			} finally {
 				session.dispose();
 			}
@@ -274,7 +275,7 @@ export class PiService {
 				await session.sendUserMessage(buildKnowledgeExtractionPrompt(request));
 				const output = getLastAssistantText(session);
 				if (!output) throw new Error("The model returned an empty extraction result.");
-				return parseKnowledgeExtraction(output, request);
+				return { ...parseKnowledgeExtraction(output, request), usage: getSessionUsage(session) };
 			} finally {
 				session.dispose();
 			}
@@ -537,6 +538,15 @@ function toAgentBridgeEvent(
 	event: AgentSessionEvent,
 ): AgentBridgeEvent {
 	const stream = extractStreamDelta(event);
+	const usage = event.type === "message_end"
+		&& "message" in event
+		&& typeof event.message === "object"
+		&& event.message !== null
+		&& "role" in event.message
+		&& event.message.role === "assistant"
+		&& "usage" in event.message
+		? event.message.usage
+		: undefined;
 	return {
 		type: event.type,
 		sessionId,
@@ -544,6 +554,13 @@ function toAgentBridgeEvent(
 		message: stream?.message ?? extractEventMessage(event),
 		streamKind: stream?.kind,
 		payload: sanitizeForRenderer(event),
+		usage: usage ? {
+			input: usage.input,
+			output: usage.output,
+			cacheRead: usage.cacheRead,
+			cacheWrite: usage.cacheWrite,
+			cost: usage.cost.total,
+		} : undefined,
 	};
 }
 
@@ -593,6 +610,19 @@ function extractEventMessage(event: AgentSessionEvent): string | undefined {
 
 function getLastAssistantText(session: AgentSession): string | undefined {
 	return getLastAssistantContent(session, "text");
+}
+
+function getSessionUsage(session: AgentSession) {
+	const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	for (const message of session.messages) {
+		if (typeof message !== "object" || message === null || !("role" in message) || message.role !== "assistant" || !("usage" in message)) continue;
+		total.input += message.usage.input;
+		total.output += message.usage.output;
+		total.cacheRead += message.usage.cacheRead;
+		total.cacheWrite += message.usage.cacheWrite;
+		total.cost += message.usage.cost.total;
+	}
+	return total;
 }
 
 function getLastAssistantReasoning(session: AgentSession): string | undefined {

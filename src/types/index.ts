@@ -16,6 +16,7 @@ export interface SessionNode {
 	isRoot: boolean;
 	status: "idle" | "running" | "error";
 	worktreePath?: string;
+	usage?: TokenUsage;
 }
 
 export interface Turn {
@@ -36,7 +37,19 @@ export interface Turn {
 	summary?: string;
 	entities?: EntityMention[];
 	changeSetId?: string;
+	usage?: TokenUsage;
+	/** Display-only usage copied with shared fork history; excluded from branch totals. */
+	inheritedUsage?: TokenUsage;
 	createdAt: string;
+	completedAt?: string;
+}
+
+export interface TokenUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	cost: number;
 }
 
 export interface ToolExecution {

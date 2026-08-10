@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, LoaderCircle, PanelRight, Send, Sparkles } from "lucide-react";
+import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, Info, LoaderCircle, PanelRight, Send, Sparkles, X } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import {
 import { useAppStore } from "../store";
 import type { SourceSearchHit } from "../shared/ipc";
 import type { Diagram, Entity, Relation, Turn } from "../types";
+import { usageTokens } from "../utils/branchUsage";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
 
@@ -53,8 +54,30 @@ export const ChatPane: React.FC = () => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
 		return bridge.onAgentEvent((event) => {
-			if (event.frontendSessionId !== activeSessionId || !streamingTurnId.current) return;
-			const turnId = streamingTurnId.current;
+			if (!event.frontendSessionId) return;
+			const turnId = event.frontendSessionId === activeSessionId
+				? streamingTurnId.current
+				: [...useAppStore.getState().turns].reverse().find((turn) =>
+					turn.sessionId === event.frontendSessionId
+					&& turn.role === "assistant"
+					&& turn.status !== "complete"
+					&& turn.status !== "complete_with_unsynced_knowledge"
+					&& turn.status !== "interrupted"
+				)?.id;
+			if (!turnId) return;
+			if (event.type === "message_end" && event.usage) {
+				const current = useAppStore.getState().turns.find((turn) => turn.id === turnId);
+				const previous = current?.usage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+				useAppStore.getState().updateTurn(turnId, {
+					usage: {
+						input: previous.input + event.usage.input,
+						output: previous.output + event.usage.output,
+						cacheRead: previous.cacheRead + event.usage.cacheRead,
+						cacheWrite: previous.cacheWrite + event.usage.cacheWrite,
+						cost: previous.cost + event.usage.cost,
+					},
+				});
+			}
 			if (event.message && event.type === "message_update") {
 				const current = useAppStore.getState().turns.find((turn) => turn.id === turnId);
 				const field = event.streamKind === "reasoning" ? "reasoning" : "content";
@@ -161,7 +184,8 @@ export const ChatPane: React.FC = () => {
 						.map((diagram) => ({ id: diagram.id, name: diagram.name, type: diagram.type, nodeLabels: diagram.nodes.map((node) => node.label) })),
 					model: selectedModel,
 				})
-				: { entities: [], relations: [], diagrams: [] };
+				: { entities: [], relations: [], diagrams: [], usage: undefined };
+			store.addTurnUsage(assistantTurnId, extraction.usage);
 			const currentSources = useAppStore.getState().sources;
 			const prefetchedSourceRefs = sourceHits.map((hit) => {
 				const source = currentSources.find((item) => item.id === hit.sourceId);
@@ -170,6 +194,7 @@ export const ChatPane: React.FC = () => {
 			const sourceRefs = result.sourceRefs?.length ? result.sourceRefs : prefetchedSourceRefs;
 			store.finalizeTurn(activeSessionId, assistantTurnId, response, extraction.entities, extraction.relations, extraction.diagrams, sourceRefs);
 			const generatedSummary = await summaryPromise;
+			store.addTurnUsage(assistantTurnId, generatedSummary.usage);
 			if (generatedSummary.summary) {
 				store.updateTurn(userTurnId, { summary: generatedSummary.summary });
 				const session = useAppStore.getState().sessions.find((item) => item.id === activeSessionId);
@@ -179,12 +204,14 @@ export const ChatPane: React.FC = () => {
 					store.renameSession(activeSessionId, generatedSummary.summary);
 				}
 			}
+			store.updateTurn(assistantTurnId, { completedAt: new Date().toISOString() });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			store.updateTurn(assistantTurnId, {
 				content: message,
 				status: "complete_with_unsynced_knowledge",
 				summary: "Request failed",
+				completedAt: new Date().toISOString(),
 			});
 			store.setSessionStatus(activeSessionId, "error");
 			setSendError(message);
@@ -213,6 +240,8 @@ export const ChatPane: React.FC = () => {
 			bridge.generateSummary({ text: forkText, model }),
 		]);
 		const current = useAppStore.getState();
+		current.addSessionUsage(result.originalSessionId, originalTitle.usage);
+		current.addSessionUsage(result.forkSessionId, forkTitle.usage);
 		current.renameContinuation(result.originalSessionId, originalTitle.summary ?? "Original path");
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
 	};
@@ -285,10 +314,17 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 }) {
 	const isUser = turn.role === "user";
 	const [collapsed, setCollapsed] = useState(false);
+	const [detailsOpen, setDetailsOpen] = useState(false);
+	useEffect(() => {
+		if (!detailsOpen) return;
+		const close = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailsOpen(false); };
+		window.addEventListener("keydown", close);
+		return () => window.removeEventListener("keydown", close);
+	}, [detailsOpen]);
 	return (
 		<article id={`turn-${turn.id}`} className={clsx("chat-turn group", isUser && "is-user")}>
 			{!isUser && <div className="assistant-mark"><Sparkles size={14} /></div>}
-			<div className={clsx("turn-content", isUser && "items-end")}>
+			<div className={clsx("turn-content", isUser ? "items-end" : "w-full")}>
 				<div className={clsx("turn-body", isUser ? "user-bubble" : "assistant-body")}>
 					{!isUser && <button type="button" title={collapsed ? "Expand response" : "Collapse response"} aria-label={collapsed ? "Expand response" : "Collapse response"} onClick={() => setCollapsed((value) => !value)} className="response-collapse"><ChevronUp size={15} className={clsx("transition-transform", collapsed && "rotate-180")} /></button>}
 					{collapsed && !isUser ? <p className="truncate text-sm font-medium text-secondary">{turn.summary || "Assistant response"}</p> : <>
@@ -304,11 +340,45 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 					{canFork && <button type="button" title="Continue from here" aria-label="Continue from here" onClick={onFork}><GitFork size={14} /></button>}
 					<button type="button" title="Copy" aria-label="Copy" onClick={() => void navigator.clipboard.writeText(turn.content)}><Copy size={14} /></button>
 					{turn.changeSetId && <span className="knowledge-updated">Knowledge updated</span>}
+					{!isUser && <button type="button" className="turn-detail-trigger" title="Turn details" aria-label="Show turn usage details" onClick={() => setDetailsOpen(true)}><Info size={14} /></button>}
 				</div>
 			</div>
+			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
 		</article>
 	);
 }
+
+function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {
+	const inherited = !turn.usage && Boolean(turn.inheritedUsage);
+	const usage = turn.usage ?? turn.inheritedUsage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date().toISOString()).getTime() - new Date(turn.createdAt).getTime());
+	const tools = Object.values((turn.tools ?? []).reduce<Record<string, { name: string; count: number; errors: number; durationMs: number }>>((groups, tool) => {
+		const group = groups[tool.name] ?? { name: tool.name, count: 0, errors: 0, durationMs: 0 };
+		group.count += 1;
+		group.errors += tool.status === "error" ? 1 : 0;
+		group.durationMs += tool.durationMs ?? 0;
+		groups[tool.name] = group;
+		return groups;
+	}, {}));
+	const toolDuration = tools.reduce((sum, tool) => sum + tool.durationMs, 0);
+	return (
+		<div className="turn-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+			<section className="turn-detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`turn-detail-title-${turn.id}`}>
+				<header><div><h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2><p>{inherited ? "Inherited shared history · excluded from this branch total" : "Usage for this assistant turn only"}</p></div><button type="button" onClick={onClose} title="Close" aria-label="Close turn details"><X size={17} /></button></header>
+				<div className="turn-detail-summary">
+					<DetailMetric label="Tokens" value={usageTokens(usage).toLocaleString()} />
+					<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
+					<DetailMetric label="Cost" value={usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`} />
+				</div>
+				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage.input} /><DetailRow label="Output" value={usage.output} /><DetailRow label="Cache read" value={usage.cacheRead} /><DetailRow label="Cache write" value={usage.cacheWrite} /></dl></div>
+				<div className="turn-detail-section"><h3>Tool calls <span>{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}</span></h3>{tools.length ? <div className="turn-tool-list">{tools.map((tool) => <div key={tool.name}><strong>{tool.name}</strong><span>{tool.count} call{tool.count === 1 ? "" : "s"}{tool.errors ? ` · ${tool.errors} failed` : ""} · {formatDuration(tool.durationMs)}</span></div>)}</div> : <p className="turn-detail-empty">No tools were called.</p>}</div>
+			</section>
+		</div>
+	);
+}
+
+const DetailMetric = ({ label, value }: { label: string; value: string }) => <div><span>{label}</span><strong>{value}</strong></div>;
+const DetailRow = ({ label, value }: { label: string; value: number }) => <div><dt>{label}</dt><dd>{value.toLocaleString()}</dd></div>;
 
 function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 	return <div className="mb-3 space-y-2">{tools.map((tool) => <details key={tool.id} className="tool-card"><summary><span className="tool-card-icon">{tool.status === "running" ? <LoaderCircle size={14} className="animate-spin" /> : tool.status === "error" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small>{tool.durationMs === undefined ? tool.status : formatDuration(tool.durationMs)}</small><ChevronDown size={14} /></summary><div className="tool-card-details">Status: {tool.status}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</div></details>)}</div>;
