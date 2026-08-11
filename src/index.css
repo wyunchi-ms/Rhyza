@@ -131,6 +131,15 @@ body {
 .entity-row { display: block; width: 100%; padding: 1rem; text-align: left; }
 .entity-row + .entity-row { border-top: 1px solid #ededed; }
 .entity-row:hover { background: #fafafa; }
+.entity-markdown-preview { background: #fafafa; }
+.entity-markdown-preview header { border-bottom: 1px solid #e5e7eb; padding-bottom: 1.5rem; }
+.entity-markdown-preview h1 { margin-top: 0.8rem; color: #212121; font-size: clamp(1.6rem, 3vw, 2.25rem); font-weight: 700; line-height: 1.2; }
+.entity-markdown-preview header > p { margin-top: 0.75rem; color: #64748b; font-size: 1rem; line-height: 1.65; }
+.entity-markdown-preview-body { margin-top: 1.5rem; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; padding: clamp(1rem, 3vw, 2rem); box-shadow: 0 1px 2px rgb(15 23 42 / 4%); }
+.entity-center-editor { background: #fafafa; }
+.entity-center-editor h1 { margin-top: 0.25rem; color: #212121; font-size: clamp(1.6rem, 3vw, 2.25rem); font-weight: 700; line-height: 1.2; }
+.entity-summary-editor { min-height: 9rem; resize: none; overflow-y: hidden; line-height: 1.55; }
+.entity-content-editor { min-height: 30rem; resize: none; overflow-y: hidden; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; line-height: 1.55; }
 
 button, input, select, textarea {
 	font: inherit;
@@ -195,6 +204,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .reasoning-block > summary::-webkit-details-marker { display: none; }
 .reasoning-block[open] .reasoning-chevron { transform: rotate(180deg); }
 .reasoning-chevron { transition: transform 160ms ease; }
+.tools-section > summary { display: flex; min-height: 2.25rem; cursor: pointer; list-style: none; align-items: center; gap: 0.5rem; border-radius: 7px; background: #f6f6f6; padding: 0.4rem 0.65rem; color: #666; }
+.tools-section > summary::-webkit-details-marker { display: none; }
+.tools-section > summary strong { color: #303030; font-size: 0.75rem; }
+.tools-section > summary small { color: #888; font-size: 0.65rem; }
+.tools-section > summary .tools-chevron { margin-left: auto; transition: transform 160ms ease; }
+.tools-section[open] > summary .tools-chevron { transform: rotate(180deg); }
+.tools-section-content { padding-top: 0.5rem; }
 .tool-card { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 7px; background: #fafafa; }
 .tool-card > summary { display: flex; min-height: 2.5rem; cursor: pointer; list-style: none; align-items: center; gap: 0.55rem; padding: 0.45rem 0.65rem; color: #555; }
 .tool-card > summary::-webkit-details-marker { display: none; }

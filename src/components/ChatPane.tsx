@@ -9,11 +9,13 @@ import {
 	isElectronRuntime,
 } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
-import type { SourceSearchHit } from "../shared/ipc";
+import type { KnowledgeExtractionResponse, SourceSearchHit, SummaryResponse } from "../shared/ipc";
 import type { Diagram, Entity, Relation, Turn } from "../types";
 import { usageTokens } from "../utils/branchUsage";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
+
+const auxiliaryRequestTimeoutMs = 30_000;
 
 export const ChatPane: React.FC = () => {
 	const store = useAppStore();
@@ -138,7 +140,11 @@ export const ChatPane: React.FC = () => {
 			const selectedModel = store.settings.defaultModel
 				? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
 				: undefined;
-			const summaryPromise = bridge.generateSummary({ text: prompt, model: selectedModel });
+			const summaryPromise = withTimeout(
+				bridge.generateSummary({ text: prompt, model: selectedModel }),
+				auxiliaryRequestTimeoutMs,
+				"Title generation",
+			).catch((): SummaryResponse => ({ error: "Title generation timed out." }));
 			const sourceHits = await bridge.sourceSearch({ query: prompt, limit: 8 });
 			const knowledgeContext = buildContextPack(prompt, store.entities, store.relations, store.diagrams, sourceHits);
 			store.updateTurn(assistantTurnId, { status: "running", summary: "Pi agent is running" });
@@ -174,7 +180,7 @@ export const ChatPane: React.FC = () => {
 				summary: summarize(response),
 			});
 			const extraction = store.settings.autoExtract && store.settings.knowledgeMode !== "read_only"
-				? await bridge.extractKnowledge({
+				? await withTimeout(bridge.extractKnowledge({
 					question: prompt,
 					answer: response,
 					existingEntities: useAppStore.getState().entities
@@ -184,7 +190,12 @@ export const ChatPane: React.FC = () => {
 						.filter((diagram) => !diagram.deletedAt)
 						.map((diagram) => ({ id: diagram.id, name: diagram.name, type: diagram.type, nodeLabels: diagram.nodes.map((node) => node.label) })),
 					model: selectedModel,
-				})
+				}), auxiliaryRequestTimeoutMs, "Knowledge extraction").catch((error: unknown): KnowledgeExtractionResponse => ({
+					entities: [],
+					relations: [],
+					diagrams: [],
+					error: error instanceof Error ? error.message : String(error),
+				}))
 				: { entities: [], relations: [], diagrams: [], usage: undefined };
 			store.addTurnUsage(assistantTurnId, extraction.usage);
 			const currentSources = useAppStore.getState().sources;
@@ -279,7 +290,7 @@ export const ChatPane: React.FC = () => {
 				<div className="chat-composer">
 					<textarea
 						className="composer-input"
-						placeholder="Message KnowBranch"
+						placeholder="Message Rhyza"
 						value={input}
 						onChange={(event) => setInput(event.target.value)}
 						onKeyDown={(event) => {
@@ -382,7 +393,36 @@ const DetailMetric = ({ label, value }: { label: string; value: string }) => <di
 const DetailRow = ({ label, value }: { label: string; value?: number }) => <div><dt>{label}</dt><dd>{value === undefined ? "—" : value.toLocaleString()}</dd></div>;
 
 function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
-	return <div className="mb-3 space-y-2">{tools.map((tool) => <details key={tool.id} className="tool-card"><summary><span className="tool-card-icon">{tool.status === "running" ? <LoaderCircle size={14} className="animate-spin" /> : tool.status === "error" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small>{tool.durationMs === undefined ? tool.status : formatDuration(tool.durationMs)}</small><ChevronDown size={14} /></summary><div className="tool-card-details">Status: {tool.status}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</div></details>)}</div>;
+	const running = tools.filter((tool) => tool.status === "running").length;
+	const errors = tools.filter((tool) => tool.status === "error").length;
+	const summary = running ? `${running} running` : errors ? `${errors} failed` : "completed";
+	return (
+		<details className="tools-section mb-3">
+			<summary>
+				{running ? <LoaderCircle size={14} className="animate-spin" /> : errors ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
+				<strong>Tools</strong>
+				<small>{tools.length} call{tools.length === 1 ? "" : "s"} · {summary}</small>
+				<ChevronDown size={14} className="tools-chevron" />
+			</summary>
+			<div className="tools-section-content space-y-2">
+				{tools.map((tool) => <details key={tool.id} className="tool-card"><summary><span className="tool-card-icon">{tool.status === "running" ? <LoaderCircle size={14} className="animate-spin" /> : tool.status === "error" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small>{tool.durationMs === undefined ? tool.status : formatDuration(tool.durationMs)}</small><ChevronDown size={14} /></summary><div className="tool-card-details">Status: {tool.status}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</div></details>)}
+			</div>
+		</details>
+	);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				timeout = setTimeout(() => reject(new Error(`${label} timed out after ${formatDuration(timeoutMs)}.`)), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
 }
 
 function TurnStatus({ status }: { status: Turn["status"] }) {
