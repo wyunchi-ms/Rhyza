@@ -21,7 +21,7 @@ const Layout: React.FC = () => {
 			>
 				<div className="app-sidebar-brand">
 					<div className="brand-mark"><Sparkles size={15} /></div>
-					<span>KnowBranch</span>
+					<span>Rhyza</span>
 					<button type="button" className="sidebar-icon-button ml-auto" onClick={toggleSidebar} title="Close sidebar" aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
 				</div>
 				<nav className="app-nav" aria-label="Workspace navigation">

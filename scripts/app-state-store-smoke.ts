@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { AppStateStore } from "../electron/main/app-state-store.js";
 
-const dataRoot = await mkdtemp(path.join(os.tmpdir(), "pigraph-state-store-"));
+const dataRoot = await mkdtemp(path.join(os.tmpdir(), "rhyza-state-store-"));
 const workspacePath = path.join(dataRoot, "workspace");
 const otherWorkspacePath = path.join(dataRoot, "other-workspace");
 const recoveryWorkspacePath = path.join(dataRoot, "recovery-workspace");

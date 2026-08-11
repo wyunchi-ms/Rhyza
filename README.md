@@ -81,20 +81,20 @@ npm run electron:dev
 该命令会依次：
 
 1. 编译 Electron Main Process 和 preload。
-2. 在 `127.0.0.1:5173` 启动 Vite。
+2. 在 `127.0.0.1:5174` 启动 Vite。
 3. 等待 Vite 可访问后启动 Electron。
 4. 让 Electron 加载 Vite 开发页面。
 
 不要使用 `npm run dev` 测试真实聊天。它只启动浏览器中的 Renderer 页面；Provider、文件系统、Pi Agent 和本地持久化依赖 Electron IPC，浏览器中会显示 `Chat requires the Electron desktop runtime.`。
 
-### 端口 5173 被占用
+### 端口 5174 被占用
 
-开发服务器使用固定端口和 `strictPort`。如果看到 `Port 5173 is already in use`，先关闭之前运行的 Rhyza/Vite 进程，再重新启动。
+开发服务器使用固定端口和 `strictPort`。如果看到 `Port 5174 is already in use`，先关闭之前运行的 Rhyza/Vite 进程，再重新启动。
 
 PowerShell 中可以定位占用进程：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 5173 -State Listen |
+Get-NetTCPConnection -LocalPort 5174 -State Listen |
   Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
@@ -191,7 +191,7 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `~/.pi/agent/auth.json` | Pi Provider 凭据，包括 GitHub Copilot OAuth Token。 |
 | `~/.pi/agent/models-store.json` | Pi 动态模型目录缓存。 |
 
-`.pi-graph`、`PiGraph` 和代码中的 `knowbranch` 是当前为了兼容旧数据而保留的内部名称。不要仅为改名手工移动这些目录，否则可能造成 Workspace 映射和状态文件不一致。
+`.pi-graph`、`PiGraph` 用户数据目录和代码中的 `knowbranch` 是当前为了兼容旧数据而保留的内部名称。应用及 npm 包名称已改为 Rhyza；不要仅为改名手工移动这些兼容目录，否则可能造成 Workspace 映射和状态文件不一致。
 
 ## 开发命令
 

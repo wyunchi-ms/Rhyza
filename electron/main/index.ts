@@ -28,14 +28,14 @@ const isDev = process.env.VITE_DEV_SERVER_URL !== undefined;
 const isSmoke = process.env.KNOWBRANCH_ELECTRON_SMOKE === "1";
 setDefaultResultOrder("ipv4first");
 
-const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173";
+const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5174";
 const smokeTimeoutMs = 15_000;
 const legacyUserDataPath = app.getPath("userData");
 const dataRootPath = path.join(app.getPath("home"), ".pi-graph");
 const smokeUserDataPath = isSmoke
 	? path.join(app.getPath("temp"), `knowbranch-electron-smoke-${process.pid}`)
 	: undefined;
-app.setName("PiGraph");
+app.setName("Rhyza");
 app.setPath("userData", smokeUserDataPath ?? path.join(app.getPath("appData"), "PiGraph"));
 const ownsSingleInstanceLock = isSmoke || app.requestSingleInstanceLock();
 
@@ -172,7 +172,7 @@ function registerIpcHandlers(): void {
 		withValidSender(event, async () => {
 			const selection = await dialog.showOpenDialog(mainWindow!, {
 				properties: ["openDirectory"],
-				title: "Select KnowBranch workspace",
+				title: "Select Rhyza workspace",
 			});
 			if (!selection.canceled && selection.filePaths[0]) {
 				await settingsStore.setWorkspacePath(selection.filePaths[0]);
