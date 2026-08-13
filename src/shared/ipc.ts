@@ -107,6 +107,7 @@ export interface AgentPromptRequest {
 	forkedFromTurnId?: string;
 	transcript: AgentTranscriptTurn[];
 	prompt: string;
+	images?: AgentPromptImage[];
 	knowledgeContext?: string;
 	thinkingLevel?: "off" | "low" | "medium" | "high";
 	model?: {
@@ -114,6 +115,11 @@ export interface AgentPromptRequest {
 		modelId: string;
 	};
 	writable?: boolean;
+}
+
+export interface AgentPromptImage {
+	mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/bmp";
+	data: string;
 }
 
 export interface AgentTranscriptTurn {
@@ -309,6 +315,15 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		prompt: value.prompt,
 		transcript: value.transcript.map(validateTranscriptTurn),
 	};
+	if (Array.isArray(value.images)) {
+		request.images = value.images.slice(0, 4).flatMap((image) => {
+			if (!isRecord(image) || typeof image.data !== "string" || image.data.length > 6_000_000) return [];
+			const allowedMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+			return typeof image.mimeType === "string" && allowedMimeTypes.has(image.mimeType)
+				? [{ mimeType: image.mimeType as AgentPromptImage["mimeType"], data: image.data }]
+				: [];
+		});
+	}
 	if (typeof value.parentFrontendSessionId === "string") {
 		request.parentFrontendSessionId = value.parentFrontendSessionId;
 	}

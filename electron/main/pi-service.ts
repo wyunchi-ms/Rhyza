@@ -10,7 +10,7 @@ import {
 	type AgentSessionEvent,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, ImageContent, Model } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type {
 	AgentBridgeEvent,
@@ -199,11 +199,13 @@ export class PiService {
 				if (usage) addUsage(promptUsage, usage);
 			});
 			try {
-				await session.sendUserMessage(
-					request.knowledgeContext
-						? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
-						: request.prompt,
-				);
+				const promptText = request.knowledgeContext
+					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
+					: request.prompt;
+				const promptContent: string | Array<{ type: "text"; text: string } | ImageContent> = request.images?.length
+					? [{ type: "text", text: promptText }, ...request.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
+					: promptText;
+				await session.sendUserMessage(promptContent);
 			} finally {
 				unsubscribeUsage();
 			}

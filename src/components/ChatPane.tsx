@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, Info, LoaderCircle, PanelRight, Send, Sparkles, X } from "lucide-react";
+import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, ImagePlus, Info, LoaderCircle, PanelRight, Send, Sparkles, X } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,19 +9,22 @@ import {
 	isElectronRuntime,
 } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
-import type { KnowledgeExtractionResponse, SourceSearchHit, SummaryResponse } from "../shared/ipc";
+import type { AgentPromptImage, KnowledgeExtractionResponse, SourceSearchHit, SummaryResponse } from "../shared/ipc";
 import type { Diagram, Entity, Relation, Turn } from "../types";
 import { usageTokens } from "../utils/branchUsage";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
 
 const auxiliaryRequestTimeoutMs = 30_000;
+const maxPromptImageBytes = 4_500_000;
 
 export const ChatPane: React.FC = () => {
 	const store = useAppStore();
 	const [input, setInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const [sendError, setSendError] = useState<string | null>(null);
+	const [images, setImages] = useState<Array<AgentPromptImage & { id: string; preview: string }>>([]);
+	const imageInputRef = useRef<HTMLInputElement | null>(null);
 	const streamingTurnId = useRef<string | null>(null);
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 	const activeSessionId = store.activeSessionId;
@@ -106,7 +109,7 @@ export const ChatPane: React.FC = () => {
 
 	const handleSend = async () => {
 		const prompt = input.trim();
-		if (!prompt || !activeSessionId || isSending) return;
+		if ((!prompt && images.length === 0) || !activeSessionId || isSending) return;
 		setInput("");
 		setSendError(null);
 		const now = new Date().toISOString();
@@ -164,6 +167,7 @@ export const ChatPane: React.FC = () => {
 				forkedFromTurnId: activeSession?.forkedFromTurnId,
 				transcript: transcript.map((turn) => ({ id: turn.id, role: turn.role, content: turn.content })),
 				prompt,
+				images: images.map(({ id: _id, preview: _preview, ...image }) => image),
 				knowledgeContext,
 				thinkingLevel: store.settings.thinkingLevel,
 				model: selectedModel,
@@ -217,6 +221,7 @@ export const ChatPane: React.FC = () => {
 				}
 			}
 			store.updateTurn(assistantTurnId, { completedAt: new Date().toISOString() });
+			setImages([]);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			store.updateTurn(assistantTurnId, {
@@ -273,7 +278,7 @@ export const ChatPane: React.FC = () => {
 						relations={store.relations}
 						diagrams={store.diagrams}
 						onFork={() => void handleFork(turn, index)}
-						canFork={index < sessionTurns.length - 1}
+						canFork={turn.role === "assistant" && index < sessionTurns.length - 1}
 						onEntityClick={store.setSelectedEntity}
 						onDiagramClick={store.setSelectedDiagram}
 					/>
@@ -288,11 +293,26 @@ export const ChatPane: React.FC = () => {
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
 			<div className="composer-shell">
 				<div className="chat-composer">
-					<textarea
+				{images.length > 0 && <div className="composer-attachments">{images.map((image) => <div key={image.id} className="composer-attachment"><img src={image.preview} alt="" /><button type="button" title="Remove image" aria-label="Remove image" onClick={() => setImages((current) => current.filter((item) => item.id !== image.id))}><X size={12} /></button></div>)}</div>}
+				<textarea
 						className="composer-input"
-						placeholder="Message Rhyza"
+						placeholder={images.length ? "Add a question about the image" : "Message Rhyza"}
 						value={input}
 						onChange={(event) => setInput(event.target.value)}
+						onPaste={(event) => {
+							const imageFiles = [...event.clipboardData.items]
+								.filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+								.map((item) => item.getAsFile())
+								.filter((file): file is File => file !== null);
+							if (imageFiles.length === 0) return;
+							event.preventDefault();
+							const files = new DataTransfer();
+							imageFiles.forEach((file) => files.items.add(file));
+							void readPromptImages(files.files).then((next) => {
+								setSendError(null);
+								setImages((current) => [...current, ...next].slice(0, 4));
+							}).catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)));
+						}}
 						onKeyDown={(event) => {
 							if (event.key === "Enter" && !event.shiftKey) {
 								event.preventDefault();
@@ -301,7 +321,9 @@ export const ChatPane: React.FC = () => {
 						}}
 						rows={1}
 					/>
-					<button type="button" title="Send" aria-label="Send" onClick={() => void handleSend()} disabled={isSending || !input.trim()} className="composer-send">
+					<button type="button" title="Attach image" aria-label="Attach image" onClick={() => imageInputRef.current?.click()} disabled={isSending} className="composer-attach"><ImagePlus size={17} /></button>
+					<input ref={imageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple onChange={(event) => { void readPromptImages(event.target.files).then((next) => { setSendError(null); setImages((current) => [...current, ...next].slice(0, 4)); }).catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error))); event.currentTarget.value = ""; }} />
+					<button type="button" title="Send" aria-label="Send" onClick={() => void handleSend()} disabled={isSending || (!input.trim() && images.length === 0)} className="composer-send">
 						{isSending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />}
 					</button>
 				</div>
@@ -349,7 +371,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 					</>}
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
-					{canFork && <button type="button" title="Continue from here" aria-label="Continue from here" onClick={onFork}><GitFork size={14} /></button>}
+					{!isUser && canFork && <button type="button" title="Continue from here" aria-label="Continue from here" onClick={onFork}><GitFork size={14} /></button>}
 					<button type="button" title="Copy" aria-label="Copy" onClick={() => void navigator.clipboard.writeText(turn.content)}><Copy size={14} /></button>
 					{turn.changeSetId && <span className="knowledge-updated">Knowledge updated</span>}
 					{!isUser && <button type="button" className="turn-detail-trigger" title="Turn details" aria-label="Show turn usage details" onClick={() => setDetailsOpen(true)}><Info size={14} /></button>}
@@ -363,6 +385,8 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {
 	const inherited = !turn.usage && Boolean(turn.inheritedUsage);
 	const usage = turn.usage ?? turn.inheritedUsage;
+	const cacheableInput = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
+	const cacheHitRate = cacheableInput > 0 ? (usage!.cacheRead / cacheableInput) * 100 : undefined;
 	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date().toISOString()).getTime() - new Date(turn.createdAt).getTime());
 	const tools = Object.values((turn.tools ?? []).reduce<Record<string, { name: string; count: number; errors: number; durationMs: number }>>((groups, tool) => {
 		const group = groups[tool.name] ?? { name: tool.name, count: 0, errors: 0, durationMs: 0 };
@@ -382,7 +406,7 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 					<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
 					<DetailMetric label="Cost" value={usage ? (usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`) : "Not recorded"} />
 				</div>
-				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage?.input} /><DetailRow label="Output" value={usage?.output} /><DetailRow label="Cache read" value={usage?.cacheRead} /><DetailRow label="Cache write" value={usage?.cacheWrite} /></dl></div>
+				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage?.input} /><DetailRow label="Output" value={usage?.output} /><DetailRow label="Cache read" value={usage?.cacheRead} /><DetailRow label="Cache write" value={usage?.cacheWrite} /><DetailRow label="Cache hit rate" value={cacheHitRate === undefined ? undefined : `${cacheHitRate.toFixed(1)}%`} title={cacheHitRate === undefined ? undefined : `Cache read ${usage!.cacheRead.toLocaleString()} ÷ cacheable input ${cacheableInput.toLocaleString()}`} /></dl></div>
 				<div className="turn-detail-section"><h3>Tool calls <span>{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}</span></h3>{tools.length ? <div className="turn-tool-list">{tools.map((tool) => <div key={tool.name}><strong>{tool.name}</strong><span>{tool.count} call{tool.count === 1 ? "" : "s"}{tool.errors ? ` · ${tool.errors} failed` : ""} · {formatDuration(tool.durationMs)}</span></div>)}</div> : <p className="turn-detail-empty">No tools were called.</p>}</div>
 			</section>
 		</div>
@@ -390,7 +414,7 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 }
 
 const DetailMetric = ({ label, value }: { label: string; value: string }) => <div><span>{label}</span><strong>{value}</strong></div>;
-const DetailRow = ({ label, value }: { label: string; value?: number }) => <div><dt>{label}</dt><dd>{value === undefined ? "—" : value.toLocaleString()}</dd></div>;
+const DetailRow = ({ label, value, title }: { label: string; value?: number | string; title?: string }) => <div title={title}><dt>{label}</dt><dd>{value === undefined ? "—" : typeof value === "number" ? value.toLocaleString() : value}</dd></div>;
 
 function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 	const running = tools.filter((tool) => tool.status === "running").length;
@@ -436,6 +460,23 @@ function TurnStatus({ status }: { status: Turn["status"] }) {
 			{status === "finalizing" ? "Organizing knowledge" : status === "retrieving" ? "Retrieving knowledge" : "Agent is working"}
 		</div>
 	);
+}
+
+async function readPromptImages(files: FileList | null): Promise<Array<AgentPromptImage & { id: string; preview: string }>> {
+	if (!files) return [];
+	return Promise.all([...files].slice(0, 4).map(async (file) => {
+		if (!(new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"])).has(file.type)) throw new Error(`${file.name} is not a supported image type.`);
+		if (file.size > maxPromptImageBytes) throw new Error(`${file.name} exceeds the 4.5 MB image limit.`);
+		const preview = await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+			reader.onload = () => resolve(String(reader.result));
+			reader.readAsDataURL(file);
+		});
+		const separator = preview.indexOf(",");
+		if (separator < 0) throw new Error(`Invalid image data for ${file.name}.`);
+		return { id: crypto.randomUUID(), preview, mimeType: file.type as AgentPromptImage["mimeType"], data: preview.slice(separator + 1) };
+	}));
 }
 
 function ReasoningBlock({ content }: { content: string }) {
