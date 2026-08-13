@@ -1,11 +1,14 @@
 import { Database, ExternalLink, Network, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore } from "../store";
+import type { Diagram, Entity } from "../types";
 import { DiagramViewer } from "./DiagramViewer";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
 
 export const KnowledgePane = () => {
 	const store = useAppStore();
+	const [preview, setPreview] = useState<{ kind: "entity"; item: Entity } | { kind: "diagram"; item: Diagram } | null>(null);
 	const viewportWidth = useViewportWidth();
 	const paneMax = Math.min(560, Math.max(320, viewportWidth * 0.45));
 	const paneSize = usePanelSize("knowbranch-layout-knowledge-width", 320, 280, paneMax);
@@ -17,6 +20,14 @@ export const KnowledgePane = () => {
 	const selectedEntity = store.entities.find((entity) => entity.id === store.selectedEntityId && !entity.deletedAt);
 	const selectedDiagram = store.diagrams.find((diagram) => diagram.id === store.selectedDiagramId && !diagram.deletedAt);
 	const diagrams = store.diagrams.filter((diagram) => !diagram.deletedAt);
+	const openEntityPreview = (entity: Entity) => {
+		store.setSelectedEntity(entity.id);
+		setPreview({ kind: "entity", item: entity });
+	};
+	const openDiagramPreview = (diagram: Diagram) => {
+		store.setSelectedDiagram(diagram.id);
+		setPreview({ kind: "diagram", item: diagram });
+	};
 
 	return (
 		<>
@@ -53,7 +64,7 @@ export const KnowledgePane = () => {
 					<div className="knowledge-list">
 						{relevant.map((entity) => {
 							const count = store.relations.filter((relation) => !relation.deletedAt && (relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id)).length;
-							return <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className="knowledge-list-item"><div className="flex justify-between gap-2"><span className="font-semibold text-sm truncate">{entity.name}</span><span className="text-[10px] text-gray-400">{entity.type}</span></div><p className="text-xs text-secondary line-clamp-2 mt-1">{entity.summary}</p><p className="text-[10px] text-gray-400 mt-2">{count} relations · {entity.sourceRefs.length} sources</p></button>;
+							return <button type="button" key={entity.id} onClick={() => openEntityPreview(entity)} className="knowledge-list-item knowledge-list-preview-trigger"><div className="flex justify-between gap-2"><span className="font-semibold text-sm truncate">{entity.name}</span><span className="text-[10px] text-gray-400">{entity.type}</span></div><p className="text-xs text-secondary line-clamp-2 mt-1">{entity.summary}</p><p className="text-[10px] text-gray-400 mt-2">{count} relations · {entity.sourceRefs.length} sources</p></button>;
 						})}
 						{relevant.length === 0 && <p className="text-xs text-secondary px-2">No knowledge linked to this branch yet.</p>}
 					</div>
@@ -61,11 +72,46 @@ export const KnowledgePane = () => {
 				<section>
 					<p className="section-label">Related diagrams</p>
 					<div className="knowledge-list">
-						{diagrams.map((diagram) => <button type="button" onClick={() => store.setSelectedDiagram(diagram.id)} key={diagram.id} className="knowledge-list-item flex items-center gap-2 text-sm font-semibold"><Network size={16} />{diagram.name}<span className="ml-auto text-xs text-gray-400">v{diagram.version}</span></button>)}
+						{diagrams.map((diagram) => <button type="button" onClick={() => openDiagramPreview(diagram)} key={diagram.id} className="knowledge-list-item knowledge-list-preview-trigger flex items-center gap-2 text-sm font-semibold"><Network size={16} />{diagram.name}<span className="ml-auto text-xs text-gray-400">v{diagram.version}</span></button>)}
 					</div>
 				</section>
 			</div>
 		</aside>
+		{preview && <KnowledgePreviewDialog preview={preview} onClose={() => setPreview(null)} />}
 		</>
 	);
 };
+
+function KnowledgePreviewDialog({ preview, onClose }: {
+	preview: { kind: "entity"; item: Entity } | { kind: "diagram"; item: Diagram };
+	onClose: () => void;
+}) {
+	const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+	useEffect(() => {
+		closeButtonRef.current?.focus();
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", closeOnEscape);
+		return () => window.removeEventListener("keydown", closeOnEscape);
+	}, [onClose]);
+	const item = preview.item;
+	return (
+		<div className="knowledge-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+			<section className={preview.kind === "entity" ? "knowledge-preview-dialog knowledge-entity-preview-dialog" : "knowledge-preview-dialog knowledge-diagram-preview-dialog"} role="dialog" aria-modal="true" aria-labelledby={`knowledge-preview-title-${item.id}`}>
+				<header className="knowledge-preview-header">
+					<div className="min-w-0">
+						<p>{preview.kind === "entity" ? "Entity preview" : "Diagram preview"}</p>
+						<h2 id={`knowledge-preview-title-${item.id}`}>{item.name}</h2>
+					</div>
+					<div className="flex items-center gap-3"><span className="knowledge-preview-type">{preview.kind === "entity" ? preview.item.type : `${preview.item.type} · v${preview.item.version}`}</span><button ref={closeButtonRef} type="button" onClick={onClose} title="Close preview" aria-label="Close preview"><X size={18} /></button></div>
+				</header>
+				{preview.kind === "entity" ? <EntityPreview entity={preview.item} /> : <div className="knowledge-preview-diagram"><DiagramViewer diagram={preview.item} /></div>}
+			</section>
+		</div>
+	);
+}
+
+function EntityPreview({ entity }: { entity: Entity }) {
+	return <div className="knowledge-preview-entity-content"><p className="knowledge-preview-summary">{entity.summary}</p><div className="knowledge-preview-entity-body">{entity.content || entity.summary}</div><footer><span>{entity.sourceRefs.length} sources</span><span>v{entity.version}</span></footer></div>;
+}
