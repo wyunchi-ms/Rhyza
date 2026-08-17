@@ -110,7 +110,9 @@ export const ChatPane: React.FC = () => {
 	const handleSend = async () => {
 		const prompt = input.trim();
 		if ((!prompt && images.length === 0) || !activeSessionId || isSending) return;
+		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
 		setInput("");
+		setImages([]);
 		setSendError(null);
 		const now = new Date().toISOString();
 		const userTurnId = createId("turn");
@@ -122,6 +124,7 @@ export const ChatPane: React.FC = () => {
 			content: prompt,
 			status: "complete",
 			summary: summarize(prompt),
+			images: promptImages,
 			createdAt: now,
 		});
 		streamingTurnId.current = assistantTurnId;
@@ -165,9 +168,9 @@ export const ChatPane: React.FC = () => {
 				frontendSessionId: activeSessionId,
 				parentFrontendSessionId: activeSession?.parentId ?? undefined,
 				forkedFromTurnId: activeSession?.forkedFromTurnId,
-				transcript: transcript.map((turn) => ({ id: turn.id, role: turn.role, content: turn.content })),
+				transcript: transcript.map((turn) => ({ id: turn.id, role: turn.role, content: turn.content, images: turn.images })),
 				prompt,
-				images: images.map(({ id: _id, preview: _preview, ...image }) => image),
+				images: promptImages,
 				knowledgeContext,
 				thinkingLevel: store.settings.thinkingLevel,
 				model: selectedModel,
@@ -221,7 +224,6 @@ export const ChatPane: React.FC = () => {
 				}
 			}
 			store.updateTurn(assistantTurnId, { completedAt: new Date().toISOString() });
-			setImages([]);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			store.updateTurn(assistantTurnId, {
@@ -365,6 +367,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 						<TurnStatus status={turn.status} />
 						{!isUser && turn.reasoning && <ReasoningBlock content={turn.reasoning} />}
 						{!isUser && turn.tools && turn.tools.length > 0 && <ToolCards tools={turn.tools} />}
+						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
 						{turn.content && (isUser
 							? <MarkdownContent content={turn.content} />
 							: <LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} />)}
@@ -380,6 +383,10 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
 		</article>
 	);
+}
+
+function UserImageAttachments({ images }: { images: NonNullable<Turn["images"]> }) {
+	return <div className="user-message-images">{images.map((image, index) => <img key={`${image.mimeType}-${index}`} src={`data:${image.mimeType};base64,${image.data}`} alt={`Attached image ${index + 1}`} />)}</div>;
 }
 
 function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {

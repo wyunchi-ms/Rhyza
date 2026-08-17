@@ -126,6 +126,7 @@ export interface AgentTranscriptTurn {
 	id: string;
 	role: "user" | "assistant";
 	content: string;
+	images?: AgentPromptImage[];
 }
 
 export interface AgentPromptResponse {
@@ -298,7 +299,8 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 	if (!isRecord(value)) {
 		throw new Error("Invalid agent prompt request.");
 	}
-	if (typeof value.prompt !== "string" || value.prompt.trim() === "") {
+	const images = validatePromptImages(value.images);
+	if (typeof value.prompt !== "string" || (value.prompt.trim() === "" && images.length === 0)) {
 		throw new Error("A prompt is required.");
 	}
 	if (
@@ -315,15 +317,7 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		prompt: value.prompt,
 		transcript: value.transcript.map(validateTranscriptTurn),
 	};
-	if (Array.isArray(value.images)) {
-		request.images = value.images.slice(0, 4).flatMap((image) => {
-			if (!isRecord(image) || typeof image.data !== "string" || image.data.length > 6_000_000) return [];
-			const allowedMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
-			return typeof image.mimeType === "string" && allowedMimeTypes.has(image.mimeType)
-				? [{ mimeType: image.mimeType as AgentPromptImage["mimeType"], data: image.data }]
-				: [];
-		});
-	}
+	if (images.length) request.images = images;
 	if (typeof value.parentFrontendSessionId === "string") {
 		request.parentFrontendSessionId = value.parentFrontendSessionId;
 	}
@@ -475,5 +469,17 @@ function validateTranscriptTurn(value: unknown): AgentTranscriptTurn {
 	if (typeof value.content !== "string") {
 		throw new Error("Invalid transcript turn content.");
 	}
-	return { id: value.id, role: value.role, content: value.content };
+	const images = validatePromptImages(value.images);
+	return { id: value.id, role: value.role, content: value.content, ...(images.length ? { images } : {}) };
+}
+
+function validatePromptImages(value: unknown): AgentPromptImage[] {
+	if (!Array.isArray(value)) return [];
+	const allowedMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+	return value.slice(0, 4).flatMap((image) => {
+		if (!isRecord(image) || typeof image.data !== "string" || image.data.length > 6_000_000) return [];
+		return typeof image.mimeType === "string" && allowedMimeTypes.has(image.mimeType)
+			? [{ mimeType: image.mimeType as AgentPromptImage["mimeType"], data: image.data }]
+			: [];
+	});
 }

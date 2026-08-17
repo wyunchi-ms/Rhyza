@@ -502,7 +502,9 @@ function appendTranscriptTurn(
 	if (turn.role === "user") {
 		sessionManager.appendMessage({
 			role: "user",
-			content: turn.content,
+			content: turn.images?.length
+				? [{ type: "text", text: turn.content }, ...turn.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
+				: turn.content,
 			timestamp: Date.now(),
 		});
 		return;

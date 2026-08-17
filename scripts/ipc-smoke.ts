@@ -24,6 +24,14 @@ try {
 
 	assertThrows(() => validateProviderStatusRequest({ providerId: "openai" }));
 	assertThrows(() => validateAgentPromptRequest({ prompt: "missing workspace" }));
+	const imageOnlyPrompt = validateAgentPromptRequest({
+		frontendSessionId: "image-session",
+		prompt: "",
+		images: [{ mimeType: "image/png", data: "aGVsbG8=" }],
+		transcript: [{ id: "image-turn", role: "user", content: "", images: [{ mimeType: "image/png", data: "aGVsbG8=" }] }],
+	});
+	assert(imageOnlyPrompt.images?.length === 1, "An image-only prompt must retain its attachment.");
+	assert(imageOnlyPrompt.transcript[0]?.images?.length === 1, "Transcript attachments must survive validation.");
 	validateProviderStatusRequest({ providerId: "github-copilot" });
 	validateModelCatalogRequest({ providerId: "github-copilot", refresh: false });
 	validateSummaryRequest({ text: "How does the session tree work?" });

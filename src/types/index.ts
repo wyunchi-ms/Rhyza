@@ -40,11 +40,17 @@ export interface Turn {
 	summary?: string;
 	entities?: EntityMention[];
 	changeSetId?: string;
+	images?: TurnImage[];
 	usage?: TokenUsage;
 	/** Display-only usage copied with shared fork history; excluded from branch totals. */
 	inheritedUsage?: TokenUsage;
 	createdAt: string;
 	completedAt?: string;
+}
+
+export interface TurnImage {
+	mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/bmp";
+	data: string;
 }
 
 export interface TokenUsage {

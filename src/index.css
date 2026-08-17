@@ -69,6 +69,8 @@ body {
 .turn-body { position: relative; min-width: 0; }
 .assistant-body { width: 100%; padding: 0.15rem 2.25rem 0.15rem 0; }
 .user-bubble { max-width: 38rem; border-radius: 18px; background: #f4f4f4; padding: 0.7rem 1rem; }
+.user-message-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.45rem; margin-bottom: 0.6rem; }
+.user-message-images img { display: block; width: 100%; max-width: 20rem; max-height: 18rem; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; object-fit: contain; }
 .response-collapse { position: absolute; right: 0; top: -0.25rem; opacity: 0; }
 .chat-turn:hover .response-collapse, .response-collapse:focus-visible { opacity: 1; }
 .turn-actions { display: flex; min-height: 1.75rem; align-items: center; gap: 0.15rem; opacity: 0; }
