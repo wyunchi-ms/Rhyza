@@ -14,7 +14,7 @@ def timestamp(seconds: float) -> str:
 
 def split_phrases(text: str, max_chars: int = 34) -> list[tuple[int, int, str]]:
     clauses = []
-    for match in re.finditer(r"[^，。！？；：]+[，。！？；：]?", text):
+    for match in re.finditer(r"[^，。！？；：.!?;:]+[，。！？；：.!?;:]?", text):
         value = match.group().strip()
         if value:
             clauses.append((match.start(), match.end(), value))
@@ -33,7 +33,7 @@ def split_phrases(text: str, max_chars: int = 34) -> list[tuple[int, int, str]]:
                 cursor_start = start
             cursor_text += value
         cursor_end = end
-        if value.endswith(("。", "！", "？", "；")) and len(re.sub(r"\s", "", cursor_text)) >= 18:
+        if value.endswith(("。", "！", "？", "；", ".", "!", "?", ";")) and len(re.sub(r"\s", "", cursor_text)) >= 18:
             groups.append((cursor_start, cursor_end, cursor_text))
             cursor_start, cursor_end, cursor_text = -1, -1, ""
     if cursor_text:

@@ -7,6 +7,18 @@ from pathlib import Path
 import azure.cognitiveservices.speech as speechsdk
 
 
+def load_env_file(path: Path) -> None:
+    """Load the local demo env file without adding a runtime dependency."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Rhyza narration with Azure Speech.")
     parser.add_argument("--input", required=True, type=Path)
@@ -14,15 +26,22 @@ def main() -> None:
     parser.add_argument("--metadata", required=True, type=Path)
     parser.add_argument("--voice", default="zh-CN-XiaoxiaoNeural")
     parser.add_argument("--rate", default="+5%")
+    parser.add_argument("--locale", default="en-US")
+    parser.add_argument("--env-file", type=Path, default=Path(".env"))
     args = parser.parse_args()
 
-    key = os.environ.get("AZURE_SPEECH_KEY")
-    region = os.environ.get("AZURE_SPEECH_REGION")
+    load_env_file(args.env_file)
+    key = os.environ.get("AZURE_TTS_API_KEY") or os.environ.get("AZURE_SPEECH_KEY")
+    region = os.environ.get("AZURE_TTS_REGION") or os.environ.get("AZURE_SPEECH_REGION")
+    endpoint = os.environ.get("AZURE_TTS_ENDPOINT")
     if not key or not region:
-        raise RuntimeError("AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are required")
+        raise RuntimeError("AZURE_TTS_API_KEY and AZURE_TTS_REGION are required")
 
     text = args.input.read_text(encoding="utf-8").strip()
-    speech_config = speechsdk.SpeechConfig(subscription=key, region=region)
+    speech_config = speechsdk.SpeechConfig(
+        subscription=key,
+        endpoint=endpoint,
+    ) if endpoint else speechsdk.SpeechConfig(subscription=key, region=region)
     speech_config.set_speech_synthesis_output_format(
         speechsdk.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3
     )
@@ -50,7 +69,7 @@ def main() -> None:
     synthesizer.synthesis_word_boundary.connect(on_boundary)
     ssml = (
         '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-        'xml:lang="zh-CN">'
+        f'xml:lang="{html.escape(args.locale)}">'
         f'<voice name="{html.escape(args.voice)}">'
         f'<prosody rate="{html.escape(args.rate)}">{html.escape(text)}</prosody>'
         "</voice></speak>"

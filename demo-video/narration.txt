@@ -1,15 +1,15 @@
-想象一下，你刚接手一个项目，里面有太多陌生的概念。你开始和 Agent 聊天：先问一个问题，回答里又出现五个值得追问的方向。你追问其中两个，它们又各自带来更多问题。几轮之后，问题数量开始失控。有些想问的问题被淹没了；隔了几轮，你甚至又问了一遍之前问过的问题。答案越来越多，你却越来越难判断自己还不知道什么。
+Imagine joining a project with a thousand unfamiliar details. You ask an agent one useful question, and its answer reveals five more directions worth exploring. You follow two of them. Each creates more questions. A few turns later, the conversation is full of answers, but it is hard to see what is still open, and easy to ask the same question twice.
 
-Rhyza 把分散的对话组织成清晰的工作脉络，让用户直观看到：已经理解什么、还有哪些问题、下一步该推进什么，减少遗漏和重复，提高知识工作的效率。
+Rhyza turns those scattered conversations into a visible work map. You can see what is understood, what still needs attention, and where to continue next.
 
-材料不限定于代码。Sources 可以加入代码、文档、笔记、论文，甚至一本书。Agent 会搜索这些本地内容，再回答问题。
+Your material is not limited to code. Add project files, documents, notes, papers, or books. The agent searches the local sources you provide, reads the relevant passages, and keeps answers grounded in the work.
 
-每次对话都是工作脉络中的节点。出现新的问题方向时，可以从当前回答直接分叉。每条分支拥有独立上下文，节点可以标记为待处理、进行中、已完成或搁置。
+Every conversation turn is a node. When an answer opens a new direction, branch directly from that turn. Each branch carries its own focused context. Right-click a node to mark it In progress, Pending, Completed, or On hold, so unfinished work remains visible instead of disappearing into the transcript.
 
-独立分支也会减少无关上下文，让 Agent 聚焦当前问题，降低历史信息干扰，有助于提高回答精度并减少 Token 消耗。
+Focused branches also remove unrelated history from the active context. The agent receives the relevant path, not every previous topic. That means less noise, more focused answers, and fewer tokens spent on work that does not belong to the question.
 
-这样，我能快速看到哪些问题仍待处理，也能在几天后回到原来的位置，沿着原有上下文继续推进。
+You can return days later to the exact branch where you stopped, with its context and status intact.
 
-回答中的实体、关系和图表会沉淀到知识图谱。已有实体再次出现时，会自动链接到对应知识，帮助我识别重复问题，并看到知识之间的关系。这些结构化知识也能成为后续分析、决策和内容产出的上下文。
+Rhyza also turns useful answers into reusable knowledge. Entities, relationships, diagrams, and source references stay connected. When an existing concept appears again, you can open it in place, inspect its details, and reuse it as context for the next decision.
 
-Rhyza 把分叉的问题转化为可管理的工作脉络，把对话积累为可复用的知识。它让我少走重复的路，快速定位未完成的问题，也为个人和团队后续的工作保留上下文。最终，用更少的时间和 Token，更高效地完成知识工作。
+Rhyza makes the shape of knowledge work visible: branch without losing the original question, track what remains, preserve context, and keep useful knowledge moving forward.

@@ -14,11 +14,11 @@ const progressOptions: Array<{
 	description: string;
 	icon: typeof Circle;
 }> = [
-	{ label: "未标记", description: "不跟踪该节点", icon: Circle },
-	{ value: "todo", label: "待探索", description: "还有问题需要继续了解", icon: Circle },
-	{ value: "in_progress", label: "探索中", description: "当前正在梳理", icon: CircleDot },
-	{ value: "complete", label: "已完成", description: "当前问题已经问清楚", icon: CheckCircle2 },
-	{ value: "parked", label: "暂不处理", description: "保留节点，稍后再看", icon: PauseCircle },
+	{ label: "Unmarked", description: "Do not track this node", icon: Circle },
+	{ value: "todo", label: "To explore", description: "Questions still need investigation", icon: Circle },
+	{ value: "in_progress", label: "In progress", description: "Currently being worked through", icon: CircleDot },
+	{ value: "complete", label: "Completed", description: "This question has been answered", icon: CheckCircle2 },
+	{ value: "parked", label: "On hold", description: "Keep this node for later", icon: PauseCircle },
 ];
 
 export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
@@ -251,12 +251,12 @@ const SessionGroup = ({
 		{contextMenu && (
 			<div
 				role="menu"
-				aria-label="设置节点状态"
+				aria-label="Set node status"
 				className="session-status-menu"
 				style={{ left: contextMenu.x, top: contextMenu.y }}
 				onPointerDown={(event) => event.stopPropagation()}
 			>
-				<div className="session-status-menu-title">节点状态</div>
+				<div className="session-status-menu-title">Node status</div>
 				{progressOptions.map((option) => {
 					const Icon = option.icon;
 					const selected = contextMenu.status === option.value;
@@ -290,7 +290,7 @@ const ProgressMarker = ({ status, active }: { status?: SessionProgressStatus; ac
 	const option = progressOptions.find((item) => item.value === status) ?? progressOptions[0];
 	const Icon = option.icon;
 	return (
-		<span title={option.label} aria-label={`节点状态：${option.label}`} className={clsx("session-progress-marker", status && `status-${status}`, active && "is-active")}>
+		<span title={option.label} aria-label={`Node status: ${option.label}`} className={clsx("session-progress-marker", status && `status-${status}`, active && "is-active")}>
 			<Icon size={status ? 12 : 7} strokeWidth={status ? 2.25 : 3} />
 		</span>
 	);

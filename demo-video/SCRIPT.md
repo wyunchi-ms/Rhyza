@@ -1,8 +1,8 @@
 # Rhyza Mini Hackathon Demo
 
-Target: 2 minutes, 16:9, Mandarin narration, Simplified Chinese captions.
+Target: 2 minutes, 16:9, English narration and English captions.
 
-Voiceover: Azure AI Speech, `zh-CN-XiaoxiaoNeural`, `+16%`, East Asia. Credentials are read from the active Azure PowerShell subscription at generation time and are never stored in this project.
+Voiceover: Azure AI Speech, `en-US-AvaMultilingualNeural`, `+5%`, Sweden Central. Credentials are read from the active Azure PowerShell subscription at generation time and are never stored in this project.
 
 ## Narration
 
