@@ -93,6 +93,23 @@
       .sources-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 1fr 380px; gap: 25px; }
       .screenshot { position: relative; min-height: 0; overflow: hidden; }
       .screenshot img { position: absolute; display: block; max-width: none; user-select: none; }
+      .real-shot { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; border: 1px solid #d8dee6; border-radius: 8px; background: #fff; box-shadow: 0 18px 42px rgba(15,23,42,.1); }
+      .real-shot img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; transform-origin: center; will-change: transform; }
+      #scene-3 .sources-layout, #scene-4 .branch-layout, #scene-5 .context-grid, #scene-6 .knowledge-layout { display: block; }
+      #scene-3 #sources-shot, #scene-3 .agent-tools, #scene-4 #branch-shot, #scene-4 .branch-side, #scene-5 .context-panel, #scene-6 .knowledge-chat, #scene-6 #knowledge-shot { display: none; }
+      #scene-3 .sources-layout, #scene-4 .branch-layout, #scene-5 .context-grid, #scene-6 .knowledge-layout { overflow: hidden; border: 1px solid #d8dee6; border-radius: 8px; background-color: #fff; background-position: center; background-repeat: no-repeat; background-size: contain; box-shadow: 0 18px 42px rgba(15,23,42,.1); will-change: transform; }
+      #scene-3 .sources-layout { background-image: url("real-app-screenshots/03-knowledge-in-the-conversation.png"); }
+      #scene-4 .branch-layout { background-image: url("real-app-screenshots/01-branch-and-status.png"); }
+      #scene-5 .context-grid { background-image: url("real-app-screenshots/02-branch-cost-and-turn-details.png"); }
+      #scene-6 .knowledge-layout { background-image: url("real-app-screenshots/04-read-entity-or-diagram-in-place.png"); }
+      .cost-layout { display: grid; height: 100%; grid-template-columns: minmax(0, 1.25fr) minmax(20rem, .75fr); gap: 28px; }
+      .cost-callout { display: flex; height: 100%; flex-direction: column; justify-content: center; gap: 14px; }
+      .cost-callout p { max-width: 28rem; color: #64748b; font-size: 21px; line-height: 1.5; }
+      .cost-points { display: flex; flex-direction: column; gap: 10px; }
+      .cost-point { border-left: 4px solid #0e9674; background: #fff; padding: 14px 16px; color: #334155; font-size: 19px; font-weight: 680; box-shadow: 0 8px 22px rgba(15,23,42,.06); }
+      .real-stack { position: relative; height: 100%; min-height: 0; }
+      .real-stack .real-shot { position: absolute; inset: 0; }
+      #knowledge-library-shot { opacity: 0; }
       #sources-shot img { left: 0; top: 36px; width: 1330px; height: 666px; object-fit: cover; object-position: left top; }
       #sources-shot .shot-rebrand { position: absolute; left: 0; top: 36px; z-index: 2; display: flex; width: 106px; height: 34px; align-items: center; gap: 7px; background: #fbfbfa; padding-left: 6px; color: #151515; font-size: 13px; font-weight: 720; }
       #sources-shot .shot-rebrand-mark { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: #252525; color: #fff; font-size: 10px; font-weight: 780; }
@@ -211,7 +228,7 @@
       <section data-hf-id="hf-r3kq" id="scene-3" class="scene">
         <div data-hf-id="hf-2utj" class="scene-rule top"></div><div data-hf-id="hf-oxo5" class="scene-rule bottom"></div><div data-hf-id="hf-vmk1" class="scene-index" data-layout-allow-overlap="">03 / SOURCES</div>
         <div data-hf-id="hf-o0eg" class="scene-content">
-          <div data-hf-id="hf-dgkd" class="heading-row"><div data-hf-id="hf-y7yw"><div data-hf-id="hf-o8gr" class="eyebrow">Any local material</div><h2 data-hf-id="hf-bg9r">Work from more than code.</h2></div><div data-hf-id="hf-xdh7" class="source-types"><span data-hf-id="hf-0lhr" class="badge">Code</span><span data-hf-id="hf-a2bo" class="badge">Documents</span><span data-hf-id="hf-dctj" class="badge">Notes</span><span data-hf-id="hf-9q3p" class="badge">Papers</span><span data-hf-id="hf-mavw" class="badge">Books</span></div></div>
+          <div data-hf-id="hf-dgkd" class="heading-row"><div data-hf-id="hf-y7yw"><div data-hf-id="hf-o8gr" class="eyebrow">From source to working knowledge</div><h2 data-hf-id="hf-bg9r">Keep the architecture you discover connected.</h2></div><div data-hf-id="hf-xdh7" class="source-types"><span data-hf-id="hf-0lhr" class="badge">Code</span><span data-hf-id="hf-a2bo" class="badge">Documents</span><span data-hf-id="hf-dctj" class="badge">Notes</span><span data-hf-id="hf-9q3p" class="badge">Papers</span><span data-hf-id="hf-mavw" class="badge">Books</span></div></div>
           <div data-hf-id="hf-2ipp" class="sources-layout">
             <div data-hf-id="hf-iafo" id="sources-shot" class="screenshot surface"><div data-hf-id="hf-85t8" class="window-bar"><span data-hf-id="hf-9gry" class="dot"></span><span data-hf-id="hf-zcc2" class="dot"></span><span data-hf-id="hf-zqn3" class="dot"></span></div><div data-hf-id="hf-sygz" class="product-demo"><aside data-hf-id="hf-lczt" class="demo-sidebar"><div data-hf-id="hf-9wfr" class="demo-brand"><b data-hf-id="hf-4nit">R</b>Rhyza</div><div data-hf-id="hf-buzl" class="demo-nav active">Sources</div><div data-hf-id="hf-4is3" class="demo-nav">Knowledge</div><div data-hf-id="hf-xz8y" class="demo-nav">Changes</div></aside><main data-hf-id="hf-c3v1" class="demo-main"><div data-hf-id="hf-uw42" class="demo-kicker">Local sources</div><div data-hf-id="hf-84ta" class="demo-heading">Project research</div><div data-hf-id="hf-u8pc" class="source-file"><i data-hf-id="hf-pjs5">MD</i>Architecture overview <span data-hf-id="hf-1rmg">Document</span></div><div data-hf-id="hf-j2xl" class="source-file"><i data-hf-id="hf-l10x">TS</i>auth-service.ts <span data-hf-id="hf-gcjs">Code</span></div><div data-hf-id="hf-hzlo" class="source-file"><i data-hf-id="hf-eelu">PDF</i>Distributed systems notes <span data-hf-id="hf-pb6d">Paper</span></div><div data-hf-id="hf-uqth" class="source-file"><i data-hf-id="hf-b9z7">BK</i>Designing Data-Intensive Applications <span data-hf-id="hf-7mes">Book</span></div></main></div></div>
             <div data-hf-id="hf-7fas" class="agent-tools surface"><div data-hf-id="hf-iq49" class="eyebrow">Agent tools</div><div data-hf-id="hf-vf7i" class="tool"><span data-hf-id="hf-nqlc" class="tool-code">S</span>Search relevant text</div><div data-hf-id="hf-xc3u" class="tool"><span data-hf-id="hf-ncab" class="tool-code">R</span>Read exact source</div><p data-hf-id="hf-wlsa" class="local-note">The Agent searches the material you provide, then grounds its answer in the relevant content.</p></div>
@@ -237,7 +254,7 @@
       <section data-hf-id="hf-7k78" id="scene-5" class="scene">
         <div data-hf-id="hf-3nfl" class="scene-rule top"></div><div data-hf-id="hf-rbib" class="scene-rule bottom"></div><div data-hf-id="hf-tdvr" class="scene-index" data-layout-allow-overlap="">05 / FOCUSED CONTEXT</div>
         <div data-hf-id="hf-n7se" class="scene-content">
-          <div data-hf-id="hf-8u48" class="heading-row"><div data-hf-id="hf-xfcu"><div data-hf-id="hf-kaav" class="eyebrow">Why branching improves efficiency</div><h2 data-hf-id="hf-2r0p">Send the relevant path, not the entire transcript.</h2></div></div>
+          <div data-hf-id="hf-8u48" class="heading-row"><div data-hf-id="hf-xfcu"><div data-hf-id="hf-kaav" class="eyebrow">Usage you can inspect</div><h2 data-hf-id="hf-2r0p">Account for every turn and every branch.</h2></div></div>
           <div data-hf-id="hf-dkfa" class="context-grid">
             <div data-hf-id="hf-dvl2" class="context-panel surface linear-context">
               <div data-hf-id="hf-4ww4" class="context-title"><span data-hf-id="hf-zstm">Linear chat</span><span data-hf-id="hf-0aat" class="badge">ALL HISTORY</span></div>
@@ -364,42 +381,27 @@
       tl.from("#scene-3 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 41.7);
       tl.from("#scene-3 h2", { x: -42, opacity: 0, duration: .55, ease: "expo.out" }, 41.81);
       tl.from("#scene-3 .source-types .badge", { y: -18, opacity: 0, stagger: .1, duration: .34, ease: "back.out(1.3)" }, 42.05);
-      tl.from("#sources-shot", { y: 48, opacity: 0, duration: .62, ease: "power3.out" }, 42.15);
-      tl.from("#scene-3 .agent-tools", { x: 55, opacity: 0, duration: .58, ease: "circ.out" }, 42.65);
-      tl.from("#scene-3 .tool", { x: 25, opacity: 0, stagger: .16, duration: .4, ease: "power2.out" }, 43.45);
+      tl.from("#scene-3 .sources-layout", { y: 48, opacity: 0, scale: .975, duration: .62, ease: "power3.out" }, 42.15);
+      tl.to("#scene-3 .sources-layout", { scale: 1.018, duration: 6.2, ease: "sine.inOut" }, 43.05);
 
       pushTransition("#scene-3", "#scene-4", 50.1);
       tl.from("#scene-4 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 50.4);
       tl.from("#scene-4 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 50.52);
-      tl.from("#branch-shot", { x: -55, opacity: 0, duration: .62, ease: "power3.out" }, 50.88);
-      tl.from("#scene-4 .branch-overlay", { scale: .9, opacity: 0, duration: .48, ease: "circ.out" }, 52.58);
-      tl.from("#scene-4 .branch-context-menu", { y: 24, opacity: 0, duration: .46, ease: "power3.out" }, 53.02);
-      tl.from("#scene-4 .branch-menu-option", { x: 16, opacity: 0, stagger: .09, duration: .28, ease: "power2.out" }, 53.22);
-      tl.from("#scene-4 .status-card", { x: 55, opacity: 0, stagger: .2, duration: .5, ease: "power3.out" }, 53.28);
-      tl.from("#scene-4 .fork-line", { scaleX: 0, opacity: 0, duration: .44, ease: "power2.out" }, 55.48);
+      tl.from("#scene-4 .branch-layout", { x: -55, opacity: 0, scale: .975, duration: .62, ease: "power3.out" }, 50.88);
+      tl.to("#scene-4 .branch-layout", { scale: 1.035, x: -14, duration: 10.6, ease: "sine.inOut" }, 52.1);
 
       pushTransition("#scene-4", "#scene-5", 63.7);
       tl.from("#scene-5 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 64.0);
       tl.from("#scene-5 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 64.12);
-      tl.from("#scene-5 .linear-context", { x: -60, opacity: 0, duration: .62, ease: "power3.out" }, 64.4);
-      tl.from("#scene-5 .linear-context .context-block", { y: 15, opacity: 0, stagger: .09, duration: .34, ease: "circ.out" }, 65.0);
-      tl.from("#scene-5 .linear-context .context-fill", { scaleX: 0, duration: .68, ease: "power3.out" }, 65.8);
-      tl.to("#scene-5 .linear-context .context-block.noise", { x: 30, opacity: .52, stagger: .08, duration: .55, ease: "power2.inOut" }, 66.6);
-      tl.from("#scene-5 .focused-context", { x: 65, opacity: 0, duration: .62, ease: "power3.out" }, 67.8);
-      tl.from("#scene-5 .focused-context .context-block", { x: 22, opacity: 0, stagger: .15, duration: .4, ease: "back.out(1.25)" }, 68.4);
-      tl.from("#scene-5 .tree-arrow", { scale: .3, opacity: 0, stagger: .16, duration: .35, ease: "back.out(1.6)" }, 68.8);
-      tl.from("#scene-5 .focused-context .context-fill", { scaleX: 0, duration: .62, ease: "power3.out" }, 69.6);
-      tl.from("#scene-5 .value-strip .badge", { y: 16, opacity: 0, stagger: .16, duration: .38, ease: "back.out(1.35)" }, 70.8);
+      tl.from("#scene-5 .context-grid", { y: 45, opacity: 0, scale: .975, duration: .62, ease: "power3.out" }, 64.4);
+      tl.to("#scene-5 .context-grid", { scale: 1.04, duration: 8.25, ease: "sine.inOut" }, 65.5);
 
       pushTransition("#scene-5", "#scene-6", 73.4);
       tl.from("#scene-6 .eyebrow", { y: 20, opacity: 0, duration: .4, ease: "power2.out" }, 73.7);
       tl.from("#scene-6 h2", { x: -44, opacity: 0, duration: .56, ease: "expo.out" }, 73.82);
       tl.from("#scene-6 .heading-row > .badge", { scale: .88, opacity: 0, duration: .42, ease: "back.out(1.4)" }, 74.08);
-      tl.from("#scene-6 .knowledge-chat", { x: -55, opacity: 0, duration: .6, ease: "power3.out" }, 74.18);
-      tl.from("#scene-6 .chat-bubble", { y: 18, opacity: 0, stagger: .22, duration: .42, ease: "circ.out" }, 74.88);
-      tl.from("#knowledge-shot", { x: 65, opacity: 0, duration: .65, ease: "power3.out" }, 79.3);
-      tl.from("#scene-6 .entity-link", { scale: .86, opacity: 0, duration: .48, ease: "back.out(1.35)" }, 85.9);
-      tl.from("#scene-6 .relation-row > *", { y: 14, opacity: 0, stagger: .12, duration: .34, ease: "power2.out" }, 93.3);
+      tl.from("#scene-6 .knowledge-layout", { x: -55, opacity: 0, scale: .975, duration: .6, ease: "power3.out" }, 74.18);
+      tl.to("#scene-6 .knowledge-layout", { scale: 1.035, x: -12, duration: 20, ease: "sine.inOut" }, 75.2);
 
       pushTransition("#scene-6", "#scene-7", 98.35);
       tl.from("#scene-7 .closing-top", { y: -22, opacity: 0, duration: .48, ease: "power2.out" }, 98.64);

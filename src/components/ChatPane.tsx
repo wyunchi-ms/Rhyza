@@ -12,6 +12,7 @@ import { useAppStore } from "../store";
 import type { AgentPromptImage, KnowledgeExtractionResponse, SourceSearchHit, SummaryResponse } from "../shared/ipc";
 import type { Diagram, Entity, Relation, Turn } from "../types";
 import { usageTokens } from "../utils/branchUsage";
+import { KnowledgePreviewDialog, type KnowledgePreview } from "./KnowledgePreviewDialog";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
 
@@ -24,6 +25,7 @@ export const ChatPane: React.FC = () => {
 	const [isSending, setIsSending] = useState(false);
 	const [sendError, setSendError] = useState<string | null>(null);
 	const [images, setImages] = useState<Array<AgentPromptImage & { id: string; preview: string }>>([]);
+	const [knowledgePreview, setKnowledgePreview] = useState<KnowledgePreview | null>(null);
 	const imageInputRef = useRef<HTMLInputElement | null>(null);
 	const streamingTurnId = useRef<string | null>(null);
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -33,6 +35,14 @@ export const ChatPane: React.FC = () => {
 		() => store.turns.filter((turn) => turn.sessionId === activeSessionId),
 		[store.turns, activeSessionId],
 	);
+	const openEntityPreview = (id: string) => {
+		const entity = store.entities.find((item) => item.id === id && !item.deletedAt);
+		if (entity) setKnowledgePreview({ kind: "entity", item: entity });
+	};
+	const openDiagramPreview = (id: string) => {
+		const diagram = store.diagrams.find((item) => item.id === id && !item.deletedAt);
+		if (diagram) setKnowledgePreview({ kind: "diagram", item: diagram });
+	};
 
 	useEffect(() => {
 		const createInitialSession = () => {
@@ -281,8 +291,8 @@ export const ChatPane: React.FC = () => {
 						diagrams={store.diagrams}
 						onFork={() => void handleFork(turn, index)}
 						canFork={turn.role === "assistant" && index < sessionTurns.length - 1}
-						onEntityClick={store.setSelectedEntity}
-						onDiagramClick={store.setSelectedDiagram}
+						onEntityClick={openEntityPreview}
+						onDiagramClick={openDiagramPreview}
 					/>
 				))}
 				{sessionTurns.length === 0 && (
@@ -334,6 +344,7 @@ export const ChatPane: React.FC = () => {
 				</div>
 				{sendError && <div className="text-center mt-1 text-xs text-red-600">{sendError}</div>}
 			</div>
+			{knowledgePreview && <KnowledgePreviewDialog preview={knowledgePreview} onClose={() => setKnowledgePreview(null)} />}
 		</div>
 	);
 };
