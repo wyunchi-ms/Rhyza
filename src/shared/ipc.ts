@@ -20,6 +20,7 @@ export const ipcChannels = {
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
+	diagnosticReport: "knowbranch:diagnostic-report",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
 } as const;
@@ -212,6 +213,21 @@ export interface KnowledgeExtractionResponse {
 
 export interface OpenExternalRequest { url: string }
 export interface AppStateSaveRequest { value: string; workspacePath: string }
+export interface DiagnosticReport {
+	timestamp: string;
+	route: string;
+	visibility: string;
+	uptimeMs: number;
+	domNodes: number;
+	memoryBytes?: number;
+	activeSessionId?: string;
+	turnCount: number;
+	runningTurnCount: number;
+	entityCount: number;
+	longTasks: { count: number; totalMs: number; maxMs: number };
+	heartbeat: { delayedCount: number; totalDelayMs: number; maxDelayMs: number };
+	regionStalls: Record<string, number>;
+}
 
 export type AuthBridgeEvent =
 	| { type: "info"; message: string; links?: { url: string; label?: string }[] }
@@ -256,6 +272,7 @@ export interface KnowbranchBridge {
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
+	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
 	onAuthEvent(listener: (event: AuthBridgeEvent) => void): () => void;
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;
 }

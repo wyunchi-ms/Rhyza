@@ -22,6 +22,7 @@ const ipcChannels = {
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
+	diagnosticReport: "knowbranch:diagnostic-report",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
 };
@@ -49,6 +50,7 @@ contextBridge.exposeInMainWorld("knowbranch", {
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
+	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
 	onAuthEvent: (listener) => {
 		const wrapped = (_event, payload) => listener(payload);
 		ipcRenderer.on(ipcChannels.authEvent, wrapped);

@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DiagramViewer } from "../components/DiagramViewer";
 import { MermaidDiagram } from "../components/MermaidDiagram";
+import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { useAppStore } from "../store";
 import type { Diagram, Entity } from "../types";
 
@@ -53,7 +54,7 @@ function EntityPreview({ entity, onEdit }: { entity: Entity; onEdit: () => void 
 }
 
 function MarkdownPreview({ content }: { content: string }) {
-	return <div className="entity-markdown-preview-body markdown-body">{content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: ({ className, children, ...props }) => { const source = String(children).replace(/\n$/, ""); return /(?:^|\s)language-mermaid(?:\s|$)/.test(className ?? "") ? <MermaidDiagram source={source} /> : className || source.includes("\n") ? <pre><code className={className} {...props}>{children}</code></pre> : <code className={className} {...props}>{children}</code>; } }}>{content}</ReactMarkdown> : <p className="text-secondary">Add content to start this entity note.</p>}</div>;
+	return <div className="entity-markdown-preview-body markdown-body">{content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: ({ className, children, ...props }) => { const source = String(children).replace(/\n$/, ""); return isMermaidCodeBlock(className, source) ? <MermaidDiagram source={source} /> : className || source.includes("\n") ? <pre><code className={className} {...props}>{children}</code></pre> : <code className={className} {...props}>{children}</code>; } }}>{content}</ReactMarkdown> : <p className="text-secondary">Add content to start this entity note.</p>}</div>;
 }
 
 function EntityCenterEditor({ draft, onDraftChange, onSave, onCancel }: { draft: Entity; onDraftChange: (draft: Entity) => void; onSave: () => void; onCancel: () => void }) {

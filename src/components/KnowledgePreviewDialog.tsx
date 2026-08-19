@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { BookOpen, Clock3, Database, FileText, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef } from "react";
 import type { Diagram, Entity } from "../types";
@@ -25,7 +25,7 @@ export function KnowledgePreviewDialog({ preview, onClose }: { preview: Knowledg
 					<div className="min-w-0"><p>{preview.kind === "entity" ? "Entity preview" : "Diagram preview"}</p><h2 id={`knowledge-preview-title-${item.id}`}>{item.name}</h2></div>
 					<div className="flex items-center gap-3"><span className="knowledge-preview-type">{preview.kind === "entity" ? preview.item.type : `${preview.item.type} · v${preview.item.version}`}</span><button ref={closeButtonRef} type="button" onClick={onClose} title="Close preview" aria-label="Close preview"><X size={18} /></button></div>
 				</header>
-				{preview.kind === "entity" ? <EntityPreview entity={preview.item} /> : <div className="knowledge-preview-diagram"><DiagramViewer diagram={preview.item} /></div>}
+				{preview.kind === "entity" ? <EntityPreview entity={preview.item} /> : <div className="knowledge-preview-diagram"><DiagramViewer diagram={preview.item} showHeader={false} /></div>}
 			</section>
 		</div>,
 		document.body,
@@ -33,5 +33,5 @@ export function KnowledgePreviewDialog({ preview, onClose }: { preview: Knowledg
 }
 
 function EntityPreview({ entity }: { entity: Entity }) {
-	return <div className="knowledge-preview-entity-content"><p className="knowledge-preview-summary">{entity.summary}</p><div className="knowledge-preview-entity-body">{entity.content || entity.summary}</div><footer><span>{entity.sourceRefs.length} sources</span><span>v{entity.version}</span></footer></div>;
+	return <div className="knowledge-preview-entity-content"><div className="knowledge-preview-entity-inner"><section className="knowledge-preview-summary"><BookOpen size={18} /><div><span>Overview</span><p>{entity.summary}</p></div></section><section className="knowledge-preview-entity-body"><h3><FileText size={16} /> Details</h3><p>{entity.content || entity.summary}</p></section><footer><span><Database size={14} />{entity.sourceRefs.length} source{entity.sourceRefs.length === 1 ? "" : "s"}</span><span>Version {entity.version}</span><span><Clock3 size={14} />Updated {new Date(entity.updatedAt).toLocaleDateString()}</span></footer></div></div>;
 }

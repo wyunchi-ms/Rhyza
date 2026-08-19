@@ -1,13 +1,12 @@
 import { AlertCircle, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useState } from "react";
 
 let mermaidInitialized = false;
 const mermaidSvgCache = new Map<string, string>();
 const maxCachedDiagrams = 100;
 
 export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSvgRendered?: (svg: string) => void }) {
-	const hostRef = useRef<HTMLDivElement | null>(null);
 	const reactId = useId();
 	const normalizedSource = source.trim();
 	const [error, setError] = useState<string | null>(null);
@@ -18,15 +17,12 @@ export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSv
 
 	useLayoutEffect(() => {
 		const cachedSvg = mermaidSvgCache.get(normalizedSource);
-		if (!hostRef.current) return;
 		if (cachedSvg) {
-			hostRef.current.innerHTML = cachedSvg;
 			setRenderedSvg(cachedSvg);
 			setError(null);
 			setLoading(false);
 			onSvgRendered?.(cachedSvg);
 		} else {
-			hostRef.current.innerHTML = "";
 			setRenderedSvg("");
 			setError(null);
 			setLoading(true);
@@ -74,12 +70,10 @@ export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSv
 					mermaidInitialized = true;
 				}
 				const diagramId = `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}`;
-				const { svg, bindFunctions } = await mermaid.render(diagramId, normalizedSource);
+				const { svg } = await mermaid.render(diagramId, normalizedSource);
+				if (cancelled) return;
 				cacheRenderedSvg(normalizedSource, svg);
 				setRenderedSvg(svg);
-				if (cancelled || !hostRef.current) return;
-				hostRef.current.innerHTML = svg;
-				bindFunctions?.(hostRef.current);
 				onSvgRendered?.(svg);
 			} catch (renderError) {
 				if (!cancelled) {
@@ -119,7 +113,7 @@ export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSv
 					</details>
 				</div>
 			) : null}
-			<div ref={hostRef} className={loading || error ? "hidden" : "mermaid-diagram-canvas"} />
+			<div className={loading || error ? "hidden" : "mermaid-diagram-canvas"} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
 		</figure>
 		{previewOpen && createPortal(
 			<div className="mermaid-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}>

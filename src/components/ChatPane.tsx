@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, ImagePlus, Info, LoaderCircle, PanelRight, Send, Sparkles, X } from "lucide-react";
+import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, ImagePlus, Info, LoaderCircle, MessageCircle, PanelRight, Send, Sparkles, X } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -13,6 +13,7 @@ import type { AgentPromptImage, KnowledgeExtractionResponse, SourceSearchHit, Su
 import type { Diagram, Entity, Relation, Turn } from "../types";
 import { usageTokens } from "../utils/branchUsage";
 import { requestScheduler } from "../utils/requestScheduler";
+import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { KnowledgePreviewDialog, type KnowledgePreview } from "./KnowledgePreviewDialog";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
@@ -121,13 +122,13 @@ export const ChatPane: React.FC = () => {
 		});
 	}, [activeSessionId]);
 
-	const handleSend = async (options?: { sessionId?: string; selectedText?: string; question?: string }) => {
+	const handleSend = async (options?: { sessionId?: string; selectedText?: string; quotedTurnId?: string; question?: string }) => {
 		const prompt = (options?.question ?? input).trim();
 		const targetSessionId = options?.sessionId ?? activeSessionId;
 		if ((!prompt && images.length === 0) || !targetSessionId) return;
 		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
 		const agentPrompt = options?.selectedText
-			? `Answer the user's question using the selected passage as the primary focus. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
+			? `Answer the user's question using the selected passage as the primary focus. The selected passage identifies what the user is asking about and is explicit evidence of a learning gap; extract any durable concept it names into the knowledge base. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
 			: prompt;
 		setInput("");
 		setImages([]);
@@ -143,6 +144,9 @@ export const ChatPane: React.FC = () => {
 			status: "complete",
 			summary: summarize(prompt),
 			images: promptImages,
+			quote: options?.selectedText && options.quotedTurnId
+				? { turnId: options.quotedTurnId, text: options.selectedText }
+				: undefined,
 			createdAt: now,
 		});
 		store.addManualTurn({
@@ -288,17 +292,45 @@ export const ChatPane: React.FC = () => {
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
 	};
 
-	const askAboutSelection = () => {
-		if (!askSelection || !selectionQuestion.trim()) return;
-		const result = store.forkSession(askSelection.turnId);
+	const sendSelectionQuestion = (question: string, selected = askSelection) => {
+		if (!selected || !question.trim()) return;
+		const result = store.forkSession(selected.turnId);
 		if (!result) return;
-		const selected = askSelection;
-		const question = selectionQuestion;
 		setAskSelection(null);
 		setSelection(null);
 		setSelectionQuestion("");
-		void handleSend({ sessionId: result.forkSessionId, selectedText: selected.text, question });
+		void handleSend({ sessionId: result.forkSessionId, selectedText: selected.text, quotedTurnId: selected.turnId, question });
 	};
+
+	useEffect(() => {
+		if (!selection && !askSelection) return;
+		const dismissSelectionMenu = () => {
+			setSelection(null);
+			setAskSelection(null);
+			setSelectionQuestion("");
+			window.getSelection()?.removeAllRanges();
+		};
+		const close = (event: PointerEvent) => {
+			const target = event.target as Element | null;
+			if (target?.closest(".text-selection-menu, .text-selection-popover")) return;
+			dismissSelectionMenu();
+		};
+		const closeOnScroll = (event: Event) => {
+			const target = event.target as Element | null;
+			if (target?.closest?.(".text-selection-popover")) return;
+			dismissSelectionMenu();
+		};
+		window.addEventListener("pointerdown", close);
+		window.addEventListener("blur", dismissSelectionMenu);
+		window.addEventListener("resize", dismissSelectionMenu);
+		window.addEventListener("scroll", closeOnScroll, true);
+		return () => {
+			window.removeEventListener("pointerdown", close);
+			window.removeEventListener("blur", dismissSelectionMenu);
+			window.removeEventListener("resize", dismissSelectionMenu);
+			window.removeEventListener("scroll", closeOnScroll, true);
+		};
+	}, [selection, askSelection]);
 
 	return (
 		<div className="chat-pane">
@@ -328,8 +360,8 @@ export const ChatPane: React.FC = () => {
 					</div>
 				)}
 			</div>
-			{selection && !askSelection && <button type="button" className="text-selection-menu" style={{ left: selection.x, top: selection.y }} onMouseDown={(event) => event.preventDefault()} onClick={() => setAskSelection(selection)}>Ask about this</button>}
-			{askSelection && <form className="text-selection-popover" style={{ left: askSelection.x, top: askSelection.y }} onSubmit={(event) => { event.preventDefault(); askAboutSelection(); }}><div className="text-selection-label">Ask about the selected passage</div><textarea autoFocus rows={2} value={selectionQuestion} onChange={(event) => setSelectionQuestion(event.target.value)} placeholder="Ask a follow-up question…" /><div className="text-selection-actions"><button type="button" onClick={() => { setAskSelection(null); setSelection(null); }}>Cancel</button><button type="submit" disabled={!selectionQuestion.trim()}>Ask</button></div></form>}
+			{selection && !askSelection && <div className="text-selection-menu" role="menu" aria-label="Actions for selected text" style={{ left: selection.x, top: selection.y }} onMouseDown={(event) => event.preventDefault()}><div className="text-selection-menu-title">Selected text</div><button type="button" role="menuitem" onClick={() => setAskSelection(selection)}><MessageCircle size={16} /><span><strong>Ask about this</strong><small>Write a follow-up question</small></span></button><button type="button" role="menuitem" onClick={() => sendSelectionQuestion("explain", selection)}><Sparkles size={16} /><span><strong>Explain</strong><small>Explain the selection directly</small></span></button></div>}
+			{askSelection && <form className="text-selection-popover" style={{ left: askSelection.x, top: askSelection.y }} onSubmit={(event) => { event.preventDefault(); sendSelectionQuestion(selectionQuestion); }}><div className="text-selection-label">Ask about the selected passage</div><textarea autoFocus rows={2} value={selectionQuestion} onChange={(event) => setSelectionQuestion(event.target.value)} placeholder="Ask a follow-up question…" /><div className="text-selection-actions"><button type="button" onClick={() => { setAskSelection(null); setSelection(null); }}>Cancel</button><button type="submit" disabled={!selectionQuestion.trim()}>Ask</button></div></form>}
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
 			<div className="composer-shell">
 				<div className="chat-composer">
@@ -407,6 +439,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 						<TurnStatus status={turn.status} />
 						{!isUser && turn.reasoning && <ReasoningBlock content={turn.reasoning} />}
 						{!isUser && turn.tools && turn.tools.length > 0 && <ToolCards tools={turn.tools} />}
+						{isUser && turn.quote && <blockquote className="user-message-quote">{turn.quote.text}</blockquote>}
 						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
 						{turn.content && (isUser
 							? <MarkdownContent content={turn.content} />
@@ -575,7 +608,7 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 			code: ({ className, children, ...props }) => {
 				const rawSource = String(children);
 				const source = rawSource.replace(/\n$/, "");
-				if (!compact && /(?:^|\s)language-mermaid(?:\s|$)/.test(className ?? "")) {
+				if (!compact && isMermaidCodeBlock(className, source)) {
 					return <MermaidDiagram source={source} />;
 				}
 				const isBlock = Boolean(className) || rawSource.includes("\n");

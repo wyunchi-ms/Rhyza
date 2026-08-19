@@ -67,12 +67,14 @@ assert(Boolean(useAppStore.getState().diagrams[0]?.deletedAt), "Diagram was not 
 loadWorkspaceState(JSON.stringify({
 	version: 2,
 	state: {
-		sessions: [{ id: "interrupted-session", parentId: null, title: "Interrupted", isRoot: true, status: "running" }],
+		sessions: [{ id: "interrupted-session", parentId: null, title: "Interrupted", titlePending: true, continuationTitlePending: true, isRoot: true, status: "running" }],
 		activeSessionId: "interrupted-session",
 		turns: [{ id: "interrupted-turn", sessionId: "interrupted-session", role: "assistant", content: "Partial", status: "running", createdAt: timestamp, tools: [{ id: "tool", name: "read", target: "src/app.ts", status: "running", startedAt: timestamp }] }],
 	},
 }));
-assert(useAppStore.getState().sessions[0]?.status === "error", "A stale running session must recover as an error.");
+assert(useAppStore.getState().sessions[0]?.status === "interrupted", "A stale running session must recover as interrupted.");
+assert(useAppStore.getState().sessions[0]?.titlePending === false, "Interrupted title generation must stop showing as pending.");
+assert(useAppStore.getState().sessions[0]?.continuationTitlePending === false, "Interrupted continuation title generation must stop showing as pending.");
 assert(useAppStore.getState().turns[0]?.status === "interrupted", "A stale running turn must recover as interrupted.");
 assert(useAppStore.getState().turns[0]?.tools?.[0]?.status === "error", "A running tool must recover as interrupted instead of staying active.");
 

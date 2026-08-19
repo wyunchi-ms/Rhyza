@@ -8,6 +8,7 @@ import Settings from "./pages/Settings";
 import Sources from "./pages/Sources";
 import Workspace from "./pages/Workspace";
 import { useAppStore } from "./store";
+import { startPerformanceDiagnostics } from "./utils/performanceDiagnostics";
 
 const App: React.FC = () => {
 	const appearance = useAppStore((state) => state.settings);
@@ -20,6 +21,9 @@ const App: React.FC = () => {
 		document.documentElement.classList.toggle("reduce-motion", appearance.reduceMotion);
 		document.documentElement.classList.toggle("high-contrast", appearance.highContrast);
 	}, [appearance]);
+	useEffect(() => {
+		return startPerformanceDiagnostics();
+	}, []);
 	useEffect(() => {
 		const timeout = window.setTimeout(reconcileKnowledge, 800);
 		return () => window.clearTimeout(timeout);

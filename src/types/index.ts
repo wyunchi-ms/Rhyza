@@ -14,7 +14,7 @@ export interface SessionNode {
 	progressStatus?: SessionProgressStatus;
 	continuationProgressStatus?: SessionProgressStatus;
 	isRoot: boolean;
-	status: "idle" | "running" | "error";
+	status: "idle" | "running" | "interrupted" | "error";
 	worktreePath?: string;
 	/** Model usage spent generating this node's title. */
 	titleUsage?: TokenUsage;
@@ -24,6 +24,8 @@ export interface SessionNode {
 
 export interface Turn {
 	id: string;
+	/** Original turn represented by a copied branch-history turn. */
+	sourceTurnId?: string;
 	sessionId: string;
 	role: "user" | "assistant";
 	content: string;
@@ -41,6 +43,10 @@ export interface Turn {
 	entities?: EntityMention[];
 	changeSetId?: string;
 	images?: TurnImage[];
+	quote?: {
+		turnId: string;
+		text: string;
+	};
 	usage?: TokenUsage;
 	/** Display-only usage copied with shared fork history; excluded from branch totals. */
 	inheritedUsage?: TokenUsage;

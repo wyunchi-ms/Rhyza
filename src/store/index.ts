@@ -181,10 +181,13 @@ export const useAppStore = create<AppState>()(
 
 			forkSession: (turnId) => {
 				const state = get();
-				const turn = state.turns.find((item) => item.id === turnId);
+				const selectedTurn = state.turns.find((item) => item.id === turnId);
+				const turn = selectedTurn?.sourceTurnId
+					? state.turns.find((item) => item.id === selectedTurn.sourceTurnId) ?? selectedTurn
+					: selectedTurn;
 				if (!turn) return null;
 				const parentTurns = state.turns.filter((item) => item.sessionId === turn.sessionId);
-				const forkIndex = parentTurns.findIndex((item) => item.id === turnId);
+				const forkIndex = parentTurns.findIndex((item) => item.id === turn.id);
 				if (forkIndex < 0) return null;
 				const id = createId("session");
 				const newSession: SessionNode = {
@@ -200,6 +203,7 @@ export const useAppStore = create<AppState>()(
 				const copiedTurns = parentTurns.slice(0, forkIndex + 1).map((item) => ({
 					...item,
 					id: createId("turn"),
+					sourceTurnId: item.sourceTurnId ?? item.id,
 					sessionId: id,
 					changeSetId: undefined,
 					inheritedUsage: item.usage ?? item.inheritedUsage,
@@ -659,7 +663,7 @@ export const useAppStore = create<AppState>()(
 				return {
 					...current,
 					...saved,
-					sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? [])),
+					sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? []), saved.turns ?? []),
 					turns: recoverInterruptedTurns(saved.turns ?? []),
 					settings: { ...defaultSettings, ...saved.settings },
 					relations: saved.relations ?? [],
@@ -692,7 +696,7 @@ export function loadWorkspaceState(serialized: string | null): void {
 		}
 	}
 	useAppStore.setState({
-		sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? [])),
+		sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? []), saved.turns ?? []),
 		activeSessionId: saved.activeSessionId ?? null,
 		turns: recoverInterruptedTurns(saved.turns ?? []),
 		entities: saved.entities ?? [],
@@ -748,19 +752,37 @@ function migrateForkTitles(sessions: SessionNode[]): SessionNode[] {
 const transientTurnStatuses = new Set<Turn["status"]>(["retrieving", "running", "finalizing"]);
 
 function recoverInterruptedTurns(turns: Turn[]): Turn[] {
+	const recoveredAt = new Date().toISOString();
 	return turns.map((turn) => transientTurnStatuses.has(turn.status)
 		? {
 			...turn,
 			content: turn.content || "The response was interrupted because the application closed before the agent finished.",
 			status: "interrupted",
 			summary: "Interrupted before completion",
-			tools: turn.tools?.map((tool) => tool.status === "running" ? { ...tool, status: "error" as const, completedAt: turn.createdAt } : tool),
+			completedAt: recoveredAt,
+			tools: turn.tools?.map((tool) => tool.status === "running" ? {
+				...tool,
+				status: "error" as const,
+				completedAt: recoveredAt,
+				durationMs: Math.max(0, new Date(recoveredAt).getTime() - new Date(tool.startedAt).getTime()),
+			} : tool),
 		}
 		: turn);
 }
 
-function recoverInterruptedSessions(sessions: SessionNode[]): SessionNode[] {
-	return sessions.map((session) => session.status === "running" ? { ...session, status: "error" } : session);
+function recoverInterruptedSessions(sessions: SessionNode[], turns: Turn[]): SessionNode[] {
+	const interruptedSessionIds = new Set(turns
+		.filter((turn) => transientTurnStatuses.has(turn.status))
+		.map((turn) => turn.sessionId));
+	return sessions.map((session) => ({
+		...session,
+		status: interruptedSessionIds.has(session.id)
+			? "interrupted"
+			: session.status === "running" ? "idle" : session.status,
+		titlePending: false,
+		continuationTitlePending: false,
+		refreshTitleOnNextPrompt: session.titlePending || session.refreshTitleOnNextPrompt,
+	}));
 }
 
 function applyExtractedDiagrams(

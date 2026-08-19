@@ -2,6 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } f
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
 import { writeFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PiService } from "./pi-service.js";
 import { SettingsStore } from "./settings-store.js";
@@ -20,6 +22,7 @@ import {
 	validateKnowledgeExtractionRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
+	type DiagnosticReport,
 } from "../../src/shared/ipc.js";
 import { AppStateStore } from "./app-state-store.js";
 
@@ -57,6 +60,9 @@ let sourceService: SourceService;
 let appStateStore: AppStateStore;
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
+const diagnosticsDirectory = path.join(dataRootPath, "diagnostics");
+const mainLoopDelay = monitorEventLoopDelay({ resolution: 20 });
+let diagnosticsWriteQueue = Promise.resolve();
 
 if (!ownsSingleInstanceLock) {
 	app.quit();
@@ -99,6 +105,11 @@ async function createWindow(): Promise<void> {
 	);
 
 	mainWindow.once("ready-to-show", () => mainWindow?.show());
+	mainWindow.on("unresponsive", () => { void writeDiagnostic("window-unresponsive", mainProcessSnapshot()); });
+	mainWindow.on("responsive", () => { void writeDiagnostic("window-responsive", mainProcessSnapshot()); });
+	mainWindow.webContents.on("render-process-gone", (_event, details) => {
+		void writeDiagnostic("renderer-process-gone", { ...mainProcessSnapshot(), reason: details.reason, exitCode: details.exitCode });
+	});
 	if (isSmoke) {
 		mainWindow.webContents.once("did-finish-load", () => {
 			void runSmokeCheck(mainWindow!);
@@ -140,6 +151,12 @@ function registerIpcHandlers(): void {
 				console.log("APP_STATE_SAVE", { workspacePath: request.workspacePath, bytes: request.value.length });
 			}
 			await appStateStore.save(request.workspacePath, request.value);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.diagnosticReport, async (event, payload) =>
+		withValidSender(event, async () => {
+			await writeDiagnostic("renderer-sample", validateDiagnosticReport(payload));
 			return { ok: true as const };
 		}),
 	);
@@ -220,28 +237,31 @@ function registerIpcHandlers(): void {
 		}),
 	);
 	ipcMain.handle(ipcChannels.agentPrompt, async (event, payload) =>
-		withValidSender(event, async () =>
-			piService.promptAgent(
-				validateAgentPromptRequest(payload),
+		withValidSender(event, async () => {
+			const request = validateAgentPromptRequest(payload);
+			return timedDiagnostic("agent-prompt", { frontendSessionId: request.frontendSessionId }, async () => piService.promptAgent(
+				request,
 				await settingsStore.requireWorkspacePath(),
-			),
-		),
+			));
+		}),
 	);
 	ipcMain.handle(ipcChannels.generateSummary, async (event, payload) =>
-		withValidSender(event, async () =>
-			piService.generateSummary(
-				validateSummaryRequest(payload),
+		withValidSender(event, async () => {
+			const request = validateSummaryRequest(payload);
+			return timedDiagnostic("generate-summary", {}, async () => piService.generateSummary(
+				request,
 				await settingsStore.requireWorkspacePath(),
-			),
-		),
+			));
+		}),
 	);
 	ipcMain.handle(ipcChannels.extractKnowledge, async (event, payload) =>
-		withValidSender(event, async () =>
-			piService.extractKnowledge(
-				validateKnowledgeExtractionRequest(payload),
+		withValidSender(event, async () => {
+			const request = validateKnowledgeExtractionRequest(payload);
+			return timedDiagnostic("extract-knowledge", {}, async () => piService.extractKnowledge(
+				request,
 				await settingsStore.requireWorkspacePath(),
-			),
-		),
+			));
+		}),
 	);
 	ipcMain.handle(ipcChannels.openExternal, async (event, payload) =>
 		withValidSender(event, async () => {
@@ -297,6 +317,11 @@ app.whenReady().then(async () => {
 		sourceService,
 	);
 	registerIpcHandlers();
+	mainLoopDelay.enable();
+	setInterval(() => {
+		void writeDiagnostic("main-sample", mainProcessSnapshot());
+		mainLoopDelay.reset();
+	}, 15_000).unref();
 	await createWindow();
 
 	app.on("activate", async () => {
@@ -305,6 +330,50 @@ app.whenReady().then(async () => {
 		}
 	});
 });
+
+function validateDiagnosticReport(value: unknown): DiagnosticReport {
+	if (!value || typeof value !== "object") throw new Error("Invalid diagnostic report.");
+	const report = value as DiagnosticReport;
+	if (typeof report.timestamp !== "string" || typeof report.route !== "string") throw new Error("Invalid diagnostic report.");
+	return JSON.parse(JSON.stringify(report)) as DiagnosticReport;
+}
+
+function mainProcessSnapshot() {
+	const memory = process.memoryUsage();
+	return {
+		timestamp: new Date().toISOString(),
+		uptimeMs: Math.round(process.uptime() * 1_000),
+		eventLoopDelayMs: {
+			mean: Number.isFinite(mainLoopDelay.mean) ? Math.round(mainLoopDelay.mean / 1e6) : 0,
+			max: Math.round(mainLoopDelay.max / 1e6),
+			p99: Math.round(mainLoopDelay.percentile(99) / 1e6),
+		},
+		memoryBytes: { rss: memory.rss, heapUsed: memory.heapUsed, external: memory.external },
+	};
+}
+
+function writeDiagnostic(kind: string, payload: object): Promise<void> {
+	const day = new Date().toISOString().slice(0, 10);
+	const filePath = path.join(diagnosticsDirectory, `performance-${day}.jsonl`);
+	diagnosticsWriteQueue = diagnosticsWriteQueue.then(async () => {
+		await mkdir(diagnosticsDirectory, { recursive: true });
+		await appendFile(filePath, `${JSON.stringify({ kind, ...payload })}\n`, "utf8");
+	}).catch((error: unknown) => console.error("DIAGNOSTIC_WRITE_FAILED", error));
+	return diagnosticsWriteQueue;
+}
+
+async function timedDiagnostic<T>(operation: string, metadata: object, action: () => Promise<T>): Promise<T> {
+	const startedAt = Date.now();
+	await writeDiagnostic("operation-start", { timestamp: new Date(startedAt).toISOString(), operation, ...metadata });
+	try {
+		const result = await action();
+		await writeDiagnostic("operation-end", { timestamp: new Date().toISOString(), operation, durationMs: Date.now() - startedAt, ok: true, ...metadata });
+		return result;
+	} catch (error) {
+		await writeDiagnostic("operation-end", { timestamp: new Date().toISOString(), operation, durationMs: Date.now() - startedAt, ok: false, error: error instanceof Error ? error.name : "UnknownError", ...metadata });
+		throw error;
+	}
+}
 
 app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") {

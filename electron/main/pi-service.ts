@@ -622,8 +622,9 @@ const sourceRetrievalGuidance = `## Attached sources
 - Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
 
 const responsePresentationGuidance = `## Response presentation
-- When the answer explains a process, call chain, sequence, architecture, state transition, decision path, or relationship graph, prefer a concise Mermaid diagram over an ASCII diagram or arrow-filled code block.
-- Use a fenced \`\`\`mermaid block with valid Mermaid syntax. Choose the diagram type that best matches the information, such as flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, or erDiagram.
+- When visualizing a process, call chain, sequence, architecture, state transition, decision path, or relationship graph, use a concise Mermaid diagram. Never use an ASCII-art tree, arrow-filled plain-text diagram, or a \`\`\`text block as a substitute for a diagram.
+- Every diagram MUST use a fenced \`\`\`mermaid block with valid Mermaid syntax and the exact \`mermaid\` language tag. Choose the diagram type that best matches the information, such as flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, or erDiagram.
+- Before finishing, verify that every visual block begins with a supported Mermaid declaration and that no diagram was emitted as an unlabeled or plain-text code block.
 - Design diagrams for a narrow reading pane. Prefer top-to-bottom flowcharts (flowchart TD or TB) and compact vertical grouping; avoid flowchart LR/RL and wide single-row chains unless horizontal order is essential.
 - When a sequence would require many participants across one row, use a vertical flowchart or split it into smaller diagrams instead of producing an extremely wide sequence diagram.
 - Add only the prose needed to explain the diagram. Do not add a diagram when plain text or executable source code is clearer.

@@ -228,6 +228,7 @@ const SessionGroup = ({
 					<span className="truncate flex-1 font-medium">{node.title}</span>
 					<UsageLabel usage={usage.node.get(node.id)} />
 					{!isBranchPoint && node.status === "running" && <LoaderCircle size={12} className="animate-spin" aria-label="Running" />}
+					{!isBranchPoint && node.status === "interrupted" && <AlertCircle size={12} className="text-amber-600" aria-label="Interrupted; this session can be continued" />}
 					{!isBranchPoint && node.status === "error" && <AlertCircle size={12} className="text-red-500" aria-label="Error" />}
 				</button>
 				<div className={clsx("absolute right-1 top-1/2 -translate-y-1/2 flex opacity-0 group-hover:opacity-100 focus-within:opacity-100", isActive ? "text-white" : "text-secondary")}>
