@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rhyza",
+  "version": "1.0.0",
+  "identifier": "com.rhyza.desktop",
+  "build": {
+    "beforeDevCommand": "npm run sidecar:compile && npm run dev",
+    "beforeBuildCommand": "npm run build:tauri-assets",
+    "devUrl": "http://localhost:5174",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{ "title": "Rhyza", "width": 1280, "height": 860, "minWidth": 760, "minHeight": 640 }],
+    "security": { "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:*" }
+  },
+  "bundle": { "active": true, "targets": "all" }
+}
