@@ -1,6 +1,9 @@
-# Keep the final delivery, but exclude intermediate renders and visual QA frames.
+# Keep generated media out of Git; final exports stay local for handoff.
 renders/*
-!renders/Rhyza-mini-hackathon-demo-v4.1.mp4
+.thumbnails/
+images/
+marketing-images/
+real-app-screenshots/
 snapshots/
 snapshots-v2/
 snapshots-v3/
@@ -19,3 +22,8 @@ assets/captions.json
 assets/narration-azure.json
 assets/narration.mp3
 assets/narration.vtt
+assets/*.mp3
+assets/*.wav
+assets/*.json
+assets/*.vtt
+assets/*.txt
