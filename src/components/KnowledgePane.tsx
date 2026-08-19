@@ -1,9 +1,7 @@
-import { Database, ExternalLink, Network, X } from "lucide-react";
+import { Database, Network, X } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useAppStore } from "../store";
 import type { Diagram, Entity } from "../types";
-import { DiagramViewer } from "./DiagramViewer";
 import { KnowledgePreviewDialog, type KnowledgePreview } from "./KnowledgePreviewDialog";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
 
@@ -18,15 +16,11 @@ export const KnowledgePane = () => {
 	const activeTurns = store.turns.filter((turn) => turn.sessionId === store.activeSessionId);
 	const mentionedIds = new Set(activeTurns.flatMap((turn) => turn.entities?.map((entity) => entity.id) ?? []));
 	const relevant = store.entities.filter((entity) => !entity.deletedAt && (mentionedIds.size === 0 || mentionedIds.has(entity.id)));
-	const selectedEntity = store.entities.find((entity) => entity.id === store.selectedEntityId && !entity.deletedAt);
-	const selectedDiagram = store.diagrams.find((diagram) => diagram.id === store.selectedDiagramId && !diagram.deletedAt);
 	const diagrams = store.diagrams.filter((diagram) => !diagram.deletedAt);
 	const openEntityPreview = (entity: Entity) => {
-		store.setSelectedEntity(entity.id);
 		setPreview({ kind: "entity", item: entity });
 	};
 	const openDiagramPreview = (diagram: Diagram) => {
-		store.setSelectedDiagram(diagram.id);
 		setPreview({ kind: "diagram", item: diagram });
 	};
 
@@ -39,27 +33,6 @@ export const KnowledgePane = () => {
 				<button type="button" className="sidebar-icon-button" title="Close" onClick={store.toggleRightPane}><X size={16} /></button>
 			</header>
 			<div className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
-				{selectedEntity && (
-					<section className="knowledge-selection">
-						<p className="section-label">Selected entity</p>
-						<div className="flex items-start justify-between gap-3">
-							<h3 className="font-bold text-primary">{selectedEntity.name}</h3>
-							<span className="text-[10px] text-gray-400">{selectedEntity.type}</span>
-						</div>
-						<p className="text-sm text-secondary mt-2 whitespace-pre-wrap">{selectedEntity.content || selectedEntity.summary}</p>
-						{selectedEntity.content && selectedEntity.summary !== selectedEntity.content && <p className="text-xs text-secondary mt-3 border-t border-gray-100 pt-3">{selectedEntity.summary}</p>}
-						<Link to="/knowledge" className="text-xs text-accent mt-3 flex items-center gap-1">Open details <ExternalLink size={12} /></Link>
-					</section>
-				)}
-				{selectedDiagram && (
-					<section className="knowledge-selection">
-						<p className="section-label">Selected diagram</p>
-						<div className="knowledge-diagram-preview border border-gray-200 rounded-md bg-white">
-							<DiagramViewer diagram={selectedDiagram} compact />
-						</div>
-						<Link to="/knowledge" className="text-xs text-accent mt-3 flex items-center gap-1">Open details <ExternalLink size={12} /></Link>
-					</section>
-				)}
 				<section>
 					<p className="section-label">Entities in branch</p>
 					<div className="knowledge-list">

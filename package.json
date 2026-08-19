@@ -16,6 +16,7 @@
     "preview": "vite preview",
     "smoke:ipc": "tsx scripts/ipc-smoke.ts",
 	"smoke:branch-usage": "tsx scripts/branch-usage-smoke.ts",
+	"smoke:knowledge-reconciliation": "tsx scripts/knowledge-reconciliation-smoke.ts",
     "smoke:mvp": "tsx scripts/mvp-smoke.ts",
 		"smoke:state-store": "tsx scripts/app-state-store-smoke.ts",
     "electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"

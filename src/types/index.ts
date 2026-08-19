@@ -197,4 +197,5 @@ export interface Settings {
 	reduceMotion: boolean;
 	highContrast: boolean;
 	fontScale: number;
+	maxConcurrentRequests: number;
 }

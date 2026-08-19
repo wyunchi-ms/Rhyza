@@ -15,6 +15,7 @@ import type {
 	SourceRef,
 	Turn,
 } from "../types";
+import { reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -61,6 +62,7 @@ interface AppState {
 	acceptChangeSet: (id: string) => void;
 	rejectChangeSet: (id: string) => void;
 	updateSettings: (settings: Partial<Settings>) => void;
+	reconcileKnowledge: () => void;
 	pruneLegacyDiagrams: () => void;
 }
 
@@ -75,6 +77,7 @@ const defaultSettings: Settings = {
 	reduceMotion: false,
 	highContrast: false,
 	fontScale: 1,
+	maxConcurrentRequests: 5,
 };
 
 let persistenceWorkspacePath: string | null = null;
@@ -182,7 +185,7 @@ export const useAppStore = create<AppState>()(
 				if (!turn) return null;
 				const parentTurns = state.turns.filter((item) => item.sessionId === turn.sessionId);
 				const forkIndex = parentTurns.findIndex((item) => item.id === turnId);
-				if (forkIndex < 0 || forkIndex === parentTurns.length - 1) return null;
+				if (forkIndex < 0) return null;
 				const id = createId("session");
 				const newSession: SessionNode = {
 					id,
@@ -608,7 +611,36 @@ export const useAppStore = create<AppState>()(
 				}));
 			},
 			updateSettings: (newSettings) =>
-				set((state) => ({ settings: { ...state.settings, ...newSettings } })),
+				set((state) => ({ settings: { ...state.settings, ...newSettings, maxConcurrentRequests: Math.min(10, Math.max(1, Math.round(newSettings.maxConcurrentRequests ?? state.settings.maxConcurrentRequests) || 5)) } })),
+			reconcileKnowledge: () => {
+				const state = get();
+				const timestamp = new Date().toISOString();
+				const reconciled = reconcileKnowledgeGraph(state.entities, state.relations, state.diagrams, timestamp);
+				if (reconciled.length === 0) return;
+				const replacements = new Map(reconciled.map(({ after }) => [after.id, after]));
+				const operations: ChangeOperation[] = reconciled.map(({ before, after }) => ({
+					kind: "diagram",
+					action: "update",
+					objectId: after.id,
+					label: after.name,
+					before,
+					after,
+				}));
+				const changeSet: ChangeSet = {
+					id: createId("changeset"),
+					title: "Knowledge reconciliation",
+					timestamp,
+					sessionId: state.activeSessionId ?? "system",
+					summary: `Linked knowledge references in ${reconciled.length} diagram${reconciled.length === 1 ? "" : "s"}.`,
+					actor: "agent",
+					status: "committed",
+					operations,
+				};
+				set((current) => ({
+					diagrams: current.diagrams.map((diagram) => replacements.get(diagram.id) ?? diagram),
+					changesets: [changeSet, ...current.changesets],
+				}));
+			},
 			pruneLegacyDiagrams: () =>
 				set((state) => {
 					const diagrams = migrateMermaidDiagrams(state.diagrams);

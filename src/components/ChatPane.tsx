@@ -12,6 +12,7 @@ import { useAppStore } from "../store";
 import type { AgentPromptImage, KnowledgeExtractionResponse, SourceSearchHit, SummaryResponse } from "../shared/ipc";
 import type { Diagram, Entity, Relation, Turn } from "../types";
 import { usageTokens } from "../utils/branchUsage";
+import { requestScheduler } from "../utils/requestScheduler";
 import { KnowledgePreviewDialog, type KnowledgePreview } from "./KnowledgePreviewDialog";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { TurnNavigator } from "./TurnNavigator";
@@ -22,15 +23,20 @@ const maxPromptImageBytes = 4_500_000;
 export const ChatPane: React.FC = () => {
 	const store = useAppStore();
 	const [input, setInput] = useState("");
-	const [isSending, setIsSending] = useState(false);
+	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
 	const [images, setImages] = useState<Array<AgentPromptImage & { id: string; preview: string }>>([]);
 	const [knowledgePreview, setKnowledgePreview] = useState<KnowledgePreview | null>(null);
+	const [selection, setSelection] = useState<{ turnId: string; text: string; x: number; y: number } | null>(null);
+	const [askSelection, setAskSelection] = useState<{ turnId: string; text: string; x: number; y: number } | null>(null);
+	const [selectionQuestion, setSelectionQuestion] = useState("");
 	const imageInputRef = useRef<HTMLInputElement | null>(null);
-	const streamingTurnId = useRef<string | null>(null);
+	const streamingTurnIds = useRef(new Map<string, string>());
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 	const activeSessionId = store.activeSessionId;
+	const isSending = pendingRequests > 0;
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
+	useEffect(() => { requestScheduler.setLimit(store.settings.maxConcurrentRequests); }, [store.settings.maxConcurrentRequests]);
 	const sessionTurns = useMemo(
 		() => store.turns.filter((turn) => turn.sessionId === activeSessionId),
 		[store.turns, activeSessionId],
@@ -70,9 +76,7 @@ export const ChatPane: React.FC = () => {
 		if (!bridge) return;
 		return bridge.onAgentEvent((event) => {
 			if (!event.frontendSessionId) return;
-			const turnId = event.frontendSessionId === activeSessionId
-				? streamingTurnId.current
-				: [...useAppStore.getState().turns].reverse().find((turn) =>
+			const turnId = streamingTurnIds.current.get(event.frontendSessionId) ?? [...useAppStore.getState().turns].reverse().find((turn) =>
 					turn.sessionId === event.frontendSessionId
 					&& turn.role === "assistant"
 					&& turn.status !== "complete"
@@ -117,10 +121,14 @@ export const ChatPane: React.FC = () => {
 		});
 	}, [activeSessionId]);
 
-	const handleSend = async () => {
-		const prompt = input.trim();
-		if ((!prompt && images.length === 0) || !activeSessionId || isSending) return;
+	const handleSend = async (options?: { sessionId?: string; selectedText?: string; question?: string }) => {
+		const prompt = (options?.question ?? input).trim();
+		const targetSessionId = options?.sessionId ?? activeSessionId;
+		if ((!prompt && images.length === 0) || !targetSessionId) return;
 		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
+		const agentPrompt = options?.selectedText
+			? `Answer the user's question using the selected passage as the primary focus. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
+			: prompt;
 		setInput("");
 		setImages([]);
 		setSendError(null);
@@ -129,7 +137,7 @@ export const ChatPane: React.FC = () => {
 		const assistantTurnId = createId("turn");
 		store.addManualTurn({
 			id: userTurnId,
-			sessionId: activeSessionId,
+			sessionId: targetSessionId,
 			role: "user",
 			content: prompt,
 			status: "complete",
@@ -137,20 +145,20 @@ export const ChatPane: React.FC = () => {
 			images: promptImages,
 			createdAt: now,
 		});
-		streamingTurnId.current = assistantTurnId;
 		store.addManualTurn({
 			id: assistantTurnId,
-			sessionId: activeSessionId,
+			sessionId: targetSessionId,
 			role: "assistant",
 			content: "",
 			status: "retrieving",
 			summary: "Retrieving workspace context",
 			createdAt: now,
 		});
-		store.setSessionStatus(activeSessionId, "running");
-		setIsSending(true);
+		store.setSessionStatus(targetSessionId, "running");
+		setPendingRequests((count) => count + 1);
 
 		try {
+			await requestScheduler.enqueue(targetSessionId, async () => {
 			const bridge = getKnowbranchBridge();
 			if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
 			const selectedModel = store.settings.defaultModel
@@ -161,13 +169,15 @@ export const ChatPane: React.FC = () => {
 				auxiliaryRequestTimeoutMs,
 				"Title generation",
 			).catch((): SummaryResponse => ({ error: "Title generation timed out." }));
-			const sourceHits = await bridge.sourceSearch({ query: prompt, limit: 8 });
-			const knowledgeContext = buildContextPack(prompt, store.entities, store.relations, store.diagrams, sourceHits);
+			const sourceHits = await bridge.sourceSearch({ query: agentPrompt, limit: 8 });
+			const targetTurns = useAppStore.getState().turns.filter((turn) => turn.sessionId === targetSessionId && turn.id !== userTurnId && turn.id !== assistantTurnId);
+			const knowledgeContext = buildContextPack(agentPrompt, useAppStore.getState().entities, useAppStore.getState().relations, useAppStore.getState().diagrams, sourceHits);
 			store.updateTurn(assistantTurnId, { status: "running", summary: "Pi agent is running" });
-			const activeSession = store.sessions.find((session) => session.id === activeSessionId);
-			const transcript = [...sessionTurns, {
+			const targetSession = useAppStore.getState().sessions.find((session) => session.id === targetSessionId);
+			streamingTurnIds.current.set(targetSessionId, assistantTurnId);
+			const transcript = [...targetTurns, {
 				id: userTurnId,
-				sessionId: activeSessionId,
+				sessionId: targetSessionId,
 				role: "user" as const,
 				content: prompt,
 				status: "complete" as const,
@@ -175,11 +185,11 @@ export const ChatPane: React.FC = () => {
 				createdAt: now,
 			}];
 			const result = await bridge.agentPrompt({
-				frontendSessionId: activeSessionId,
-				parentFrontendSessionId: activeSession?.parentId ?? undefined,
-				forkedFromTurnId: activeSession?.forkedFromTurnId,
+				frontendSessionId: targetSessionId,
+				parentFrontendSessionId: targetSession?.parentId ?? undefined,
+				forkedFromTurnId: targetSession?.forkedFromTurnId,
 				transcript: transcript.map((turn) => ({ id: turn.id, role: turn.role, content: turn.content, images: turn.images })),
-				prompt,
+				prompt: agentPrompt,
 				images: promptImages,
 				knowledgeContext,
 				thinkingLevel: store.settings.thinkingLevel,
@@ -198,7 +208,7 @@ export const ChatPane: React.FC = () => {
 			});
 			const extraction = store.settings.autoExtract && store.settings.knowledgeMode !== "read_only"
 				? await withTimeout(bridge.extractKnowledge({
-					question: prompt,
+					question: agentPrompt,
 					answer: response,
 					existingEntities: useAppStore.getState().entities
 						.filter((entity) => !entity.deletedAt)
@@ -221,19 +231,20 @@ export const ChatPane: React.FC = () => {
 				return { sourceId: hit.sourceId, path: hit.path, revision: source?.revision, lineStart: hit.line, lineEnd: hit.line };
 			});
 			const sourceRefs = result.sourceRefs?.length ? result.sourceRefs : prefetchedSourceRefs;
-			store.finalizeTurn(activeSessionId, assistantTurnId, response, extraction.entities, extraction.relations, extraction.diagrams, sourceRefs);
+			store.finalizeTurn(targetSessionId, assistantTurnId, response, extraction.entities, extraction.relations, extraction.diagrams, sourceRefs);
 			const generatedSummary = await summaryPromise;
 			store.addTurnUsage(assistantTurnId, generatedSummary.usage);
 			if (generatedSummary.summary) {
 				store.updateTurn(userTurnId, { summary: generatedSummary.summary });
-				const session = useAppStore.getState().sessions.find((item) => item.id === activeSessionId);
+				const session = useAppStore.getState().sessions.find((item) => item.id === targetSessionId);
 				if (session?.continuationTitlePending) {
-					store.renameContinuation(activeSessionId, generatedSummary.summary);
+					store.renameContinuation(targetSessionId, generatedSummary.summary);
 				} else if (session?.title === "New session" || session?.titlePending || session?.refreshTitleOnNextPrompt) {
-					store.renameSession(activeSessionId, generatedSummary.summary);
+					store.renameSession(targetSessionId, generatedSummary.summary);
 				}
 			}
 			store.updateTurn(assistantTurnId, { completedAt: new Date().toISOString() });
+			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			store.updateTurn(assistantTurnId, {
@@ -242,14 +253,16 @@ export const ChatPane: React.FC = () => {
 				summary: "Request failed",
 				completedAt: new Date().toISOString(),
 			});
-			store.setSessionStatus(activeSessionId, "error");
+			store.setSessionStatus(targetSessionId, "error");
 			setSendError(message);
 		} finally {
-			streamingTurnId.current = null;
-			if (useAppStore.getState().sessions.find((session) => session.id === activeSessionId)?.status !== "error") {
-				store.setSessionStatus(activeSessionId, "idle");
+			streamingTurnIds.current.delete(targetSessionId);
+			const currentState = useAppStore.getState();
+			if (currentState.sessions.find((session) => session.id === targetSessionId)?.status !== "error") {
+				const hasQueuedOrRunning = currentState.turns.some((turn) => turn.sessionId === targetSessionId && turn.role === "assistant" && ["retrieving", "running", "finalizing"].includes(turn.status));
+				store.setSessionStatus(targetSessionId, hasQueuedOrRunning ? "running" : "idle");
 			}
-			setIsSending(false);
+			setPendingRequests((count) => Math.max(0, count - 1));
 		}
 	};
 
@@ -275,6 +288,18 @@ export const ChatPane: React.FC = () => {
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
 	};
 
+	const askAboutSelection = () => {
+		if (!askSelection || !selectionQuestion.trim()) return;
+		const result = store.forkSession(askSelection.turnId);
+		if (!result) return;
+		const selected = askSelection;
+		const question = selectionQuestion;
+		setAskSelection(null);
+		setSelection(null);
+		setSelectionQuestion("");
+		void handleSend({ sessionId: result.forkSessionId, selectedText: selected.text, question });
+	};
+
 	return (
 		<div className="chat-pane">
 			<header className="chat-topbar">
@@ -293,6 +318,7 @@ export const ChatPane: React.FC = () => {
 						canFork={turn.role === "assistant" && index < sessionTurns.length - 1}
 						onEntityClick={openEntityPreview}
 						onDiagramClick={openDiagramPreview}
+						onTextSelection={(text, rect) => setSelection({ turnId: turn.id, text, x: rect.left + rect.width / 2, y: rect.bottom + 8 })}
 					/>
 				))}
 				{sessionTurns.length === 0 && (
@@ -302,6 +328,8 @@ export const ChatPane: React.FC = () => {
 					</div>
 				)}
 			</div>
+			{selection && !askSelection && <button type="button" className="text-selection-menu" style={{ left: selection.x, top: selection.y }} onMouseDown={(event) => event.preventDefault()} onClick={() => setAskSelection(selection)}>Ask about this</button>}
+			{askSelection && <form className="text-selection-popover" style={{ left: askSelection.x, top: askSelection.y }} onSubmit={(event) => { event.preventDefault(); askAboutSelection(); }}><div className="text-selection-label">Ask about the selected passage</div><textarea autoFocus rows={2} value={selectionQuestion} onChange={(event) => setSelectionQuestion(event.target.value)} placeholder="Ask a follow-up question…" /><div className="text-selection-actions"><button type="button" onClick={() => { setAskSelection(null); setSelection(null); }}>Cancel</button><button type="submit" disabled={!selectionQuestion.trim()}>Ask</button></div></form>}
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
 			<div className="composer-shell">
 				<div className="chat-composer">
@@ -349,7 +377,7 @@ export const ChatPane: React.FC = () => {
 	);
 };
 
-function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick }: {
+function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection }: {
 	turn: Turn;
 	entities: Entity[];
 	relations: Relation[];
@@ -358,6 +386,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 	canFork: boolean;
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
+	onTextSelection: (text: string, rect: DOMRect) => void;
 }) {
 	const isUser = turn.role === "user";
 	const [collapsed, setCollapsed] = useState(false);
@@ -381,7 +410,7 @@ function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onE
 						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
 						{turn.content && (isUser
 							? <MarkdownContent content={turn.content} />
-							: <LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} />)}
+							: <LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />)}
 					</>}
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
@@ -511,27 +540,29 @@ function ReasoningBlock({ content }: { content: string }) {
 	);
 }
 
-function LinkifiedContent({ turn, entities, relations, diagrams, onEntityClick, onDiagramClick }: {
+function LinkifiedContent({ turn, entities, relations, diagrams, onEntityClick, onDiagramClick, onTextSelection }: {
 	turn: Turn;
 	entities: Entity[];
 	relations: Relation[];
 	diagrams: Diagram[];
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
+	onTextSelection: (text: string, rect: DOMRect) => void;
 }) {
 	const references = useMemo(() => buildKnowledgeReferences(entities, relations, diagrams), [entities, relations, diagrams]);
-	return <MarkdownContent content={turn.content} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} />;
+	return <MarkdownContent content={turn.content} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />;
 }
 
 type KnowledgeReference = { kind: "entity" | "diagram"; id: string; labels: string[]; title: string; type: string; summary: string; relationCount: number; sourceCount: number };
 const emptyKnowledgeReferences: KnowledgeReference[] = [];
 
-function MarkdownContent({ content, compact = false, references, onEntityClick, onDiagramClick }: {
+function MarkdownContent({ content, compact = false, references, onEntityClick, onDiagramClick, onTextSelection }: {
 	content: string;
 	compact?: boolean;
 	references?: KnowledgeReference[];
 	onEntityClick?: (id: string) => void;
 	onDiagramClick?: (id: string) => void;
+	onTextSelection?: (text: string, rect: DOMRect) => void;
 }) {
 	const knowledgeReferences = references ?? emptyKnowledgeReferences;
 	const remarkPlugins = useMemo<NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>>(
@@ -557,7 +588,14 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 		[compact, knowledgeReferences, onDiagramClick, onEntityClick],
 	);
 	return (
-		<div className={clsx("markdown-body", compact && "markdown-compact")}>
+		<div className={clsx("markdown-body", compact && "markdown-compact")} onMouseUp={(event) => {
+			if (!onTextSelection || compact) return;
+			const selected = window.getSelection();
+			if (!selected || selected.isCollapsed || !selected.toString().trim()) return;
+			const range = selected.getRangeAt(0);
+			if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
+			onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
+		}}>
 			<ReactMarkdown
 				remarkPlugins={remarkPlugins}
 				components={components}
