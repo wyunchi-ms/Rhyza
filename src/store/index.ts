@@ -15,7 +15,8 @@ import type {
 	SourceRef,
 	Turn,
 } from "../types";
-import { reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
+import { createId } from "../utils/common";
+import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -55,6 +56,7 @@ interface AppState {
 	saveEntity: (entity: Entity) => void;
 	softDeleteEntity: (id: string) => void;
 	saveRelation: (relation: Relation) => void;
+	applyRelationCandidates: (candidates: KnowledgeRelationCandidate[]) => { created: number; updated: number };
 	softDeleteRelation: (id: string) => void;
 	saveDiagram: (diagram: Diagram) => void;
 	softDeleteDiagram: (id: string) => void;
@@ -500,13 +502,64 @@ export const useAppStore = create<AppState>()(
 					selectedEntityId: state.selectedEntityId === id ? null : state.selectedEntityId,
 				}));
 			},
-			saveRelation: (relation) => {
-				const before = get().relations.find((item) => item.id === relation.id);
-				const after = { ...relation, version: (before?.version ?? 0) + 1 };
+				saveRelation: (relation) => {
+					const before = get().relations.find((item) => item.id === relation.id);
+					const after = { ...relation, version: (before?.version ?? 0) + 1 };
 				const source = get().entities.find((entity) => entity.id === after.sourceEntityId)?.name ?? after.sourceEntityId;
 				const target = get().entities.find((entity) => entity.id === after.targetEntityId)?.name ?? after.targetEntityId;
 				const operation: ChangeOperation = { kind: "relation", action: before ? "update" : "create", objectId: after.id, label: `${source} ${after.type} ${target}`, before, after };
-				set((state) => ({ relations: before ? state.relations.map((item) => item.id === after.id ? after : item) : [...state.relations, after], changesets: [manualChangeSet(operation), ...state.changesets] }));
+					set((state) => ({ relations: before ? state.relations.map((item) => item.id === after.id ? after : item) : [...state.relations, after], changesets: [manualChangeSet(operation), ...state.changesets] }));
+				},
+			applyRelationCandidates: (candidates) => {
+				const state = get();
+				const nextRelations = [...state.relations];
+				const operations: ChangeOperation[] = [];
+				let created = 0;
+				let updated = 0;
+				for (const candidate of candidates) {
+					const source = findEntity(state.entities, candidate.sourceEntityId, candidate.sourceName);
+					const target = findEntity(state.entities, candidate.targetEntityId, candidate.targetName);
+					if (!source || !target || source.id === target.id) continue;
+					const existing = nextRelations.find((relation) => !relation.deletedAt && relation.sourceEntityId === source.id && relation.targetEntityId === target.id && relation.type === candidate.type);
+					if (existing) {
+						const description = candidate.description || existing.description;
+						const confidence = candidate.confidence === "explicit" ? "confirmed" as const : existing.confidence;
+						if (description === existing.description && confidence === existing.confidence) continue;
+						const after: Relation = { ...existing, description, confidence, sourceRefs: dedupeSourceRefs([...existing.sourceRefs, ...source.sourceRefs, ...target.sourceRefs]), version: existing.version + 1 };
+						nextRelations[nextRelations.findIndex((relation) => relation.id === existing.id)] = after;
+						operations.push({ kind: "relation", action: "update", objectId: after.id, label: `${source.name} ${after.type} ${target.name}`, before: existing, after });
+						updated += 1;
+						continue;
+					}
+					const relation: Relation = {
+						id: createId("relation"),
+						sourceEntityId: source.id,
+						targetEntityId: target.id,
+						type: candidate.type,
+						description: candidate.description,
+						confidence: candidate.confidence === "explicit" ? "confirmed" : "inferred",
+						sourceRefs: dedupeSourceRefs([...source.sourceRefs, ...target.sourceRefs]),
+						version: 1,
+					};
+					nextRelations.push(relation);
+					operations.push({ kind: "relation", action: "create", objectId: relation.id, label: `${source.name} ${relation.type} ${target.name}`, after: relation });
+					created += 1;
+				}
+				if (operations.length) {
+					const timestamp = new Date().toISOString();
+					const changeSet: ChangeSet = {
+						id: createId("changeset"),
+						title: "Rebuilt knowledge relations",
+						timestamp,
+						sessionId: state.activeSessionId ?? "system",
+						summary: `${created} relations created, ${updated} updated by global knowledge scan.`,
+						actor: "agent",
+						status: state.settings.knowledgeMode === "suggest" ? "proposed" : "committed",
+						operations,
+					};
+					set((current) => ({ relations: nextRelations, changesets: [changeSet, ...current.changesets] }));
+				}
+				return { created, updated };
 			},
 			softDeleteRelation: (id) => {
 				const before = get().relations.find((item) => item.id === id);
@@ -708,10 +761,6 @@ export function loadWorkspaceState(serialized: string | null): void {
 	});
 }
 
-function createId(prefix: string): string {
-	return `${prefix}_${crypto.randomUUID()}`;
-}
-
 function addTokenUsage(left: import("../types").TokenUsage | undefined, right: import("../types").TokenUsage) {
 	return {
 		input: (left?.input ?? 0) + right.input,
@@ -870,10 +919,6 @@ function findMatchingDiagram(diagrams: Diagram[], candidate: KnowledgeDiagramCan
 		})
 		.sort((left, right) => right.score - left.score)
 		.find((item) => item.score >= 0.5)?.diagram;
-}
-
-function normalizeLabel(value: string): string {
-	return value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
 
 function findEntity(entities: Entity[], id: string | undefined, name: string): Entity | undefined {

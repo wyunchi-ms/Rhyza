@@ -737,6 +737,7 @@ Rules:
 - summary and content must describe the entity itself as standalone knowledge. Never quote, paraphrase, or refer to "the answer", "the project", "the user", or the conversation.
 - summary is one concise sentence. content is a focused 2-4 sentence explanation of the entity: what it is, its purpose, and the key distinction needed for understanding.
 - Extract only meaningful relations supported by the answer between returned or existing entities. Prefer stable existing IDs when available.
+- When the question explicitly asks to rebuild relationships, return zero entities and zero diagrams, scan all supplied existing entities and diagram topology, and return every high-confidence useful relation without duplicating the existing graph.
 - Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Do not invent diagrams when MERMAID_BLOCKS is empty.
 - For each diagram, choose existingDiagramId only when it represents the same subject as an EXISTING_DIAGRAM. Never choose the reserved "workspace-knowledge-map". Otherwise omit existingDiagramId to create a new diagram.
 - Diagram node keys must be short stable identifiers. Every edge sourceKey and targetKey must reference a returned node key.
@@ -831,7 +832,7 @@ export function isDurableKnowledgeEntityCandidate(name: string, type: string): b
 function parseRelationCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeRelationCandidate[] {
 	if (!Array.isArray(value)) return [];
 	const existingIds = new Set(request.existingEntities.map((entity) => entity.id));
-	return value.slice(0, 12).flatMap((candidate): KnowledgeRelationCandidate[] => {
+	return value.slice(0, 100).flatMap((candidate): KnowledgeRelationCandidate[] => {
 		if (!isRecord(candidate)) return [];
 		const sourceName = cleanCandidateText(candidate.sourceName, 120);
 		const targetName = cleanCandidateText(candidate.targetName, 120);

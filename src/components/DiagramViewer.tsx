@@ -28,7 +28,7 @@ export function DiagramViewer({ diagram, compact = false, showHeader = true }: {
 	return (
 		<div className={compact ? "diagram-viewer diagram-viewer-compact" : "diagram-viewer h-full min-h-0 flex flex-col"}>
 			{showHeader && <div className="h-12 border-b border-gray-100 flex items-center justify-between px-4">
-				<div><span className="font-bold text-primary">{diagram.name}</span><span className="ml-2 text-xs text-secondary">v{diagram.version} / {diagram.type}</span></div>
+				<div><span className="font-bold text-primary">{diagram.name}</span></div>
 				<div ref={exportMenuRef} className="diagram-export">
 					<button type="button" onClick={() => setExportOpen((open) => !open)} aria-haspopup="menu" aria-expanded={exportOpen} title="Download diagram" aria-label="Download diagram" className="icon-button"><Download size={16} /></button>
 					{exportOpen && <div className="diagram-export-menu" role="menu">

@@ -1,13 +1,12 @@
 import { Database, Network, X } from "lucide-react";
-import { useState } from "react";
 import { useAppStore } from "../store";
-import type { Diagram, Entity } from "../types";
-import { KnowledgePreviewDialog, type KnowledgePreview } from "./KnowledgePreviewDialog";
+import { useKnowledgePreview } from "../hooks/useKnowledgePreview";
+import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
 
 export const KnowledgePane = () => {
 	const store = useAppStore();
-	const [preview, setPreview] = useState<KnowledgePreview | null>(null);
+	const { preview, openEntity, openDiagram, closePreview } = useKnowledgePreview(store.entities, store.diagrams);
 	const viewportWidth = useViewportWidth();
 	const paneMax = Math.min(560, Math.max(320, viewportWidth * 0.45));
 	const paneSize = usePanelSize("knowbranch-layout-knowledge-width", 320, 280, paneMax);
@@ -17,12 +16,6 @@ export const KnowledgePane = () => {
 	const mentionedIds = new Set(activeTurns.flatMap((turn) => turn.entities?.map((entity) => entity.id) ?? []));
 	const relevant = store.entities.filter((entity) => !entity.deletedAt && (mentionedIds.size === 0 || mentionedIds.has(entity.id)));
 	const diagrams = store.diagrams.filter((diagram) => !diagram.deletedAt);
-	const openEntityPreview = (entity: Entity) => {
-		setPreview({ kind: "entity", item: entity });
-	};
-	const openDiagramPreview = (diagram: Diagram) => {
-		setPreview({ kind: "diagram", item: diagram });
-	};
 
 	return (
 		<>
@@ -38,7 +31,7 @@ export const KnowledgePane = () => {
 					<div className="knowledge-list">
 						{relevant.map((entity) => {
 							const count = store.relations.filter((relation) => !relation.deletedAt && (relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id)).length;
-							return <button type="button" key={entity.id} onClick={() => openEntityPreview(entity)} className="knowledge-list-item knowledge-list-preview-trigger"><div className="flex justify-between gap-2"><span className="font-semibold text-sm truncate">{entity.name}</span><span className="text-[10px] text-gray-400">{entity.type}</span></div><p className="text-xs text-secondary line-clamp-2 mt-1">{entity.summary}</p><p className="text-[10px] text-gray-400 mt-2">{count} relations · {entity.sourceRefs.length} sources</p></button>;
+							return <button type="button" key={entity.id} onClick={() => openEntity(entity)} className="knowledge-list-item knowledge-list-preview-trigger"><div className="flex justify-between gap-2"><span className="font-semibold text-sm truncate">{entity.name}</span><span className="text-[10px] text-gray-400">{entity.type}</span></div><p className="text-xs text-secondary line-clamp-2 mt-1">{entity.summary}</p><p className="text-[10px] text-gray-400 mt-2">{count} relations · {entity.sourceRefs.length} sources</p></button>;
 						})}
 						{relevant.length === 0 && <p className="text-xs text-secondary px-2">No knowledge linked to this branch yet.</p>}
 					</div>
@@ -46,12 +39,12 @@ export const KnowledgePane = () => {
 				<section>
 					<p className="section-label">Related diagrams</p>
 					<div className="knowledge-list">
-						{diagrams.map((diagram) => <button type="button" onClick={() => openDiagramPreview(diagram)} key={diagram.id} className="knowledge-list-item knowledge-list-preview-trigger flex items-center gap-2 text-sm font-semibold"><Network size={16} />{diagram.name}<span className="ml-auto text-xs text-gray-400">v{diagram.version}</span></button>)}
+						{diagrams.map((diagram) => <button type="button" onClick={() => openDiagram(diagram)} key={diagram.id} className="knowledge-list-item knowledge-list-preview-trigger flex items-center gap-2 text-sm font-semibold"><Network size={16} />{diagram.name}<span className="ml-auto text-xs text-gray-400">v{diagram.version}</span></button>)}
 					</div>
 				</section>
 			</div>
 		</aside>
-		{preview && <KnowledgePreviewDialog preview={preview} onClose={() => setPreview(null)} />}
+		{preview && <KnowledgePreviewDialog preview={preview} onClose={closePreview} />}
 		</>
 	);
 };

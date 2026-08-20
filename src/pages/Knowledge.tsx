@@ -1,12 +1,14 @@
-import { Database, Network, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, Database, Network, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DiagramViewer } from "../components/DiagramViewer";
 import { MermaidDiagram } from "../components/MermaidDiagram";
+import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { useAppStore } from "../store";
-import type { Diagram, Entity } from "../types";
+import type { Diagram, Entity, Relation, SourceRef } from "../types";
+import { withTimeout } from "../utils/common";
 
 const Knowledge = () => {
 	const store = useAppStore();
@@ -15,11 +17,13 @@ const Knowledge = () => {
 	const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
 	const [entityDraft, setEntityDraft] = useState<Entity | null>(null);
 	const [isEditingEntity, setIsEditingEntity] = useState(false);
+	const [rebuildState, setRebuildState] = useState<{ status: "idle" | "running" | "success" | "error"; message?: string }>({ status: "idle" });
 	const activeEntities = store.entities.filter((entity) => !entity.deletedAt);
 	const activeDiagrams = store.diagrams.filter((diagram) => !diagram.deletedAt);
-	const selected = activeEntities.find((entity) => entity.id === store.selectedEntityId) ?? null;
 	const filtered = activeEntities.filter((entity) => `${entity.name} ${entity.aliases.join(" ")} ${entity.type} ${entity.summary}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
-	const diagram = activeDiagrams.find((item) => item.id === selectedDiagramId) ?? activeDiagrams[0] ?? null;
+	const selected = filtered.find((entity) => entity.id === store.selectedEntityId) ?? filtered[0] ?? null;
+	const filteredDiagrams = activeDiagrams.filter((item) => `${item.name} ${item.type}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+	const diagram = filteredDiagrams.find((item) => item.id === selectedDiagramId) ?? filteredDiagrams[0] ?? null;
 	useEffect(() => {
 		if (diagram && diagram.id !== selectedDiagramId) setSelectedDiagramId(diagram.id);
 	}, [diagram, selectedDiagramId]);
@@ -27,26 +31,64 @@ const Knowledge = () => {
 		setEntityDraft(selected);
 		setIsEditingEntity(false);
 	}, [selected]);
+	const rebuildRelations = async () => {
+		if (activeEntities.length < 2 || rebuildState.status === "running") return;
+		const bridge = getKnowbranchBridge();
+		if (!bridge) {
+			setRebuildState({ status: "error", message: "The Electron runtime is required to run the global LLM scan." });
+			return;
+		}
+		setRebuildState({ status: "running", message: `Scanning ${activeEntities.length} entities and ${activeDiagrams.length} diagrams…` });
+		try {
+			const model = store.settings.defaultModel ? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel } : undefined;
+			const response = await withTimeout(bridge.extractKnowledge({
+				question: "Rebuild every meaningful relationship among the existing workspace entities. Use entity descriptions and diagram topology as evidence. Return relations only; do not create or rewrite entities or diagrams.",
+				answer: buildRelationRebuildEvidence(activeEntities, store.relations.filter((relation) => !relation.deletedAt), activeDiagrams),
+				existingEntities: activeEntities.map((entity) => ({ id: entity.id, name: entity.name, aliases: entity.aliases, type: entity.type, summary: entity.summary, content: entity.content, version: entity.version })),
+				existingDiagrams: activeDiagrams.map((item) => ({ id: item.id, name: item.name, type: item.type, nodeLabels: item.nodes.map((node) => node.label) })),
+				model,
+			}), 120_000, "Global relation rebuild");
+			if (response.error && response.relations.length === 0) throw new Error(response.error);
+			const linkedBefore = countDiagramKnowledgeLinks(useAppStore.getState().diagrams);
+			const changes = store.applyRelationCandidates(response.relations);
+			store.reconcileKnowledge();
+			const linkedAfter = countDiagramKnowledgeLinks(useAppStore.getState().diagrams);
+			const cost = response.usage?.cost ? ` · $${response.usage.cost.toFixed(4)}` : "";
+			setRebuildState({ status: "success", message: `${changes.created} relations created, ${changes.updated} updated, ${Math.max(0, linkedAfter - linkedBefore)} diagram links added${cost}.` });
+		} catch (error) {
+			setRebuildState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+		}
+	};
 
 	return (
-		<div className="knowledge-layout flex-1 grid grid-cols-[220px_minmax(0,1fr)_320px] bg-white overflow-hidden relative">
-			<aside className="border-r border-gray-200 p-4 overflow-y-auto">
-				<h1 className="text-lg font-semibold text-primary mb-4">Knowledge</h1>
-				<div className="segmented mb-4"><button type="button" className={mode === "entities" ? "active" : ""} onClick={() => setMode("entities")}><Database size={14} /> Entities</button><button type="button" className={mode === "diagrams" ? "active" : ""} onClick={() => setMode("diagrams")}><Network size={14} /> Diagrams</button></div>
-				<div className="relative mb-4"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="field field-with-icon" placeholder="Search" /></div>
-				{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={`w-full text-left px-3 py-2 rounded-md mb-1 ${selected?.id === entity.id ? "bg-accent/10 text-accent" : "hover:bg-gray-50"}`}><span className="block text-sm font-semibold truncate">{entity.name}</span><span className="block text-xs text-secondary">{entity.type} / v{entity.version}</span></button>) : activeDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={`w-full text-left px-3 py-2 rounded-md mb-1 ${diagram?.id === item.id ? "bg-accent/10 text-accent" : "hover:bg-gray-50"}`}><span className="block text-sm font-semibold truncate">{item.name}</span><span className="block text-xs font-normal">{item.type} / v{item.version}</span></button>)}
-			</aside>
-			<main className="min-w-0 min-h-0 overflow-hidden">
-				{mode === "diagrams" && diagram ? <DiagramViewer diagram={diagram} /> : mode === "diagrams" ? <div className="empty-state h-full">Mermaid diagrams from agent responses will appear here.</div> : selected && entityDraft ? isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} /> : <EntityOverview entities={filtered} onSelect={store.setSelectedEntity} />}
-			</main>
-			<aside className={`entity-detail-pane border-l border-gray-200 overflow-y-auto ${(mode === "diagrams" ? diagram : selected) ? "is-open" : ""}`}>{mode === "diagrams" ? diagram ? <DiagramEditor diagram={diagram} onDeleted={() => setSelectedDiagramId(null)} /> : <div className="empty-state h-full">Select a diagram to edit it.</div> : selected ? <EntityMetaPanel entity={selected} /> : <div className="empty-state h-full">Select an entity to inspect sources, relations, and history.</div>}</aside>
+		<div className="knowledge-page flex-1 bg-white overflow-hidden">
+			<header className="knowledge-page-header">
+				<div><p className="knowledge-eyebrow">Workspace library</p><h1>Knowledge</h1></div>
+				<div className="knowledge-tabs" role="tablist" aria-label="Knowledge resource type">
+					<button type="button" role="tab" aria-selected={mode === "entities"} className={mode === "entities" ? "is-active" : ""} onClick={() => { setMode("entities"); setSearch(""); }}><Database size={17} /><span>Entities</span><small>{activeEntities.length}</small></button>
+					<button type="button" role="tab" aria-selected={mode === "diagrams"} className={mode === "diagrams" ? "is-active" : ""} onClick={() => { setMode("diagrams"); setSearch(""); }}><Network size={17} /><span>Diagrams</span><small>{activeDiagrams.length}</small></button>
+				</div>
+				<div className="knowledge-header-actions">
+					<button type="button" className="knowledge-rebuild-button" disabled={activeEntities.length < 2 || rebuildState.status === "running"} onClick={() => void rebuildRelations()} title="Ask the current LLM to scan all entities and diagrams, rebuild entity relations, and relink diagrams"><RefreshCw size={15} className={rebuildState.status === "running" ? "animate-spin" : ""} /><span>{rebuildState.status === "running" ? "Rebuilding…" : "Rebuild relations"}</span></button>
+					<label className="knowledge-search"><span className="sr-only">Search {mode}</span><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${mode}`} /></label>
+					{rebuildState.message && <p className={`knowledge-rebuild-feedback is-${rebuildState.status}`} role="status">{rebuildState.message}</p>}
+				</div>
+			</header>
+			<div className="knowledge-browser">
+				<aside className="knowledge-resource-pane" aria-label={`${mode} list`}>
+					<div className="knowledge-resource-heading"><strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong><span>{mode === "entities" ? filtered.length : filteredDiagrams.length} shown</span></div>
+					<div className="knowledge-resource-list">
+						{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={selected?.id === entity.id ? "is-selected" : ""}><span><strong>{entity.name}</strong><small>{entity.summary}</small></span><em>{entity.type} · v{entity.version}</em></button>) : filteredDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={diagram?.id === item.id ? "is-selected" : ""}><span><strong>{item.name}</strong><small>{item.nodes.length} nodes · {item.edges.length} edges</small></span><em>{item.type} · v{item.version}</em></button>)}
+						{(mode === "entities" ? filtered.length : filteredDiagrams.length) === 0 && <div className="knowledge-list-empty">No matching {mode}.</div>}
+					</div>
+				</aside>
+				<main className="knowledge-detail-area">
+					{mode === "entities" && selected && entityDraft ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail">{isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />}</section><aside className="knowledge-inspector"><EntityMetaPanel entity={selected} onOpenDiagram={(diagramId) => { store.setSelectedDiagram(diagramId); setSelectedDiagramId(diagramId); setSearch(""); setMode("diagrams"); }} /></aside></div> : mode === "diagrams" && diagram ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail"><DiagramViewer diagram={diagram} /></section><aside className="knowledge-inspector"><DiagramEditor diagram={diagram} entities={activeEntities} onOpenEntity={(entityId) => { store.setSelectedEntity(entityId); setSearch(""); setMode("entities"); }} onDeleted={() => setSelectedDiagramId(null)} /></aside></div> : <div className="empty-state h-full">{mode === "entities" ? "No entities yet. Complete a chat turn to build your knowledge base." : "Mermaid diagrams from agent responses will appear here."}</div>}
+				</main>
+			</div>
 		</div>
 	);
 };
-
-function EntityOverview({ entities, onSelect }: { entities: Entity[]; onSelect: (id: string) => void }) {
-	return <div className="p-6 overflow-y-auto h-full"><div className="entity-grid">{entities.map((entity) => <button type="button" key={entity.id} onClick={() => onSelect(entity.id)} className="entity-row"><div className="flex justify-between gap-3"><h2 className="font-semibold text-primary truncate">{entity.name}</h2><span className="status-badge status-progress">{entity.confidence}</span></div><p className="text-sm text-secondary mt-2 line-clamp-2">{entity.summary}</p><p className="text-xs text-gray-400 mt-3">{entity.type} · {entity.sourceRefs.length} sources</p></button>)}</div>{entities.length === 0 && <div className="empty-state h-full">No entities yet. Complete a chat turn or create one manually.</div>}</div>;
-}
 
 function EntityPreview({ entity, onEdit }: { entity: Entity; onEdit: () => void }) {
 	const content = entity.content.trim() || entity.summary;
@@ -75,14 +117,114 @@ function EntityCenterEditor({ draft, onDraftChange, onSave, onCancel }: { draft:
 	</div></form>;
 }
 
-function EntityMetaPanel({ entity }: { entity: Entity }) {
-	const { softDeleteEntity, saveRelation, softDeleteRelation, relations, entities, changesets } = useAppStore();
-	const [relationTarget, setRelationTarget] = useState("");
-	const [relationType, setRelationType] = useState("related_to");
-	const [relationDescription, setRelationDescription] = useState("");
+function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiagram: (diagramId: string) => void }) {
+	const { softDeleteEntity, saveRelation, softDeleteRelation, setSelectedEntity, relations, entities, diagrams } = useAppStore();
+	const [relationForm, setRelationForm] = useState<{ relation?: Relation; relatedEntityId: string; type: string; description: string } | null>(null);
 	const entityRelations = relations.filter((relation) => !relation.deletedAt && (relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id));
-	const history = changesets.filter((change) => change.operations.some((operation) => operation.objectId === entity.id));
-	return <div className="p-5 space-y-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">{entity.type}</span><h2 className="text-xl font-black text-primary truncate">{entity.name}</h2></div><button type="button" title="Archive entity" onClick={() => { if (window.confirm(`Archive “${entity.name}” and its relations?`)) softDeleteEntity(entity.id); }} className="secondary-button shrink-0 text-red-600"><Trash2 size={14} /> Archive</button></div><section><h3 className="section-label">Relations</h3>{entityRelations.map((relation) => { const outgoing = relation.sourceEntityId === entity.id; const otherId = outgoing ? relation.targetEntityId : relation.sourceEntityId; const other = entities.find((item) => item.id === otherId); return <div key={relation.id} className="flex items-start gap-2 border-b border-gray-100 py-2 text-sm"><div className="min-w-0 flex-1"><p><span className="font-semibold">{outgoing ? relation.type : `← ${relation.type}`}</span> {other?.name ?? otherId}</p>{relation.description && <p className="mt-1 text-xs text-secondary">{relation.description}</p>}</div><button type="button" className="icon-button" title="Archive relation" aria-label="Archive relation" onClick={() => softDeleteRelation(relation.id)}><Trash2 size={13} /></button></div>; })}{entityRelations.length === 0 && <p className="text-xs text-secondary">No relations.</p>}<div className="mt-3 space-y-2 rounded-md border border-gray-200 p-3"><select className="field" value={relationTarget} onChange={(event) => setRelationTarget(event.target.value)}><option value="">Target entity</option>{entities.filter((item) => !item.deletedAt && item.id !== entity.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input className="field" value={relationType} onChange={(event) => setRelationType(event.target.value)} placeholder="Relation type" /><input className="field" value={relationDescription} onChange={(event) => setRelationDescription(event.target.value)} placeholder="Description" /><button type="button" className="secondary-button" disabled={!relationTarget || !relationType.trim()} onClick={() => { saveRelation({ id: `relation_${crypto.randomUUID()}`, sourceEntityId: entity.id, targetEntityId: relationTarget, type: relationType.trim(), description: relationDescription.trim(), confidence: "confirmed", sourceRefs: [], version: 0 }); setRelationTarget(""); setRelationDescription(""); }}><Plus size={14} /> Add relation</button></div></section><section><h3 className="section-label">Sources</h3>{entity.sourceRefs.map((source, index) => <div key={`${source.turnId}-${index}`} className="text-xs text-secondary py-1">{source.path ?? `Session ${source.sessionId}`} {source.turnId ? `/ Turn ${source.turnId.slice(0, 8)}` : ""}</div>)}</section><section><h3 className="section-label">History</h3>{history.map((change) => <div key={change.id} className="text-xs text-secondary py-1">{change.title} / {new Date(change.timestamp).toLocaleString()}</div>)}</section></div>;
+	const linkedDiagrams = diagrams.filter((diagram) => !diagram.deletedAt).flatMap((diagram) => {
+		const linkedNodes = diagram.nodes.filter((node) => node.entityId === entity.id);
+		return linkedNodes.length ? [{ diagram, linkedNodes }] : [];
+	});
+	const sources = uniqueSourceLocations(entity.sourceRefs);
+	useEffect(() => setRelationForm(null), [entity.id]);
+	const openRelationEditor = (relation?: Relation) => {
+		const relatedEntityId = relation ? (relation.sourceEntityId === entity.id ? relation.targetEntityId : relation.sourceEntityId) : "";
+		setRelationForm({ relation, relatedEntityId, type: relation?.type ?? "related_to", description: relation?.description ?? "" });
+	};
+	const submitRelation = () => {
+		if (!relationForm?.relatedEntityId || !relationForm.type.trim()) return;
+		const existing = relationForm.relation;
+		const outgoing = !existing || existing.sourceEntityId === entity.id;
+		saveRelation({
+			...(existing ?? {}),
+			id: existing?.id ?? `relation_${crypto.randomUUID()}`,
+			sourceEntityId: outgoing ? entity.id : relationForm.relatedEntityId,
+			targetEntityId: outgoing ? relationForm.relatedEntityId : entity.id,
+			type: relationForm.type.trim(),
+			description: relationForm.description.trim(),
+			confidence: existing?.confidence ?? "confirmed",
+			sourceRefs: existing?.sourceRefs ?? [],
+			version: existing?.version ?? 0,
+		});
+		setRelationForm(null);
+	};
+	return <div className="p-5 space-y-5">
+		<div className="flex items-start justify-between gap-3">
+			<div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">{entity.type}</span><h2 className="text-xl font-black text-primary truncate">{entity.name}</h2></div>
+			<button type="button" title="Archive entity" onClick={() => { if (window.confirm(`Archive “${entity.name}” and its relations?`)) softDeleteEntity(entity.id); }} className="secondary-button shrink-0 text-red-600"><Trash2 size={14} /> Archive</button>
+		</div>
+		<section>
+			<div className="entity-section-heading">
+				<h3 className="section-label">Relations</h3>
+				<span className="entity-section-actions"><small>{entityRelations.length}</small><button type="button" onClick={() => openRelationEditor()} title="Add relation" aria-label="Add relation"><Plus size={14} /></button></span>
+			</div>
+			<div className="entity-relation-list">
+				{entityRelations.map((relation) => {
+					const outgoing = relation.sourceEntityId === entity.id;
+					const otherId = outgoing ? relation.targetEntityId : relation.sourceEntityId;
+					const other = entities.find((item) => item.id === otherId);
+					return <div key={relation.id} className="entity-relation-item">
+						<button type="button" className="entity-relation-link" onClick={() => setSelectedEntity(otherId)} aria-label={`Open entity ${other?.name ?? otherId}`}>
+							<span className="entity-relation-heading"><small>{outgoing ? relation.type : `incoming · ${relation.type}`}</small><ArrowRight size={14} aria-hidden="true" /></span>
+							<strong>{other?.name ?? otherId}</strong>
+							{relation.description && <span className="entity-relation-description">{relation.description}</span>}
+						</button>
+						<span className="entity-relation-actions">
+							<button type="button" className="entity-relation-edit" title="Edit relation" aria-label={`Edit relation to ${other?.name ?? otherId}`} onClick={() => openRelationEditor(relation)}><Pencil size={13} /></button>
+							<button type="button" className="entity-relation-delete" title="Archive relation" aria-label={`Archive relation to ${other?.name ?? otherId}`} onClick={() => softDeleteRelation(relation.id)}><Trash2 size={13} /></button>
+						</span>
+					</div>;
+				})}
+				{entityRelations.length === 0 && <p className="text-xs text-secondary">No relations.</p>}
+			</div>
+			{relationForm && <form className="entity-relation-form" onSubmit={(event) => { event.preventDefault(); submitRelation(); }}>
+				<div className="entity-relation-form-header"><strong>{relationForm.relation ? "Edit relation" : "Add relation"}</strong><button type="button" onClick={() => setRelationForm(null)} title="Close relation form" aria-label="Close relation form"><X size={14} /></button></div>
+				<label><span>Related entity</span><select className="field" value={relationForm.relatedEntityId} onChange={(event) => setRelationForm({ ...relationForm, relatedEntityId: event.target.value })}><option value="">Select entity</option>{entities.filter((item) => !item.deletedAt && item.id !== entity.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+				<label><span>Relation type</span><input className="field" value={relationForm.type} onChange={(event) => setRelationForm({ ...relationForm, type: event.target.value })} placeholder="related_to" /></label>
+				<label><span>Description</span><textarea className="field" rows={3} value={relationForm.description} onChange={(event) => setRelationForm({ ...relationForm, description: event.target.value })} placeholder="Describe how these entities are connected" /></label>
+				<div className="entity-relation-form-actions"><button type="button" className="secondary-button" onClick={() => setRelationForm(null)}>Cancel</button><button type="submit" className="command-button" disabled={!relationForm.relatedEntityId || !relationForm.type.trim()}>{relationForm.relation ? "Save changes" : "Add relation"}</button></div>
+			</form>}
+		</section>
+		<section>
+			<div className="entity-connected-heading"><h3 className="section-label">Connected diagrams</h3><span>{linkedDiagrams.length}</span></div>
+			<div className="entity-diagram-list">
+				{linkedDiagrams.map(({ diagram, linkedNodes }) => <button key={diagram.id} type="button" className="entity-diagram-link" onClick={() => onOpenDiagram(diagram.id)} aria-label={`Open diagram ${diagram.name}`}>
+					<Network size={15} aria-hidden="true" />
+					<span><strong>{diagram.name}</strong><small>{diagram.type} · {linkedNodes.length} linked {linkedNodes.length === 1 ? "node" : "nodes"}</small></span>
+					<ArrowRight size={14} aria-hidden="true" />
+				</button>)}
+				{linkedDiagrams.length === 0 && <p className="text-xs text-secondary">No diagrams reference this entity yet.</p>}
+			</div>
+		</section>
+		<details className="entity-sources-disclosure">
+			<summary><span>Sources</span><span className="entity-sources-summary-meta"><small>{sources.length}</small><ChevronDown size={14} aria-hidden="true" /></span></summary>
+			<div className="entity-sources-content">{sources.map((source) => <div key={sourceLocationKey(source)} className="break-words font-mono text-[11px] leading-4 text-secondary" title={formatSourceLocation(source)}>{formatSourceLocation(source)}</div>)}{sources.length === 0 && <p className="text-xs text-secondary">No sources.</p>}</div>
+		</details>
+	</div>;
+}
+
+function uniqueSourceLocations(sourceRefs: SourceRef[]): SourceRef[] {
+	const unique = new Map<string, SourceRef>();
+	for (const source of sourceRefs) {
+		const key = sourceLocationKey(source);
+		if (!unique.has(key)) unique.set(key, source);
+	}
+	return [...unique.values()];
+}
+
+function sourceLocationKey(source: SourceRef): string {
+	if (source.path) return [source.path, source.lineStart ?? "", source.lineEnd ?? ""].join(":");
+	return [source.sessionId, source.turnId].join(":");
+}
+
+function formatSourceLocation(source: SourceRef): string {
+	if (source.path) {
+		if (source.lineStart === undefined) return source.path;
+		const lineRange = source.lineEnd !== undefined && source.lineEnd !== source.lineStart ? `${source.lineStart}-${source.lineEnd}` : String(source.lineStart);
+		return `${source.path}:${lineRange}`;
+	}
+	const session = source.sessionId ? `Session ${source.sessionId}` : "Unknown session";
+	return source.turnId ? `${session} / Turn ${source.turnId.slice(0, 8)}` : session;
 }
 
 function resizeTextArea(textarea: HTMLTextAreaElement | null, minimumHeight = 480) {
@@ -91,20 +233,84 @@ function resizeTextArea(textarea: HTMLTextAreaElement | null, minimumHeight = 48
 	textarea.style.height = `${Math.max(minimumHeight, textarea.scrollHeight)}px`;
 }
 
-function DiagramEditor({ diagram, onDeleted }: { diagram: Diagram; onDeleted: () => void }) {
+function DiagramEditor({ diagram, entities, onOpenEntity, onDeleted }: { diagram: Diagram; entities: Entity[]; onOpenEntity: (entityId: string) => void; onDeleted: () => void }) {
 	const { saveDiagram, softDeleteDiagram } = useAppStore();
 	const [draft, setDraft] = useState(diagram);
-	useEffect(() => setDraft(diagram), [diagram]);
+	const [entityLinkForm, setEntityLinkForm] = useState<{ nodeId: string; entityId: string; editing: boolean } | null>(null);
+	useEffect(() => {
+		setDraft(diagram);
+		setEntityLinkForm(null);
+	}, [diagram]);
+	const entityById = new Map(entities.map((entity) => [entity.id, entity]));
+	const linkedNodes = diagram.nodes.flatMap((node) => {
+		const entity = node.entityId ? entityById.get(node.entityId) : undefined;
+		return entity ? [{ node, entity }] : [];
+	});
+	const unlinkedNodes = diagram.nodes.filter((node) => !node.entityId || !entityById.has(node.entityId));
+	const saveEntityLink = () => {
+		if (!entityLinkForm?.nodeId || !entityLinkForm.entityId) return;
+		const nodeId = entityLinkForm.nodeId;
+		saveDiagram({
+			...diagram,
+			nodes: diagram.nodes.map((node) => node.id === nodeId ? { ...node, entityId: entityLinkForm.entityId } : node),
+			edges: diagram.edges.map((edge) => edge.source === nodeId || edge.target === nodeId ? { ...edge, relationId: undefined } : edge),
+		});
+		setEntityLinkForm(null);
+	};
+	const removeEntityLink = (nodeId: string) => {
+		saveDiagram({
+			...diagram,
+			nodes: diagram.nodes.map((node) => node.id === nodeId ? { ...node, entityId: undefined } : node),
+			edges: diagram.edges.map((edge) => edge.source === nodeId || edge.target === nodeId ? { ...edge, relationId: undefined } : edge),
+		});
+	};
 	return <form className="p-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.mermaidSource.trim()) saveDiagram(draft); }}>
 		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">Diagram</span><h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2></div><button type="button" title="Archive diagram" className="secondary-button shrink-0 text-red-600" onClick={() => { if (window.confirm(`Archive diagram “${diagram.name}”?`)) { softDeleteDiagram(diagram.id); onDeleted(); } }}><Trash2 size={14} /> Archive</button></div>
 		<label className="form-label">Name<input className="field mt-1" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
 		<label className="form-label">Type<select className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}><option value="architecture">Architecture</option><option value="structure">Structure</option><option value="flowchart">Flowchart</option><option value="sequence">Sequence</option><option value="swimlane">Swimlane</option><option value="dependency">Dependency</option></select></label>
+		<section aria-labelledby="diagram-linked-heading">
+			<div className="entity-section-heading">
+				<h3 id="diagram-linked-heading" className="form-label">Connected entities</h3>
+				<span className="entity-section-actions"><button type="button" disabled={unlinkedNodes.length === 0 || entities.length === 0} onClick={() => setEntityLinkForm({ nodeId: unlinkedNodes[0]?.id ?? "", entityId: "", editing: false })} title="Connect entity" aria-label="Connect entity"><Plus size={14} /></button></span>
+			</div>
+			<div className="entity-relation-list">
+				{linkedNodes.map(({ node, entity }) => <div key={node.id} className="entity-relation-item">
+					<button type="button" className="entity-relation-link" onClick={() => onOpenEntity(entity.id)} aria-label={`Open entity ${entity.name}`}>
+						<span className="entity-relation-heading"><small>{node.label}</small><ArrowRight size={14} aria-hidden="true" /></span>
+						<strong>{entity.name}</strong>
+						<span className="entity-relation-description">{entity.type}</span>
+					</button>
+					<span className="entity-relation-actions">
+						<button type="button" className="entity-relation-edit" title="Edit connected entity" aria-label={`Edit connection for ${node.label}`} onClick={() => setEntityLinkForm({ nodeId: node.id, entityId: entity.id, editing: true })}><Pencil size={13} /></button>
+						<button type="button" className="entity-relation-delete" title="Remove connected entity" aria-label={`Remove connection for ${node.label}`} onClick={() => removeEntityLink(node.id)}><Trash2 size={13} /></button>
+					</span>
+				</div>)}
+				{linkedNodes.length === 0 && <p className="text-xs text-secondary">No connected entities.</p>}
+			</div>
+			{entityLinkForm && <div className="entity-relation-form">
+				<div className="entity-relation-form-header"><strong>{entityLinkForm.editing ? "Edit connected entity" : "Connect entity"}</strong><button type="button" onClick={() => setEntityLinkForm(null)} title="Close connection form" aria-label="Close connection form"><X size={14} /></button></div>
+				<label><span>Diagram node</span><select className="field" disabled={entityLinkForm.editing} value={entityLinkForm.nodeId} onChange={(event) => setEntityLinkForm({ ...entityLinkForm, nodeId: event.target.value })}>{(entityLinkForm.editing ? diagram.nodes.filter((node) => node.id === entityLinkForm.nodeId) : unlinkedNodes).map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
+				<label><span>Entity</span><select className="field" value={entityLinkForm.entityId} onChange={(event) => setEntityLinkForm({ ...entityLinkForm, entityId: event.target.value })}><option value="">Select entity</option>{entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select></label>
+				<div className="entity-relation-form-actions"><button type="button" className="secondary-button" onClick={() => setEntityLinkForm(null)}>Cancel</button><button type="button" className="command-button" disabled={!entityLinkForm.nodeId || !entityLinkForm.entityId} onClick={saveEntityLink}>{entityLinkForm.editing ? "Save changes" : "Connect entity"}</button></div>
+			</div>}
+		</section>
 		<label className="form-label">Mermaid source<textarea required spellCheck={false} className="field mt-1 min-h-52 font-mono text-xs" value={draft.mermaidSource} onChange={(event) => setDraft({ ...draft, mermaidSource: event.target.value })} /></label>
-		<section><h3 className="section-label">Preview</h3><div className="border border-gray-200 rounded-md overflow-auto p-3 min-h-40 bg-white"><MermaidDiagram source={draft.mermaidSource} /></div></section>
 		<p className="text-xs text-secondary">{draft.nodes.length} indexed nodes · {draft.edges.length} indexed edges</p>
-		<section><h3 className="section-label">Version diff</h3><div className="space-y-2">{[...diagram.versions].reverse().map((version) => <div key={version.version} className="rounded-md border border-gray-200 bg-white p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">Version {version.version}</span><span className="text-[10px] text-gray-400">{new Date(version.timestamp).toLocaleString()}</span></div><div className="mt-2 flex flex-wrap gap-1"><span className="change-add">+{version.addedNodeIds.length} nodes</span><span className="change-add">+{version.addedEdgeIds.length} edges</span><span className="change-delete">-{version.removedNodeIds.length} nodes</span><span className="change-delete">-{version.removedEdgeIds.length} edges</span></div></div>)}</div></section>
 		<button type="submit" className="command-button w-full justify-center" disabled={!draft.mermaidSource.trim()}>Save Mermaid diagram</button>
 	</form>;
+}
+
+function buildRelationRebuildEvidence(entities: Entity[], relations: Relation[], diagrams: Diagram[]): string {
+	return JSON.stringify({
+		instruction: "Infer a sparse, useful graph. Prefer specific directional relation types over related_to. Keep existing valid relations and add only relationships supported by entity content or diagram topology.",
+		entities: entities.map((entity) => ({ id: entity.id, name: entity.name, aliases: entity.aliases, type: entity.type, summary: entity.summary, content: entity.content })),
+		existingRelations: relations.map((relation) => ({ sourceEntityId: relation.sourceEntityId, targetEntityId: relation.targetEntityId, type: relation.type, description: relation.description, confidence: relation.confidence })),
+		diagrams: diagrams.map((item) => ({ id: item.id, name: item.name, type: item.type, nodes: item.nodes.map((node) => ({ id: node.id, entityId: node.entityId, label: node.label, type: node.type })), edges: item.edges.map((edge) => ({ source: edge.source, target: edge.target, relationId: edge.relationId, label: edge.label })) })),
+	});
+}
+
+function countDiagramKnowledgeLinks(diagrams: Diagram[]): number {
+	return diagrams.filter((diagram) => !diagram.deletedAt).reduce((count, diagram) => count + diagram.nodes.filter((node) => Boolean(node.entityId)).length + diagram.edges.filter((edge) => Boolean(edge.relationId)).length, 0);
 }
 
 export default Knowledge;
