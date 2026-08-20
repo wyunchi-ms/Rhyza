@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-electron/
+src-tauri/target/
+src-tauri/gen/
 .sisyphus/
 *.log
 .env

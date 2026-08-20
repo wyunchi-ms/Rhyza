@@ -9,5 +9,5 @@
     "declarationMap": false,
     "sourceMap": true
   },
-  "include": ["electron/**/*.ts", "src/shared/**/*.ts"]
+	"include": ["electron/**/*.ts", "sidecar/**/*.ts", "src/shared/**/*.ts"]
 }
