@@ -19,7 +19,8 @@
 		"build:tauri-assets": "npm run build && npm run sidecar:compile",
 		"tauri:dev": "tauri dev",
 		"tauri:build": "tauri build",
-    "tauri:build:windows": "tauri build --bundles nsis"
+    "tauri:build:windows": "tauri build --bundles nsis",
+    "tauri:portable:windows": "tauri build --no-bundle && node scripts/create-portable.mjs"
   },
   "repository": {
     "type": "git",

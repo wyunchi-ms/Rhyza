@@ -41,7 +41,18 @@ fn choose_sources() -> Vec<String> {
         .collect()
 }
 
-fn start_sidecar() -> Result<SidecarState, String> {
+fn resolve_sidecar() -> Result<(PathBuf, PathBuf, PathBuf), String> {
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(executable_dir) = executable.parent() {
+            let resources = executable_dir.join("resources");
+            let entrypoint = resources.join("sidecar").join("index.js");
+            let node = resources.join(if cfg!(windows) { "node.exe" } else { "node" });
+            if entrypoint.is_file() && node.is_file() {
+                return Ok((entrypoint, node, resources));
+            }
+        }
+    }
+
     let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("Missing project root")?
@@ -50,10 +61,22 @@ fn start_sidecar() -> Result<SidecarState, String> {
         .join("dist-sidecar")
         .join("sidecar")
         .join("index.js");
-    let node = std::env::var("RHYZA_NODE_BINARY").unwrap_or_else(|_| "node".to_string());
+    if !entrypoint.is_file() {
+        return Err(format!(
+            "Node sidecar was not found at {}. Run `npm run sidecar:compile`.",
+            entrypoint.display()
+        ));
+    }
+    let node =
+        PathBuf::from(std::env::var("RHYZA_NODE_BINARY").unwrap_or_else(|_| "node".to_string()));
+    Ok((entrypoint, node, project_root))
+}
+
+fn start_sidecar() -> Result<SidecarState, String> {
+    let (entrypoint, node, working_directory) = resolve_sidecar()?;
     let mut child = Command::new(node)
         .arg(entrypoint)
-        .current_dir(project_root)
+        .current_dir(working_directory)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

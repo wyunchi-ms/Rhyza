@@ -42,19 +42,26 @@ $env:RHYZA_NODE_BINARY = (Get-Command node).Source
 npm run tauri:dev
 ```
 
-## Windows 打包
+## Windows 绿色版
 
 ```powershell
-npm run tauri:build:windows
+npm run tauri:portable:windows
 ```
 
-生成的 NSIS 安装程序在：
+通常无需配置额外变量。如果 Node 由 Volta 管理，先指定真实 Node 二进制，避免把 Volta shim 打入绿色版：
+
+```powershell
+$env:RHYZA_PORTABLE_NODE_BINARY = (volta which node)
+npm run tauri:portable:windows
+```
+
+绿色版输出目录：
 
 ```text
-src-tauri\target\release\bundle\nsis\
+dist-portable\Rhyza\
 ```
 
-当前原型的安装包用于验证 Tauri 打包流程，仍要求运行环境提供 Node.js。正式分发前需要将 Node sidecar 封装为每个平台的独立二进制并通过 Tauri `externalBin` 一起分发。
+将整个 `Rhyza` 文件夹复制到目标电脑后，直接双击 `Rhyza.exe` 即可；无需安装程序，也无需目标电脑预装 Node.js。请勿单独移动 `Rhyza.exe`，它需要同级 `resources` 文件夹中的 Node sidecar 和运行时。
 
 ## 首次配置
 
@@ -70,6 +77,7 @@ Pi 凭据保存在 `~/.pi/agent/auth.json`，不会写入仓库。
 | --- | --- |
 | `npm run tauri:dev` | 启动完整 Tauri + Node sidecar 开发环境。 |
 | `npm run tauri:build:windows` | 生成 Windows NSIS `.exe` 安装程序。 |
+| `npm run tauri:portable:windows` | 生成免安装的 `dist-portable/Rhyza/Rhyza.exe`。 |
 | `npm run build` | 进行前端类型检查并生成 Vite 前端资源。 |
 | `npm run sidecar:compile` | 编译 Node sidecar 至 `dist-sidecar/`。 |
 | `npm run typecheck` | 运行 TypeScript 类型检查。 |
