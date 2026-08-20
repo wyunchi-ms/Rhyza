@@ -252,7 +252,7 @@ export interface AgentBridgeEvent {
 }
 
 export interface KnowbranchBridge {
-	isElectron: true;
+	isTauri: true;
 	providerStatus(request: ProviderStatusRequest): Promise<ProviderStatusResponse>;
 	providerLogin(request: ProviderLoginRequest): Promise<ProviderActionResponse>;
 	providerLogout(request: ProviderLogoutRequest): Promise<ProviderActionResponse>;

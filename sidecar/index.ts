@@ -1,10 +1,10 @@
 import { createServer, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
-import { AppStateStore } from "../electron/main/app-state-store.js";
-import { PiService } from "../electron/main/pi-service.js";
-import { SettingsStore } from "../electron/main/settings-store.js";
-import { SourceService } from "../electron/main/source-service.js";
+import { AppStateStore } from "./services/app-state-store.js";
+import { PiService } from "./services/pi-service.js";
+import { SettingsStore } from "./services/settings-store.js";
+import { SourceService } from "./services/source-service.js";
 import {
 	validateAgentPromptRequest,
 	validateAppStateSaveRequest,

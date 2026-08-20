@@ -12,17 +12,17 @@ export function getKnowbranchBridge() {
 	return window.knowbranch;
 }
 
-export function isElectronRuntime(): boolean {
-	return window.knowbranch?.isElectron === true;
+export function isTauriRuntime(): boolean {
+	return window.knowbranch?.isTauri === true;
 }
 
-export function useElectronProviderState() {
+export function useDesktopProviderState() {
 	const [providerStatus, setProviderStatus] =
 		useState<ProviderStatusResponse | null>(null);
 	const [models, setModels] = useState<ModelInfo[]>([]);
 	const [workspace, setWorkspace] = useState<WorkspaceInfo>({ path: null });
 	const [authEvents, setAuthEvents] = useState<AuthBridgeEvent[]>([]);
-	const [loading, setLoading] = useState(isElectronRuntime());
+	const [loading, setLoading] = useState(isTauriRuntime());
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -71,7 +71,7 @@ export function useElectronProviderState() {
 	}, []);
 
 	return {
-		isElectron: isElectronRuntime(),
+		isDesktop: isTauriRuntime(),
 		providerStatus,
 		models,
 		workspace,

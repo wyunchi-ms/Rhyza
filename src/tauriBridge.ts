@@ -24,7 +24,7 @@ export async function installTauriBridge(): Promise<void> {
 	events.addEventListener("agent", (event) => { const payload = JSON.parse((event as MessageEvent).data) as AgentBridgeEvent; agentListeners.forEach((listener) => listener(payload)); });
 
 	window.knowbranch = {
-		isElectron: true,
+		isTauri: true,
 		providerStatus: (payload) => rpc("providerStatus", payload),
 		providerLogin: (payload) => rpc("providerLogin", payload),
 		providerLogout: (payload) => rpc("providerLogout", payload),

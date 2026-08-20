@@ -1,6 +1,6 @@
 # Tauri + Node sidecar prototype
 
-This branch keeps the existing React/Vite UI and Node-based Pi agent services while replacing Electron's bundled Chromium window with a Tauri system-WebView shell.
+This branch runs the React/Vite UI and Node-based Pi agent services in a Tauri system-WebView shell.
 
 ## Architecture
 
@@ -26,14 +26,14 @@ The sidecar binds an ephemeral loopback port and creates a random token for ever
 3. Ensure `node` is on PATH, or set `RHYZA_NODE_BINARY` to an absolute Node executable.
 4. Run `npm run tauri:dev`.
 
-The Tauri pre-dev command compiles `dist-electron/sidecar/index.js` before starting Vite. The name of that output folder is retained temporarily so Electron and Tauri can share one TypeScript build.
+The Tauri pre-dev command compiles `dist-sidecar/sidecar/index.js` before starting Vite.
 
 ## Verified in this prototype
 
 - React and sidecar TypeScript builds pass.
 - The Node sidecar starts, emits a handshake, authenticates RPC requests, and returns the configured workspace.
 - The Tauri Rust shell passes `cargo check` on Windows.
-- Existing Electron code remains available on this branch.
+- The project uses the system WebView instead of bundling a browser runtime.
 
 ## Remaining production work
 

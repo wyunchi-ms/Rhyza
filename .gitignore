@@ -1,6 +1,6 @@
 node_modules/
 dist/
-dist-electron/
+dist-sidecar/
 src-tauri/target/
 src-tauri/gen/
 .sisyphus/

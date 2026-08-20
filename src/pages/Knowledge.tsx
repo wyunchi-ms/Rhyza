@@ -35,7 +35,7 @@ const Knowledge = () => {
 		if (activeEntities.length < 2 || rebuildState.status === "running") return;
 		const bridge = getKnowbranchBridge();
 		if (!bridge) {
-			setRebuildState({ status: "error", message: "The Electron runtime is required to run the global LLM scan." });
+			setRebuildState({ status: "error", message: "The Tauri runtime is required to run the global LLM scan." });
 			return;
 		}
 		setRebuildState({ status: "running", message: `Scanning ${activeEntities.length} entities and ${activeDiagrams.length} diagrams…` });

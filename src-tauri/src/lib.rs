@@ -47,7 +47,7 @@ fn start_sidecar() -> Result<SidecarState, String> {
         .ok_or("Missing project root")?
         .to_path_buf();
     let entrypoint = project_root
-        .join("dist-electron")
+        .join("dist-sidecar")
         .join("sidecar")
         .join("index.js");
     let node = std::env::var("RHYZA_NODE_BINARY").unwrap_or_else(|_| "node".to_string());

@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { SourceService } from "../electron/main/source-service.js";
-import { AppStateStore } from "../electron/main/app-state-store.js";
-import { WorktreeService } from "../electron/main/worktree-service.js";
+import { SourceService } from "../sidecar/services/source-service.js";
+import { AppStateStore } from "../sidecar/services/app-state-store.js";
+import { WorktreeService } from "../sidecar/services/worktree-service.js";
 
 const execFileAsync = promisify(execFile);
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "knowbranch-mvp-smoke-"));

@@ -9,7 +9,7 @@ const filePath = requestedPath ?? (existsSync(directory)
 	: undefined);
 
 if (!filePath || !existsSync(filePath)) {
-	console.error("No diagnostics file found. Run the Electron app for at least 10 seconds first.");
+	console.error("No diagnostics file found. Run the Tauri app for at least 10 seconds first.");
 	process.exit(1);
 }
 

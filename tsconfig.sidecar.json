@@ -3,11 +3,11 @@
   "compilerOptions": {
     "composite": false,
     "noEmit": false,
-    "outDir": "dist-electron",
+    "outDir": "dist-sidecar",
     "rootDir": ".",
     "declaration": false,
     "declarationMap": false,
     "sourceMap": true
   },
-	"include": ["electron/**/*.ts", "sidecar/**/*.ts", "src/shared/**/*.ts"]
+	"include": ["sidecar/**/*.ts", "src/shared/**/*.ts"]
 }
