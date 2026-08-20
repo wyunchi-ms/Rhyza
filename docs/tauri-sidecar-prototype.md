@@ -32,6 +32,7 @@ The Tauri pre-dev command compiles `dist-electron/sidecar/index.js` before start
 
 - React and sidecar TypeScript builds pass.
 - The Node sidecar starts, emits a handshake, authenticates RPC requests, and returns the configured workspace.
+- The Tauri Rust shell passes `cargo check` on Windows.
 - Existing Electron code remains available on this branch.
 
 ## Remaining production work
@@ -46,4 +47,4 @@ The Tauri pre-dev command compiles `dist-electron/sidecar/index.js` before start
 
 ## Current build limitation
 
-The local environment used for this prototype could not complete `cargo check` because Cargo remained blocked while updating the crates.io index. The Rust source is formatted, but a full Rust/Tauri compile still needs to run in an environment with working crates.io access.
+The first Rust build needs working crates.io access to populate Cargo's dependency cache. Once dependencies are available, the current Tauri shell passes `cargo check` on Windows.

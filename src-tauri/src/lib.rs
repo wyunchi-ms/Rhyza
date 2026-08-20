@@ -36,6 +36,7 @@ fn choose_sources() -> Vec<String> {
     rfd::FileDialog::new()
         .pick_folders()
         .into_iter()
+        .flatten()
         .map(|path| path.to_string_lossy().into_owned())
         .collect()
 }
