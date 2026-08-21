@@ -4,15 +4,15 @@ import type React from "react";
 import {
 	githubCopilotProviderId,
 	getKnowbranchBridge,
-	useDesktopProviderState,
+	useElectronProviderState,
 } from "../hooks/useKnowbranchBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
-	const desktop = useDesktopProviderState();
-	const providerLabel = desktop.isDesktop
+	const electron = useElectronProviderState();
+	const providerLabel = electron.isElectron
 		? "GitHub Copilot"
 		: settings.provider;
 	const selectedModel = settings.defaultModel;
@@ -20,17 +20,17 @@ const Settings: React.FC = () => {
 	const handleLogin = async () => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
-		desktop.setError(null);
+		electron.setError(null);
 		const result = await bridge.providerLogin({
 			providerId: githubCopilotProviderId,
 		});
-		desktop.setProviderStatus(result.status);
-		if (result.error) desktop.setError(result.error);
+		electron.setProviderStatus(result.status);
+		if (result.error) electron.setError(result.error);
 		const catalog = await bridge.modelCatalog({
 			providerId: githubCopilotProviderId,
 			refresh: result.ok,
 		});
-		desktop.setModels(catalog.models);
+		electron.setModels(catalog.models);
 	};
 
 	const handleLogout = async () => {
@@ -39,8 +39,8 @@ const Settings: React.FC = () => {
 		const result = await bridge.providerLogout({
 			providerId: githubCopilotProviderId,
 		});
-		desktop.setProviderStatus(result.status);
-		if (result.error) desktop.setError(result.error);
+		electron.setProviderStatus(result.status);
+		if (result.error) electron.setError(result.error);
 	};
 
 	const handleSelectWorkspace = async () => {
@@ -48,7 +48,7 @@ const Settings: React.FC = () => {
 		if (!bridge) return;
 		const workspace = await bridge.selectWorkspace();
 		setWorkspacePersistencePath(workspace.path);
-		desktop.setWorkspace(workspace);
+		electron.setWorkspace(workspace);
 		loadWorkspaceState(bridge.appStateLoad());
 	};
 
@@ -75,35 +75,35 @@ const Settings: React.FC = () => {
 									{providerLabel}
 								</h3>
 								<p className="text-sm text-secondary">
-									{desktop.isDesktop
-										? desktop.providerStatus?.configured
-											? `Configured via ${desktop.providerStatus.source ?? "Pi SDK"}.`
+									{electron.isElectron
+										? electron.providerStatus?.configured
+											? `Configured via ${electron.providerStatus.source ?? "Pi SDK"}.`
 											: "Not signed in. OAuth/device flow progress appears below."
-										: "Provider controls require the Tauri desktop runtime."}
+										: "Provider controls require the Electron desktop runtime."}
 								</p>
-								{desktop.error && (
-									<p className="text-xs text-red-500 mt-1">{desktop.error}</p>
+								{electron.error && (
+									<p className="text-xs text-red-500 mt-1">{electron.error}</p>
 								)}
 							</div>
 							<button
 								type="button"
 								onClick={
-									desktop.providerStatus?.configured ? handleLogout : handleLogin
+									electron.providerStatus?.configured ? handleLogout : handleLogin
 								}
-							disabled={!desktop.isDesktop || desktop.loading}
+								disabled={!electron.isElectron || electron.loading}
 								className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors"
 							>
-								{desktop.isDesktop
-									? desktop.providerStatus?.configured
+								{electron.isElectron
+									? electron.providerStatus?.configured
 										? "Sign Out"
 										: "Sign In"
 									: "Desktop required"}
 							</button>
 						</div>
 
-						{desktop.authEvents.length > 0 && (
+						{electron.authEvents.length > 0 && (
 							<div className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1">
-								{desktop.authEvents.map((event, index) => (
+								{electron.authEvents.map((event, index) => (
 									<AuthEventItem key={`${event.type}-${index}`} event={event} />
 								))}
 							</div>
@@ -125,8 +125,8 @@ const Settings: React.FC = () => {
 								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
 							>
 								<option value="">Use provider default</option>
-								{desktop.isDesktop ? (
-									desktop.models.map((model) => (
+								{electron.isElectron ? (
+									electron.models.map((model) => (
 										<option key={model.id} value={model.id}>
 											{model.name}
 										</option>
@@ -152,15 +152,15 @@ const Settings: React.FC = () => {
 							<div>
 								<h3 className="font-bold text-primary">Workspace Folder</h3>
 								<p className="text-sm text-secondary break-all">
-									{desktop.isDesktop
-										? desktop.workspace.path ?? "No workspace selected."
-										: "Workspace selection requires the Tauri desktop runtime."}
+									{electron.isElectron
+										? electron.workspace.path ?? "No workspace selected."
+										: "Workspace selection requires the Electron desktop runtime."}
 								</p>
 							</div>
 							<button
 								type="button"
 								onClick={handleSelectWorkspace}
-							disabled={!desktop.isDesktop}
+								disabled={!electron.isElectron}
 								className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
 							>
 								Choose Folder

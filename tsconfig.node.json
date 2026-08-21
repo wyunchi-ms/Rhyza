@@ -8,7 +8,7 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "strict": true,
-    "types": ["node"]
+    "types": ["node", "electron"]
   },
   "include": ["vite.config.ts"]
 }

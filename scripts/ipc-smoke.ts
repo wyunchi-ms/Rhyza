@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { extractMermaidDiagramCandidates, isDurableKnowledgeEntityCandidate, PiService } from "../sidecar/services/pi-service.js";
+import { extractMermaidDiagramCandidates, isDurableKnowledgeEntityCandidate, PiService } from "../electron/main/pi-service.js";
 import {
 	validateAgentPromptRequest,
 	validateModelCatalogRequest,

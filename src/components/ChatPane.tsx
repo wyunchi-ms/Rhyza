@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	githubCopilotProviderId,
 	getKnowbranchBridge,
-	isTauriRuntime,
+	isElectronRuntime,
 } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
 import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
@@ -153,7 +153,7 @@ export const ChatPane: React.FC = () => {
 		try {
 			await requestScheduler.enqueue(targetSessionId, async () => {
 			const bridge = getKnowbranchBridge();
-			if (!bridge) throw new Error("Chat requires the Tauri desktop runtime.");
+			if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
 			const selectedModel = store.settings.defaultModel
 				? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
 				: undefined;
@@ -347,7 +347,7 @@ export const ChatPane: React.FC = () => {
 			</div>
 			{selection && <SelectionAskPopover selection={selection} onAsk={sendSelectionQuestion} onClose={() => setSelection(null)} />}
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
-			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} isSending={isSending} error={sendError} runtimeCaption={isTauriRuntime() ? `Pi SDK / GitHub Copilot${store.settings.defaultModel ? ` / ${store.settings.defaultModel}` : ""}` : "Tauri runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
+			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} isSending={isSending} error={sendError} runtimeCaption={isElectronRuntime() ? `Pi SDK / GitHub Copilot${store.settings.defaultModel ? ` / ${store.settings.defaultModel}` : ""}` : "Electron runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
 			{knowledgePreview && <KnowledgePreviewDialog preview={knowledgePreview} onClose={closePreview} />}
 		</div>
 	);
