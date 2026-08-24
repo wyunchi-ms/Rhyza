@@ -1,4 +1,5 @@
 import { Database, Network, X } from "lucide-react";
+import clsx from "clsx";
 import { useAppStore } from "../store";
 import { useKnowledgePreview } from "../hooks/useKnowledgePreview";
 import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
@@ -11,7 +12,7 @@ export const KnowledgePane = () => {
 	const paneMax = Math.min(560, Math.max(320, viewportWidth * 0.45));
 	const paneSize = usePanelSize("knowbranch-layout-knowledge-width", 320, 280, paneMax);
 	const paneWidth = Math.min(paneSize.value, paneMax);
-	if (!store.rightPaneOpen) return null;
+	const isOpen = store.rightPaneOpen;
 	const activeTurns = store.turns.filter((turn) => turn.sessionId === store.activeSessionId);
 	const mentionedIds = new Set(activeTurns.flatMap((turn) => turn.entities?.map((entity) => entity.id) ?? []));
 	const relevant = store.entities.filter((entity) => !entity.deletedAt && (mentionedIds.size === 0 || mentionedIds.has(entity.id)));
@@ -19,8 +20,8 @@ export const KnowledgePane = () => {
 
 	return (
 		<>
-		<PanelResizeHandle side="right" label="Resize knowledge panel" value={paneWidth} min={280} max={paneMax} defaultValue={320} onChange={paneSize.setValue} onCommit={paneSize.commit} />
-		<aside className="knowledge-pane" style={{ width: paneWidth, flexBasis: paneWidth, maxWidth: "calc(100vw - 4rem)" }}>
+		{isOpen && <PanelResizeHandle side="right" label="Resize knowledge panel" value={paneWidth} min={280} max={paneMax} defaultValue={320} onChange={paneSize.setValue} onCommit={paneSize.commit} />}
+		<aside className={clsx("knowledge-pane", !isOpen && "is-closed")} aria-hidden={!isOpen} style={{ width: isOpen ? paneWidth : 0, flexBasis: isOpen ? paneWidth : 0, maxWidth: "calc(100vw - 4rem)" }}>
 			<header className="knowledge-pane-header">
 				<h2><Database size={16} /> Knowledge</h2>
 				<button type="button" className="sidebar-icon-button" title="Close" onClick={store.toggleRightPane}><X size={16} /></button>

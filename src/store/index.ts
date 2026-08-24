@@ -155,7 +155,7 @@ export const useAppStore = create<AppState>()(
 			changesets: [],
 			settings: defaultSettings,
 			sidebarOpen: true,
-			rightPaneOpen: true,
+			rightPaneOpen: false,
 			selectedEntityId: null,
 			selectedDiagramId: null,
 

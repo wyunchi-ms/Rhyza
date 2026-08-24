@@ -28,6 +28,7 @@ export const ChatPane: React.FC = () => {
 	const [sendError, setSendError] = useState<string | null>(null);
 	const [images, setImages] = useState<ComposerImage[]>([]);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
+	const [keyboardTurnId, setKeyboardTurnId] = useState<string | null>(null);
 	const streamingTurnIds = useRef(new Map<string, string>());
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 	const activeSessionId = store.activeSessionId;
@@ -39,6 +40,15 @@ export const ChatPane: React.FC = () => {
 		() => store.turns.filter((turn) => turn.sessionId === activeSessionId),
 		[store.turns, activeSessionId],
 	);
+	const moveKeyboardTurn = (direction: -1 | 1) => {
+		if (sessionTurns.length === 0) return;
+		const currentIndex = keyboardTurnId ? sessionTurns.findIndex((turn) => turn.id === keyboardTurnId) : direction < 0 ? sessionTurns.length : -1;
+		const nextIndex = Math.max(0, Math.min(sessionTurns.length - 1, currentIndex + direction));
+		const nextTurn = sessionTurns[nextIndex];
+		if (!nextTurn) return;
+		setKeyboardTurnId(nextTurn.id);
+		document.getElementById(`turn-${nextTurn.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+	};
 
 	useEffect(() => {
 		const createInitialSession = () => {
@@ -323,11 +333,22 @@ export const ChatPane: React.FC = () => {
 				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1><span>{store.settings.defaultModel || "GitHub Copilot"}</span></div>
 				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && "is-active")} onClick={store.toggleRightPane} title="Toggle knowledge panel" aria-label="Toggle knowledge panel"><PanelRight size={17} /></button>
 			</header>
-			<div ref={scrollContainerRef} className="chat-scroll">
+			<div ref={scrollContainerRef} className="chat-scroll" tabIndex={0} role="region" aria-label="Conversation. Use up and down arrow keys to move between turns." onFocus={() => setKeyboardTurnId((current) => current ?? sessionTurns[sessionTurns.length - 1]?.id ?? null)} onPointerDown={(event) => {
+				const target = event.target as Element | null;
+				if (target?.closest("button, a, input, textarea, select, [contenteditable='true']")) return;
+				const turnId = target?.closest<HTMLElement>("[data-turn-id]")?.dataset.turnId;
+				setKeyboardTurnId(turnId ?? sessionTurns[sessionTurns.length - 1]?.id ?? null);
+				event.currentTarget.focus({ preventScroll: true });
+			}} onKeyDown={(event) => {
+				if (event.target !== event.currentTarget || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+				event.preventDefault();
+				moveKeyboardTurn(event.key === "ArrowUp" ? -1 : 1);
+			}}>
 				{sessionTurns.map((turn, index) => (
 					<TurnMessage
 						key={turn.id}
 						turn={turn}
+						isKeyboardActive={turn.id === keyboardTurnId}
 						entities={store.entities}
 						relations={store.relations}
 						diagrams={store.diagrams}

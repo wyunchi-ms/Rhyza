@@ -10,7 +10,7 @@ import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { MermaidDiagram } from "../MermaidDiagram";
 
-export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection }: {
+export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
 	turn: Turn;
 	entities: Entity[];
 	relations: Relation[];
@@ -20,6 +20,7 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
 	onTextSelection: (text: string, rect: DOMRect) => void;
+	isKeyboardActive: boolean;
 }) {
 	const isUser = turn.role === "user";
 	const [collapsed, setCollapsed] = useState(false);
@@ -31,15 +32,14 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 		return () => window.removeEventListener("keydown", close);
 	}, [detailsOpen]);
 	return (
-		<article id={`turn-${turn.id}`} className={clsx("chat-turn group", isUser && "is-user")}>
+		<article id={`turn-${turn.id}`} data-turn-id={turn.id} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")}>
 			{!isUser && <div className="assistant-mark"><Sparkles size={14} /></div>}
 			<div className={clsx("turn-content", isUser ? "items-end" : "w-full")}>
 				<div className={clsx("turn-body", isUser ? "user-bubble" : "assistant-body")}>
 					{!isUser && <button type="button" title={collapsed ? "Expand response" : "Collapse response"} aria-label={collapsed ? "Expand response" : "Collapse response"} onClick={() => setCollapsed((value) => !value)} className="response-collapse"><ChevronUp size={15} className={clsx("transition-transform", collapsed && "rotate-180")} /></button>}
 					{collapsed && !isUser ? <p className="truncate text-sm font-medium text-secondary">{turn.summary || "Assistant response"}</p> : <>
 						<TurnStatus status={turn.status} />
-						{!isUser && turn.reasoning && <ReasoningBlock content={turn.reasoning} />}
-						{!isUser && turn.tools && turn.tools.length > 0 && <ToolCards tools={turn.tools} />}
+						{!isUser && <TurnWorkDetails turn={turn} />}
 						{isUser && turn.quote && <blockquote className="user-message-quote">{turn.quote.text}</blockquote>}
 						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
 						{turn.content && <LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={isUser ? undefined : onTextSelection} />}
@@ -55,6 +55,14 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
 		</article>
 	);
+}
+
+function TurnWorkDetails({ turn }: { turn: Turn }) {
+	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date()).getTime() - new Date(turn.createdAt).getTime());
+	return <details className="turn-work-details"><summary><span>Worked for {formatDuration(elapsedMs)}</span><ChevronDown size={14} /></summary><div className="turn-work-details-content">
+		{turn.reasoning ? <ReasoningBlock content={turn.reasoning} /> : <p className="turn-work-empty">No reasoning was recorded for this turn.</p>}
+		{turn.tools?.length ? <ToolCards tools={turn.tools} /> : <p className="turn-work-empty">No tools were called.</p>}
+	</div></details>;
 }
 
 function UserImageAttachments({ images }: { images: NonNullable<Turn["images"]> }) {
