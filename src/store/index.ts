@@ -17,10 +17,14 @@ import type {
 } from "../types";
 import { createId } from "../utils/common";
 import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
+import { forkSessionAtTurn } from "../utils/sessionFork";
+import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
+import { syncSessionExecutionStatus } from "../utils/sessionRuntime";
 
 interface AppState {
 	sessions: SessionNode[];
 	activeSessionId: string | null;
+	visibleSessionId: string | null;
 	turns: Turn[];
 	entities: Entity[];
 	relations: Relation[];
@@ -34,18 +38,18 @@ interface AppState {
 	selectedDiagramId: string | null;
 
 	setActiveSession: (id: string) => void;
+	setVisibleSession: (id: string | null) => void;
 	setSelectedEntity: (id: string | null) => void;
 	setSelectedDiagram: (id: string | null) => void;
 	toggleSidebar: () => void;
 	toggleRightPane: () => void;
 	createRootSession: () => string;
-	forkSession: (turnId: string) => { forkSessionId: string; originalSessionId: string } | null;
+	forkSession: (turnId: string) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
 	renameSession: (id: string, title: string, keepPending?: boolean) => void;
-	renameContinuation: (id: string, title: string) => void;
-	setSessionProgressStatus: (id: string, status?: SessionProgressStatus, continuation?: boolean) => void;
+	setSessionProgressStatus: (id: string, status?: SessionProgressStatus) => void;
 	deleteSession: (id: string) => void;
 	setSessionStatus: (id: string, status: SessionNode["status"]) => void;
-	addSessionTitleUsage: (id: string, usage?: import("../types").TokenUsage, continuation?: boolean) => void;
+	addSessionTitleUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addTurnUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addManualTurn: (turn: Turn) => void;
 	updateTurn: (turnId: string, patch: Partial<Turn>) => void;
@@ -147,6 +151,7 @@ export const useAppStore = create<AppState>()(
 		(set, get) => ({
 			sessions: [],
 			activeSessionId: null,
+			visibleSessionId: null,
 			turns: [],
 			entities: [],
 			relations: [],
@@ -159,7 +164,8 @@ export const useAppStore = create<AppState>()(
 			selectedEntityId: null,
 			selectedDiagramId: null,
 
-			setActiveSession: (id) => set({ activeSessionId: id }),
+			setActiveSession: (id) => set({ activeSessionId: id, visibleSessionId: id }),
+			setVisibleSession: (id) => set({ visibleSessionId: id }),
 			setSelectedEntity: (id) => set({ selectedEntityId: id, selectedDiagramId: null, rightPaneOpen: true }),
 			setSelectedDiagram: (id) => set({ selectedDiagramId: id, selectedEntityId: null, rightPaneOpen: true }),
 			toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -177,50 +183,32 @@ export const useAppStore = create<AppState>()(
 				set((state) => ({
 					sessions: [...state.sessions, newSession],
 					activeSessionId: id,
+					visibleSessionId: id,
 				}));
 				return id;
 			},
 
 			forkSession: (turnId) => {
 				const state = get();
-				const selectedTurn = state.turns.find((item) => item.id === turnId);
-				const turn = selectedTurn?.sourceTurnId
-					? state.turns.find((item) => item.id === selectedTurn.sourceTurnId) ?? selectedTurn
-					: selectedTurn;
-				if (!turn) return null;
-				const parentTurns = state.turns.filter((item) => item.sessionId === turn.sessionId);
-				const forkIndex = parentTurns.findIndex((item) => item.id === turn.id);
-				if (forkIndex < 0) return null;
-				const id = createId("session");
-				const newSession: SessionNode = {
-					id,
-					parentId: turn.sessionId,
-					forkedFromTurnId: turnId,
-					title: "New branch",
-					titlePending: true,
-					refreshTitleOnNextPrompt: true,
-					isRoot: false,
-					status: "idle",
-				};
-				const copiedTurns = parentTurns.slice(0, forkIndex + 1).map((item) => ({
-					...item,
-					id: createId("turn"),
-					sourceTurnId: item.sourceTurnId ?? item.id,
-					sessionId: id,
-					changeSetId: undefined,
-					inheritedUsage: item.usage ?? item.inheritedUsage,
-					usage: undefined,
-				}));
-				set((current) => ({
-					sessions: [...current.sessions.map((session) => session.id === turn.sessionId ? {
-						...session,
-						continuationTitle: session.continuationTitle ?? "Original path",
-						continuationTitlePending: true,
-					} : session), newSession],
-					turns: [...current.turns, ...copiedTurns],
-					activeSessionId: id,
-				}));
-				return { forkSessionId: id, originalSessionId: turn.sessionId };
+				const result = forkSessionAtTurn(state, turnId, createId);
+				if (!result) return null;
+				const debugSnapshot = createForkDebugSnapshot(state, turnId, result);
+				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.forkSessionId, visibleSessionId: result.forkSessionId });
+				const dumpWriter = typeof window !== "undefined" ? window.knowbranch?.forkDebugDump : undefined;
+				if (typeof dumpWriter === "function") {
+					void dumpWriter({
+						kind: "fork",
+						timestamp: debugSnapshot.timestamp,
+						selectedTurnId: turnId,
+						snapshot: debugSnapshot,
+					}).then(
+						(response) => announceForkDebug({ ok: true, message: `Fork dump: ${response.path}` }),
+						(error: unknown) => announceForkDebug({ ok: false, message: `Fork dump failed: ${error instanceof Error ? error.message : String(error)}` }),
+					);
+				} else {
+					announceForkDebug({ ok: false, message: "Fork dump unavailable. Restart Electron to load the updated preload bridge." });
+				}
+				return { forkSessionId: result.forkSessionId, originalSessionId: result.originalSessionId, branchPointSessionId: result.branchPointSessionId };
 			},
 
 			renameSession: (id, title, refreshOnNextPrompt = false) =>
@@ -229,18 +217,10 @@ export const useAppStore = create<AppState>()(
 						session.id === id ? { ...session, title: title.trim() || session.title, titlePending: false, refreshTitleOnNextPrompt: refreshOnNextPrompt } : session,
 					),
 				})),
-			renameContinuation: (id, title) =>
-				set((state) => ({
-					sessions: state.sessions.map((session) =>
-						session.id === id ? { ...session, continuationTitle: title.trim() || session.continuationTitle, continuationTitlePending: false } : session,
-					),
-				})),
-			setSessionProgressStatus: (id, status, continuation = false) =>
+			setSessionProgressStatus: (id, status) =>
 				set((state) => ({
 					sessions: state.sessions.map((session) => session.id === id
-						? continuation
-							? { ...session, continuationProgressStatus: status }
-							: { ...session, progressStatus: status }
+						? { ...session, progressStatus: status }
 						: session),
 				})),
 			deleteSession: (id) => {
@@ -269,6 +249,7 @@ export const useAppStore = create<AppState>()(
 				set({
 					sessions,
 					activeSessionId,
+					visibleSessionId: activeSessionId,
 					turns: state.turns.filter((turn) => !descendants.has(turn.sessionId)),
 				});
 			},
@@ -278,13 +259,11 @@ export const useAppStore = create<AppState>()(
 						session.id === id ? { ...session, status } : session,
 					),
 				})),
-			addSessionTitleUsage: (id, usage, continuation = false) => {
+			addSessionTitleUsage: (id, usage) => {
 				if (!usage) return;
 				set((state) => ({
 					sessions: state.sessions.map((session) => session.id === id
-						? continuation
-							? { ...session, continuationTitleUsage: addTokenUsage(session.continuationTitleUsage, usage) }
-							: { ...session, titleUsage: addTokenUsage(session.titleUsage, usage) }
+						? { ...session, titleUsage: addTokenUsage(session.titleUsage, usage) }
 						: session),
 				}));
 			},
@@ -307,7 +286,11 @@ export const useAppStore = create<AppState>()(
 			finalizeTurn: (sessionId, turnId, content, candidates = [], relationCandidates = [], diagramCandidates = [], sourceRefs = []) => {
 				const state = get();
 				if (!state.settings.autoExtract || state.settings.knowledgeMode === "read_only") {
-					get().updateTurn(turnId, { status: "complete", completedAt: new Date().toISOString() });
+					const completedAt = new Date().toISOString();
+					set((current) => {
+						const turns = current.turns.map((turn) => turn.id === turnId ? { ...turn, status: "complete" as const, completedAt } : turn);
+						return { turns, sessions: syncSessionExecutionStatus(current.sessions, turns, sessionId) };
+					});
 					return;
 				}
 				const timestamp = new Date().toISOString();
@@ -406,24 +389,28 @@ export const useAppStore = create<AppState>()(
 					status: state.settings.knowledgeMode === "suggest" ? "proposed" : "committed",
 					operations,
 				};
-				set((current) => ({
-					entities: nextEntities,
-					relations: nextRelations,
-					diagrams: extractedDiagramResult.diagrams,
-					changesets: operations.length ? [changeSet, ...current.changesets] : current.changesets,
-					turns: current.turns.map((turn) =>
+				set((current) => {
+					const turns = current.turns.map((turn) =>
 						turn.id === turnId
 							? {
 									...turn,
 									content,
-									status: "complete",
+									status: "complete" as const,
 									completedAt: timestamp,
 									entities: mentions,
 									changeSetId: operations.length ? changeSetId : undefined,
 								}
 							: turn,
-					),
-				}));
+					);
+					return {
+						entities: nextEntities,
+						relations: nextRelations,
+						diagrams: extractedDiagramResult.diagrams,
+						changesets: operations.length ? [changeSet, ...current.changesets] : current.changesets,
+						turns,
+						sessions: syncSessionExecutionStatus(current.sessions, turns, sessionId),
+					};
+				});
 			},
 
 			upsertSources: (sources) =>
@@ -716,7 +703,7 @@ export const useAppStore = create<AppState>()(
 				return {
 					...current,
 					...saved,
-					sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? []), saved.turns ?? []),
+					sessions: recoverInterruptedSessions(saved.sessions ?? [], saved.turns ?? []),
 					turns: recoverInterruptedTurns(saved.turns ?? []),
 					settings: { ...defaultSettings, ...saved.settings },
 					relations: saved.relations ?? [],
@@ -749,8 +736,9 @@ export function loadWorkspaceState(serialized: string | null): void {
 		}
 	}
 	useAppStore.setState({
-		sessions: recoverInterruptedSessions(migrateForkTitles(saved.sessions ?? []), saved.turns ?? []),
+		sessions: recoverInterruptedSessions(saved.sessions ?? [], saved.turns ?? []),
 		activeSessionId: saved.activeSessionId ?? null,
+		visibleSessionId: saved.activeSessionId ?? null,
 		turns: recoverInterruptedTurns(saved.turns ?? []),
 		entities: saved.entities ?? [],
 		relations: saved.relations ?? [],
@@ -769,33 +757,6 @@ function addTokenUsage(left: import("../types").TokenUsage | undefined, right: i
 		cacheWrite: (left?.cacheWrite ?? 0) + right.cacheWrite,
 		cost: (left?.cost ?? 0) + right.cost,
 	};
-}
-
-function migrateForkTitles(sessions: SessionNode[]): SessionNode[] {
-	const cleanedSessions = sessions.map((session) => {
-		const cleaned = { ...session } as SessionNode & { usage?: import("../types").TokenUsage };
-		const legacyUsage = cleaned.usage;
-		delete cleaned.usage;
-		if (!legacyUsage) return cleaned;
-		// The former field mixed title usage into the session. Root sessions only
-		// received it for their original-path label; child sessions received it
-		// when their own branch title was generated.
-		return cleaned.parentId
-			? { ...cleaned, titleUsage: addTokenUsage(cleaned.titleUsage, legacyUsage) }
-			: { ...cleaned, continuationTitleUsage: addTokenUsage(cleaned.continuationTitleUsage, legacyUsage) };
-	});
-	const parentIds = new Set(cleanedSessions.flatMap((session) => session.parentId ? [session.parentId] : []));
-	const byId = new Map(cleanedSessions.map((session) => [session.id, session]));
-	return cleanedSessions.map((session) => {
-		if (parentIds.has(session.id) && !session.continuationTitle) {
-			return { ...session, continuationTitle: "Original path", continuationTitlePending: false };
-		}
-		const parent = session.parentId ? byId.get(session.parentId) : undefined;
-		if (session.forkedFromTurnId && parent && session.title === parent.title && !session.titlePending) {
-			return { ...session, titlePending: false, refreshTitleOnNextPrompt: true };
-		}
-		return session;
-	});
 }
 
 const transientTurnStatuses = new Set<Turn["status"]>(["retrieving", "running", "finalizing"]);
@@ -829,7 +790,6 @@ function recoverInterruptedSessions(sessions: SessionNode[], turns: Turn[]): Ses
 			? "interrupted"
 			: session.status === "running" ? "idle" : session.status,
 		titlePending: false,
-		continuationTitlePending: false,
 		refreshTitleOnNextPrompt: session.titlePending || session.refreshTitleOnNextPrompt,
 	}));
 }

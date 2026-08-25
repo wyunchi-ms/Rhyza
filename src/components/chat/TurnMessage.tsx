@@ -1,17 +1,19 @@
 import clsx from "clsx";
 import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, Info, LoaderCircle, Sparkles, X } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { createPortal } from "react-dom";
 import remarkGfm from "remark-gfm";
 import { getKnowbranchBridge } from "../../hooks/useKnowbranchBridge";
-import type { Diagram, Entity, Relation, Turn } from "../../types";
+import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types";
 import { usageTokens } from "../../utils/branchUsage";
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { MermaidDiagram } from "../MermaidDiagram";
 
-export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
+export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
 	turn: Turn;
+	sessionNodeId: string;
 	entities: Entity[];
 	relations: Relation[];
 	diagrams: Diagram[];
@@ -32,7 +34,7 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 		return () => window.removeEventListener("keydown", close);
 	}, [detailsOpen]);
 	return (
-		<article id={`turn-${turn.id}`} data-turn-id={turn.id} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")}>
+		<article id={`turn-${turn.id}`} data-turn-id={turn.id} data-session-node-id={sessionNodeId} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")}>
 			{!isUser && <div className="assistant-mark"><Sparkles size={14} /></div>}
 			<div className={clsx("turn-content", isUser ? "items-end" : "w-full")}>
 				<div className={clsx("turn-body", isUser ? "user-bubble" : "assistant-body")}>
@@ -42,7 +44,7 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 						{!isUser && <TurnWorkDetails turn={turn} />}
 						{isUser && turn.quote && <blockquote className="user-message-quote">{turn.quote.text}</blockquote>}
 						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
-						{turn.content && <LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={isUser ? undefined : onTextSelection} />}
+						{turn.content && <div data-turn-search-content><LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={isUser ? undefined : onTextSelection} /></div>}
 					</>}
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
@@ -59,10 +61,31 @@ export function TurnMessage({ turn, entities, relations, diagrams, onFork, canFo
 
 function TurnWorkDetails({ turn }: { turn: Turn }) {
 	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date()).getTime() - new Date(turn.createdAt).getTime());
+	const activities = turn.activities?.length ? turn.activities : fallbackTurnActivities(turn);
 	return <details className="turn-work-details"><summary><span>Worked for {formatDuration(elapsedMs)}</span><ChevronDown size={14} /></summary><div className="turn-work-details-content">
-		{turn.reasoning ? <ReasoningBlock content={turn.reasoning} /> : <p className="turn-work-empty">No reasoning was recorded for this turn.</p>}
-		{turn.tools?.length ? <ToolCards tools={turn.tools} /> : <p className="turn-work-empty">No tools were called.</p>}
+		{activities.length > 0 && <TurnActivityTimeline activities={activities} />}
+		{turn.reasoning && <ReasoningBlock content={turn.reasoning} />}
+		{turn.tools?.length ? <ToolCards tools={turn.tools} /> : null}
+		{!turn.reasoning && !turn.tools?.length && !["retrieving", "running", "finalizing"].includes(turn.status) && <p className="turn-work-note">This model did not expose reasoning or agent tool calls for this turn.</p>}
 	</div></details>;
+}
+
+function fallbackTurnActivities(turn: Turn): TurnActivity[] {
+	if (!["retrieving", "running", "finalizing"].includes(turn.status)) return [];
+	const label = turn.status === "retrieving"
+		? "Retrieving workspace context"
+		: turn.status === "finalizing"
+			? "Updating workspace knowledge"
+			: "Generating response";
+	return [{ id: turn.status === "retrieving" ? "retrieval" : turn.status === "finalizing" ? "knowledge" : "agent", label, status: "running", startedAt: turn.createdAt }];
+}
+
+function TurnActivityTimeline({ activities }: { activities: TurnActivity[] }) {
+	return <ol className="turn-activity-timeline" aria-label="Turn execution timeline">{activities.map((activity) => <li key={activity.id} className={`is-${activity.status}`}>
+		<span className="turn-activity-icon">{activity.status === "running" ? <LoaderCircle size={13} className="animate-spin" /> : activity.status === "error" ? <AlertCircle size={13} /> : <CheckCircle2 size={13} />}</span>
+		<span className="turn-activity-copy"><strong>{activity.label}</strong>{activity.detail && <small>{activity.detail}</small>}</span>
+		<small className="turn-activity-duration">{activity.durationMs === undefined ? activity.status : formatDuration(activity.durationMs)}</small>
+	</li>)}</ol>;
 }
 
 function UserImageAttachments({ images }: { images: NonNullable<Turn["images"]> }) {
@@ -218,14 +241,44 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 function KnowledgeAnchor({ href, references, children, onEntityClick, onDiagramClick }: { href?: string; references: KnowledgeReference[]; children: React.ReactNode; onEntityClick?: (id: string) => void; onDiagramClick?: (id: string) => void }) {
 	const [hovered, setHovered] = useState(false);
 	const timer = useRef<number | null>(null);
+	const anchorRef = useRef<HTMLSpanElement | null>(null);
 	const reference = href?.startsWith("#knowledge/") ? references.find((item) => href.endsWith(encodeURIComponent(item.id))) : undefined;
 	const open = () => { timer.current = window.setTimeout(() => setHovered(true), 300); };
 	const close = () => { if (timer.current !== null) window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setHovered(false), 150); };
-	return <span className="knowledge-link-wrap" onMouseEnter={open} onMouseLeave={close}><a href={href} onFocus={() => setHovered(Boolean(reference))} onBlur={() => setHovered(false)} onClick={(event) => {
+	useEffect(() => {
+		if (!hovered) return;
+		const dismiss = () => setHovered(false);
+		window.addEventListener("scroll", dismiss, true);
+		window.addEventListener("resize", dismiss);
+		return () => {
+			window.removeEventListener("scroll", dismiss, true);
+			window.removeEventListener("resize", dismiss);
+		};
+	}, [hovered]);
+	return <span ref={anchorRef} className="knowledge-link-wrap" onMouseEnter={open} onMouseLeave={close}><a href={href} onFocus={() => setHovered(Boolean(reference))} onBlur={() => setHovered(false)} onClick={(event) => {
 		if (href?.startsWith("#knowledge/entity/")) { event.preventDefault(); onEntityClick?.(decodeURIComponent(href.slice("#knowledge/entity/".length))); }
 		else if (href?.startsWith("#knowledge/diagram/")) { event.preventDefault(); onDiagramClick?.(decodeURIComponent(href.slice("#knowledge/diagram/".length))); }
 		else if (href?.startsWith("http")) { event.preventDefault(); void getKnowbranchBridge()?.openExternal({ url: href }); }
-	}}>{children}</a>{hovered && reference && <span role="tooltip" className="knowledge-hover-card" onMouseEnter={() => { if (timer.current !== null) window.clearTimeout(timer.current); }} onMouseLeave={close}><span className="flex items-center justify-between gap-3"><strong>{reference.title}</strong><small>{reference.type}</small></span><span className="mt-1 line-clamp-2">{reference.summary}</span><small className="mt-2 block">{reference.relationCount} relations · {reference.sourceCount} sources</small></span>}</span>;
+	}}>{children}</a>{hovered && reference && anchorRef.current && createPortal(<KnowledgeHoverCard reference={reference} anchor={anchorRef.current} onMouseEnter={() => { if (timer.current !== null) window.clearTimeout(timer.current); }} onMouseLeave={close} />, document.body)}</span>;
+}
+
+function KnowledgeHoverCard({ reference, anchor, onMouseEnter, onMouseLeave }: { reference: KnowledgeReference; anchor: HTMLElement; onMouseEnter: () => void; onMouseLeave: () => void }) {
+	const cardRef = useRef<HTMLSpanElement | null>(null);
+	const [position, setPosition] = useState({ left: 0, top: 0, ready: false });
+	useLayoutEffect(() => {
+		const card = cardRef.current;
+		if (!card) return;
+		const anchorRect = anchor.getBoundingClientRect();
+		const cardRect = card.getBoundingClientRect();
+		const gap = 8;
+		const margin = 8;
+		const left = Math.max(margin, Math.min(anchorRect.left, window.innerWidth - cardRect.width - margin));
+		const top = anchorRect.top >= cardRect.height + gap + margin
+			? anchorRect.top - cardRect.height - gap
+			: Math.min(anchorRect.bottom + gap, window.innerHeight - cardRect.height - margin);
+		setPosition({ left, top: Math.max(margin, top), ready: true });
+	}, [anchor, reference]);
+	return <span ref={cardRef} role="tooltip" className="knowledge-hover-card" style={{ left: position.left, top: position.top, visibility: position.ready ? "visible" : "hidden" }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}><span className="flex items-center justify-between gap-3"><strong>{reference.title}</strong><small>{reference.type}</small></span><span className="mt-1 line-clamp-2">{reference.summary}</span><small className="mt-2 block">{reference.relationCount} relations · {reference.sourceCount} sources</small></span>;
 }
 
 interface MarkdownNode {
@@ -258,6 +311,13 @@ function transformMarkdownChildren(
 	if (["link", "linkReference", "code", "inlineCode", "html"].includes(node.type) || !node.children) return;
 	const transformed: MarkdownNode[] = [];
 	for (const child of node.children) {
+		if (child.type === "inlineCode" && child.value) {
+			const reference = referenceByLabel.get(child.value.trim().toLocaleLowerCase());
+			transformed.push(reference
+				? { type: "link", url: `#knowledge/${reference.kind}/${encodeURIComponent(reference.id)}`, children: [{ type: "text", value: child.value }] }
+				: child);
+			continue;
+		}
 		if (child.type !== "text" || !child.value) {
 			transformMarkdownChildren(child, pattern, referenceByLabel);
 			transformed.push(child);

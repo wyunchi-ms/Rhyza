@@ -9,17 +9,12 @@ export interface SessionNode {
 	title: string;
 	titlePending?: boolean;
 	refreshTitleOnNextPrompt?: boolean;
-	continuationTitle?: string;
-	continuationTitlePending?: boolean;
 	progressStatus?: SessionProgressStatus;
-	continuationProgressStatus?: SessionProgressStatus;
 	isRoot: boolean;
 	status: "idle" | "running" | "interrupted" | "error";
 	worktreePath?: string;
 	/** Model usage spent generating this node's title. */
 	titleUsage?: TokenUsage;
-	/** Model usage spent generating the original-path title below a fork point. */
-	continuationTitleUsage?: TokenUsage;
 }
 
 export interface Turn {
@@ -31,6 +26,7 @@ export interface Turn {
 	content: string;
 	reasoning?: string;
 	tools?: ToolExecution[];
+	activities?: TurnActivity[];
 	status:
 		| "idle"
 		| "retrieving"
@@ -65,6 +61,16 @@ export interface TokenUsage {
 	cacheRead: number;
 	cacheWrite: number;
 	cost: number;
+}
+
+export interface TurnActivity {
+	id: "retrieval" | "agent" | "knowledge";
+	label: string;
+	status: "running" | "complete" | "error";
+	startedAt: string;
+	completedAt?: string;
+	durationMs?: number;
+	detail?: string;
 }
 
 export interface ToolExecution {

@@ -4,6 +4,8 @@ import { useEffect, useId, useLayoutEffect, useState } from "react";
 
 let mermaidInitialized = false;
 const mermaidSvgCache = new Map<string, string>();
+const mermaidRenderPromises = new Map<string, Promise<string>>();
+let mermaidRenderQueue: Promise<void> = Promise.resolve();
 const maxCachedDiagrams = 100;
 
 export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSvgRendered?: (svg: string) => void }) {
@@ -50,27 +52,8 @@ export function MermaidDiagram({ source, onSvgRendered }: { source: string; onSv
 			setLoading(true);
 			setError(null);
 			try {
-				const { default: mermaid } = await import("mermaid");
-				if (!mermaidInitialized) {
-					mermaid.initialize({
-						startOnLoad: false,
-						securityLevel: "strict",
-						theme: "base",
-						themeVariables: {
-							primaryColor: "#f8fafc",
-							primaryTextColor: "#0f172a",
-							primaryBorderColor: "#94a3b8",
-							lineColor: "#64748b",
-							secondaryColor: "#eef2ff",
-							tertiaryColor: "#f1f5f9",
-							fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-						},
-						flowchart: { curve: "basis", htmlLabels: true },
-					});
-					mermaidInitialized = true;
-				}
 				const diagramId = `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}`;
-				const { svg } = await mermaid.render(diagramId, normalizedSource);
+				const svg = await renderMermaidSvg(normalizedSource, diagramId);
 				if (cancelled) return;
 				cacheRenderedSvg(normalizedSource, svg);
 				setRenderedSvg(svg);
@@ -144,4 +127,42 @@ function cacheRenderedSvg(source: string, svg: string): void {
 		if (oldestKey) mermaidSvgCache.delete(oldestKey);
 	}
 	mermaidSvgCache.set(source, svg);
+}
+
+function renderMermaidSvg(source: string, diagramId: string): Promise<string> {
+	const cached = mermaidSvgCache.get(source);
+	if (cached) return Promise.resolve(cached);
+	const pending = mermaidRenderPromises.get(source);
+	if (pending) return pending;
+
+	const renderPromise = mermaidRenderQueue.then(async () => {
+		const { default: mermaid } = await import("mermaid");
+		if (!mermaidInitialized) {
+			mermaid.initialize({
+				startOnLoad: false,
+				securityLevel: "strict",
+				theme: "base",
+				themeVariables: {
+					primaryColor: "#f8fafc",
+					primaryTextColor: "#0f172a",
+					primaryBorderColor: "#94a3b8",
+					lineColor: "#64748b",
+					secondaryColor: "#eef2ff",
+					tertiaryColor: "#f1f5f9",
+					fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+				},
+				flowchart: { curve: "basis", htmlLabels: true },
+			});
+			mermaidInitialized = true;
+		}
+		const { svg } = await mermaid.render(diagramId, source);
+		cacheRenderedSvg(source, svg);
+		return svg;
+	});
+	mermaidRenderQueue = renderPromise.then(() => undefined, () => undefined);
+	mermaidRenderPromises.set(source, renderPromise);
+	void renderPromise.finally(() => {
+		if (mermaidRenderPromises.get(source) === renderPromise) mermaidRenderPromises.delete(source);
+	}).catch(() => undefined);
+	return renderPromise;
 }

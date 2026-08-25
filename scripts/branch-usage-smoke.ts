@@ -4,7 +4,7 @@ import { allocateBranchUsage } from "../src/utils/branchUsage.js";
 
 const sharedUsage: TokenUsage = { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: 0.0012 };
 const continuationUsage: TokenUsage = { input: 11, output: 21, cacheRead: 31, cacheWrite: 41, cost: 0.0018 };
-const continuationTitleUsage: TokenUsage = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.0004 };
+const rootTitleUsage: TokenUsage = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.0004 };
 const childTitleUsage: TokenUsage = { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: 0.0005 };
 
 const root: SessionNode = {
@@ -13,7 +13,7 @@ const root: SessionNode = {
 	title: "Root",
 	isRoot: true,
 	status: "idle",
-	continuationTitleUsage,
+	titleUsage: rootTitleUsage,
 };
 const child: SessionNode = {
 	id: "child",
@@ -36,11 +36,9 @@ const turns: Turn[] = [
 ];
 
 const allocation = allocateBranchUsage(sessions, turns);
-const expectedContinuation = sum(continuationUsage, continuationTitleUsage);
 const expectedChild = childTitleUsage;
-const expectedRoot = sum(sharedUsage, expectedContinuation, expectedChild);
+const expectedRoot = sum(rootTitleUsage, sharedUsage, continuationUsage, expectedChild);
 assert.deepEqual(allocation.node.get(root.id), expectedRoot);
-assert.deepEqual(allocation.continuation.get(root.id), expectedContinuation);
 assert.deepEqual(allocation.node.get(child.id), expectedChild);
 assert.deepEqual(allocation.total, {
 	input: expectedRoot.input,

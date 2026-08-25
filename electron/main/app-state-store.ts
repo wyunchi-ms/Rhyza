@@ -127,7 +127,6 @@ function restoreLegacySessionUsage(currentRaw: string, backupRaw: string): strin
 				|| typeof candidate.id !== "string"
 				|| isTokenUsage(candidate.usage)
 				|| isTokenUsage(candidate.titleUsage)
-				|| isTokenUsage(candidate.continuationTitleUsage)
 			) return candidate;
 			const usage = backupUsage.get(candidate.id);
 			if (!usage) return candidate;

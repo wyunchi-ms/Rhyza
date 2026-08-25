@@ -17,7 +17,6 @@ import type {
 	AgentUsage,
 	AgentPromptRequest,
 	AgentPromptResponse,
-	AgentTranscriptTurn,
 	AuthBridgeEvent,
 	ModelCatalogRequest,
 	ModelCatalogResponse,
@@ -36,6 +35,7 @@ import type {
 } from "../../src/shared/ipc.js";
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
+import { openOrCreatePiSession } from "./pi-session-lineage.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -353,7 +353,14 @@ export class PiService {
 			],
 		});
 		await resourceLoader.reload();
-		const sessionManager = this.createBranchSessionManager(sessionWorkspace.path, request);
+		const { sessionManager } = await openOrCreatePiSession({
+			workspacePath: sessionWorkspace.path,
+			sessionDir: path.join(this.agentDir, "knowbranch-sessions"),
+			frontendSessionId: request.frontendSessionId,
+			parentFrontendSessionId: request.parentFrontendSessionId,
+			forkedFromTurnId: request.forkedFromTurnId,
+			transcript: request.transcript,
+		});
 		const sourceRefs = new Map<string, SourceReference>();
 		const customTools = this.createSourceTools(sourceRefs, workspacePath);
 		const builtInTools = request.writable && sessionWorkspace.isolated
@@ -448,36 +455,6 @@ export class PiService {
 		return [searchSources, readSource];
 	}
 
-	private createBranchSessionManager(
-		workspacePath: string,
-		request: AgentPromptRequest,
-	): SessionManager {
-		const sessionManager = SessionManager.create(
-			workspacePath,
-			path.join(this.agentDir, "knowbranch-sessions"),
-			{
-				id: safeSessionId(request.frontendSessionId),
-				parentSession: request.parentFrontendSessionId,
-			},
-		);
-		const replayTranscript = request.forkedFromTurnId
-			? throughTurn(request.transcript, request.forkedFromTurnId)
-			: request.transcript;
-		for (const turn of replayTranscript) {
-			appendTranscriptTurn(sessionManager, turn);
-		}
-		if (request.parentFrontendSessionId || request.forkedFromTurnId) {
-			sessionManager.appendCustomEntry("knowbranch.branch", {
-				frontendSessionId: request.frontendSessionId,
-				parentFrontendSessionId: request.parentFrontendSessionId,
-				forkedFromTurnId: request.forkedFromTurnId,
-				replayStrategy:
-					"distinct persisted AgentSession seeded by replaying frontend transcript through fork point",
-			});
-		}
-		return sessionManager;
-	}
-
 	private disposeSession(frontendSessionId: string): void {
 		const activeSession = this.activeSessions.get(frontendSessionId);
 		if (!activeSession) {
@@ -493,40 +470,6 @@ export class PiService {
 			this.disposeSession(frontendSessionId);
 		}
 	}
-}
-
-function appendTranscriptTurn(
-	sessionManager: SessionManager,
-	turn: AgentTranscriptTurn,
-): void {
-	if (turn.role === "user") {
-		sessionManager.appendMessage({
-			role: "user",
-			content: turn.images?.length
-				? [{ type: "text", text: turn.content }, ...turn.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
-				: turn.content,
-			timestamp: Date.now(),
-		});
-		return;
-	}
-	sessionManager.appendCustomMessageEntry(
-		"knowbranch.replayed-assistant",
-		`Assistant said earlier: ${turn.content}`,
-		false,
-		{ sourceTurnId: turn.id },
-	);
-}
-
-function throughTurn(
-	transcript: AgentTranscriptTurn[],
-	forkedFromTurnId: string,
-): AgentTranscriptTurn[] {
-	const index = transcript.findIndex((turn) => turn.id === forkedFromTurnId);
-	return index === -1 ? transcript : transcript.slice(0, index + 1);
-}
-
-function safeSessionId(frontendSessionId: string): string {
-	return `kb-${frontendSessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 function toModelInfo(model: PiModel): ModelInfo {
@@ -613,12 +556,16 @@ function hasUsage(usage: AgentUsage): boolean {
 const workspaceExplorationGuidance = `## Workspace exploration
 - The current working directory is the workspace selected by the user.
 - For questions about code in the workspace, inspect it autonomously with ls, find, grep, and read before answering.
+- Prioritize implementation source files, symbol definitions and call sites, nearby tests, runtime configuration, and project documentation that directly explain the code in question.
+- Treat agent skill files, CI/workflow definitions, generated output, vendored dependencies, and repository administration files as secondary. Read or cite them only when the question is specifically about those files or they materially affect the implementation being explained.
 - Start with directory discovery when the user does not provide exact file paths. Do not claim that file paths are required unless workspace discovery tools have actually failed.
 - Read-only tools may be used freely for analysis. Modify files only when edit, write, or bash tools are available and the user requested a change.`;
 
 const sourceRetrievalGuidance = `## Attached sources
 - search_sources and read_source access repositories and documentation attached to this workspace but outside the current working directory.
 - Use them when the question refers to an attached source, when supplied source matches are insufficient, or when comparing the workspace with external implementations.
+- Search with discriminative symbol names, exact identifiers, and relevant paths. Prefer implementation code and project documentation over incidental matches in skill instructions, CI files, generated files, or repository metadata.
+- A search hit is only a candidate, not evidence. Read the relevant range and verify that it directly supports the claim before relying on or citing it.
 - Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
 
 const responsePresentationGuidance = `## Response presentation

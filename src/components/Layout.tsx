@@ -1,8 +1,10 @@
 import clsx from "clsx";
-import { Clock3, Database, FileCode2, PanelLeftClose, PanelLeftOpen, Settings, Sparkles } from "lucide-react";
+import { Clock3, Database, FileCode2, PanelLeftClose, PanelLeftOpen, Search, Settings, Sparkles } from "lucide-react";
 import type React from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAppStore } from "../store";
+import { GlobalSearch } from "./GlobalSearch";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
 import { SessionTree } from "./SessionTree";
 
@@ -13,6 +15,16 @@ const Layout: React.FC = () => {
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
 	const sidebarSize = usePanelSize("knowbranch-layout-sidebar-width", 260, 200, sidebarMax);
 	const sidebarWidth = Math.min(sidebarSize.value, sidebarMax);
+	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+	useEffect(() => {
+		const openSearch = (event: KeyboardEvent) => {
+			if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLocaleLowerCase() !== "f") return;
+			event.preventDefault();
+			setGlobalSearchOpen(true);
+		};
+		window.addEventListener("keydown", openSearch);
+		return () => window.removeEventListener("keydown", openSearch);
+	}, []);
 	return (
 		<div className="app-shell">
 			<aside
@@ -22,7 +34,8 @@ const Layout: React.FC = () => {
 				<div className="app-sidebar-brand">
 					<div className="brand-mark"><Sparkles size={15} /></div>
 					<span>Rhyza</span>
-					<button type="button" className="sidebar-icon-button ml-auto" onClick={toggleSidebar} title="Close sidebar" aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
+					<button type="button" className="sidebar-icon-button ml-auto" onClick={() => setGlobalSearchOpen(true)} title="Search chats (Ctrl+Shift+F)" aria-label="Search all chats"><Search size={16} /></button>
+					<button type="button" className="sidebar-icon-button" onClick={toggleSidebar} title="Close sidebar" aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
 				</div>
 				<nav className="app-nav" aria-label="Workspace navigation">
 					<NavItem to="/knowledge" icon={<Database size={17} />} label="Knowledge" />
@@ -37,6 +50,7 @@ const Layout: React.FC = () => {
 			{sidebarOpen && <PanelResizeHandle side="left" label="Resize navigation sidebar" value={sidebarWidth} min={200} max={sidebarMax} defaultValue={260} onChange={sidebarSize.setValue} onCommit={sidebarSize.commit} />}
 			{!sidebarOpen && <button type="button" className="sidebar-reopen" onClick={toggleSidebar} title="Open sidebar" aria-label="Open sidebar"><PanelLeftOpen size={18} /></button>}
 			<main className="app-main"><Outlet /></main>
+			<GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
 		</div>
 	);
 };

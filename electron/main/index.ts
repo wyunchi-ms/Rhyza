@@ -22,6 +22,7 @@ import {
 	validateKnowledgeExtractionRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
+	validateForkDebugDumpRequest,
 	type DiagnosticReport,
 } from "../../src/shared/ipc.js";
 import { AppStateStore } from "./app-state-store.js";
@@ -160,6 +161,18 @@ function registerIpcHandlers(): void {
 			return { ok: true as const };
 		}),
 	);
+	ipcMain.handle(ipcChannels.forkDebugDump, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateForkDebugDumpRequest(payload);
+			const workspacePath = await settingsStore.requireWorkspacePath();
+			const dumpDirectory = path.join(workspacePath, ".rhyza-debug", "fork-dumps");
+			const fileName = `${safeDebugFilePart(request.timestamp)}-${request.kind}-${safeDebugFilePart(request.selectedTurnId)}.json`;
+			const filePath = path.join(dumpDirectory, fileName);
+			await mkdir(dumpDirectory, { recursive: true });
+			await writeFile(filePath, `${JSON.stringify(request.snapshot, null, 2)}\n`, "utf8");
+			return { ok: true as const, path: filePath };
+		}),
+	);
 	ipcMain.handle(ipcChannels.providerStatus, async (event, payload) =>
 		withValidSender(event, () =>
 			piService.getProviderStatus(validateProviderStatusRequest(payload).providerId),
@@ -292,6 +305,10 @@ function isAllowedRendererUrl(url: string): boolean {
 	return [...allowedRendererUrls].some(
 		(allowedUrl) => url === allowedUrl || url.startsWith(`${allowedUrl}#`),
 	);
+}
+
+function safeDebugFilePart(value: string): string {
+	return value.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 100) || "unknown";
 }
 
 app.whenReady().then(async () => {

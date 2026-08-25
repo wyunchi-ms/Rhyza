@@ -23,6 +23,7 @@ const ipcChannels = {
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
 	diagnosticReport: "knowbranch:diagnostic-report",
+	forkDebugDump: "knowbranch:fork-debug-dump",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
 };
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld("knowbranch", {
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
+	forkDebugDump: (request) => ipcRenderer.invoke(ipcChannels.forkDebugDump, request),
 	onAuthEvent: (listener) => {
 		const wrapped = (_event, payload) => listener(payload);
 		ipcRenderer.on(ipcChannels.authEvent, wrapped);

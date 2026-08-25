@@ -21,6 +21,7 @@ export const ipcChannels = {
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
 	diagnosticReport: "knowbranch:diagnostic-report",
+	forkDebugDump: "knowbranch:fork-debug-dump",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
 } as const;
@@ -229,6 +230,13 @@ export interface DiagnosticReport {
 	regionStalls: Record<string, number>;
 }
 
+export interface ForkDebugDumpRequest {
+	kind: "fork" | "selection-append";
+	timestamp: string;
+	selectedTurnId: string;
+	snapshot: unknown;
+}
+
 export type AuthBridgeEvent =
 	| { type: "info"; message: string; links?: { url: string; label?: string }[] }
 	| { type: "auth_url"; url: string; instructions?: string }
@@ -273,6 +281,7 @@ export interface KnowbranchBridge {
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
+	forkDebugDump(request: ForkDebugDumpRequest): Promise<{ ok: true; path: string }>;
 	onAuthEvent(listener: (event: AuthBridgeEvent) => void): () => void;
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;
 }
@@ -436,6 +445,19 @@ export function validateSourceSearchRequest(value: unknown): SourceSearchRequest
 		sourceId: typeof value.sourceId === "string" ? value.sourceId : undefined,
 		limit: typeof value.limit === "number" ? Math.max(1, Math.min(100, value.limit)) : 30,
 	};
+}
+
+export function validateForkDebugDumpRequest(value: unknown): ForkDebugDumpRequest {
+	if (
+		!isRecord(value)
+		|| (value.kind !== "fork" && value.kind !== "selection-append")
+		|| typeof value.timestamp !== "string"
+		|| typeof value.selectedTurnId !== "string"
+		|| !isRecord(value.snapshot)
+	) {
+		throw new Error("Invalid fork debug dump.");
+	}
+	return { kind: value.kind, timestamp: value.timestamp, selectedTurnId: value.selectedTurnId, snapshot: value.snapshot };
 }
 
 export function validateWorkspaceDiffRequest(value: unknown): WorkspaceDiffRequest {

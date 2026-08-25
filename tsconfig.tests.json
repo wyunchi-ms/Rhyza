@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    "tests/**/*.ts",
+    "src/types/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/utils/agentTranscript.ts",
+		"src/utils/sessionFork.ts",
+		"src/utils/forkDebug.ts",
+		"src/utils/sessionVisibility.ts",
+    "electron/main/pi-session-lineage.ts"
+  ]
+}

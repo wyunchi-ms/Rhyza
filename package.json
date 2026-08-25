@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
 		"dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
+	"test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",
     "electron:compile": "tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",
     "electron:dev": "npm run electron:compile && run-p dev electron:dev:main",
 		"electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5174 electron dist-electron/electron/main/index.js",

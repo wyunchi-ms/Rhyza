@@ -36,15 +36,13 @@ useAppStore.setState({
 		{ id: "turn-2", sessionId: "fork-root", role: "assistant", content: "Answer", status: "complete", createdAt: timestamp },
 	],
 });
-assert(useAppStore.getState().forkSession("turn-2") === null, "The latest turn must not be forkable.");
 const fork = useAppStore.getState().forkSession("turn-1");
 assert(Boolean(fork), "A historical turn should remain forkable.");
-assert(useAppStore.getState().sessions.find((session) => session.id === "fork-root")?.continuationTitlePending === true, "The original path must become a titled leaf.");
+assert(useAppStore.getState().sessions.filter((session) => session.parentId === "fork-root").length === 2, "The original and new continuations must be siblings below the fork point.");
+assert(useAppStore.getState().turns.filter((turn) => turn.sessionId === "fork-root").length === 1, "The fork-point session must end at the selected turn.");
 assert(useAppStore.getState().sessions.find((session) => session.id === fork?.forkSessionId)?.titlePending === true, "The new branch title must be marked for AI refresh.");
 useAppStore.getState().setSessionProgressStatus("fork-root", "complete");
-useAppStore.getState().setSessionProgressStatus("fork-root", "todo", true);
 assert(useAppStore.getState().sessions.find((session) => session.id === "fork-root")?.progressStatus === "complete", "A branch status must be stored on the session.");
-assert(useAppStore.getState().sessions.find((session) => session.id === "fork-root")?.continuationProgressStatus === "todo", "The original path must keep an independent status.");
 
 useAppStore.setState({
 	entities: [{ id: "entity", name: "Worktree", aliases: [], type: "Concept", summary: "Summary", content: "Content", confidence: "confirmed", sourceRefs: [], version: 1, updatedAt: timestamp }],
@@ -67,14 +65,13 @@ assert(Boolean(useAppStore.getState().diagrams[0]?.deletedAt), "Diagram was not 
 loadWorkspaceState(JSON.stringify({
 	version: 2,
 	state: {
-		sessions: [{ id: "interrupted-session", parentId: null, title: "Interrupted", titlePending: true, continuationTitlePending: true, isRoot: true, status: "running" }],
+		sessions: [{ id: "interrupted-session", parentId: null, title: "Interrupted", titlePending: true, isRoot: true, status: "running" }],
 		activeSessionId: "interrupted-session",
 		turns: [{ id: "interrupted-turn", sessionId: "interrupted-session", role: "assistant", content: "Partial", status: "running", createdAt: timestamp, tools: [{ id: "tool", name: "read", target: "src/app.ts", status: "running", startedAt: timestamp }] }],
 	},
 }));
 assert(useAppStore.getState().sessions[0]?.status === "interrupted", "A stale running session must recover as interrupted.");
 assert(useAppStore.getState().sessions[0]?.titlePending === false, "Interrupted title generation must stop showing as pending.");
-assert(useAppStore.getState().sessions[0]?.continuationTitlePending === false, "Interrupted continuation title generation must stop showing as pending.");
 assert(useAppStore.getState().turns[0]?.status === "interrupted", "A stale running turn must recover as interrupted.");
 assert(useAppStore.getState().turns[0]?.tools?.[0]?.status === "error", "A running tool must recover as interrupted instead of staying active.");
 

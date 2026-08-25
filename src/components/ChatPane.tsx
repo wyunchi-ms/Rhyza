@@ -13,9 +13,15 @@ import { requestScheduler } from "../utils/requestScheduler";
 import { useKnowledgePreview } from "../hooks/useKnowledgePreview";
 import { createId, summarize, withTimeout } from "../utils/common";
 import { buildKnowledgeContext, isRecord, summarizeToolTarget } from "../utils/knowledgeContext";
+import { buildPriorAgentTranscript } from "../utils/agentTranscript";
+import { buildTurnSessionMap, sessionAtViewportAnchor } from "../utils/sessionVisibility";
+import { selectionContinuationTarget } from "../utils/sessionFork";
+import { createSelectionAppendDebugSnapshot, forkDebugEventName, type ForkDebugEventDetail } from "../utils/forkDebug";
+import { failRunningTurnActivities, finishTurnActivity, startTurnActivity } from "../utils/turnActivity";
 import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
 import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionAskPopover";
 import { ChatComposer, type ComposerImage } from "./chat/ChatComposer";
+import { ConversationFind } from "./chat/ConversationFind";
 import { TurnMessage } from "./chat/TurnMessage";
 import { TurnNavigator } from "./TurnNavigator";
 
@@ -26,6 +32,7 @@ export const ChatPane: React.FC = () => {
 	const [input, setInput] = useState("");
 	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
+	const [forkDebugStatus, setForkDebugStatus] = useState<ForkDebugEventDetail | null>(null);
 	const [images, setImages] = useState<ComposerImage[]>([]);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
 	const [keyboardTurnId, setKeyboardTurnId] = useState<string | null>(null);
@@ -36,10 +43,48 @@ export const ChatPane: React.FC = () => {
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
 	const { preview: knowledgePreview, openEntityById: openEntityPreview, openDiagramById: openDiagramPreview, closePreview } = useKnowledgePreview(store.entities, store.diagrams);
 	useEffect(() => { requestScheduler.setLimit(store.settings.maxConcurrentRequests); }, [store.settings.maxConcurrentRequests]);
+	useEffect(() => {
+		const onForkDebug = (event: Event) => setForkDebugStatus((event as CustomEvent<ForkDebugEventDetail>).detail);
+		window.addEventListener(forkDebugEventName, onForkDebug);
+		return () => window.removeEventListener(forkDebugEventName, onForkDebug);
+	}, []);
 	const sessionTurns = useMemo(
 		() => store.turns.filter((turn) => turn.sessionId === activeSessionId),
 		[store.turns, activeSessionId],
 	);
+	const turnSessionMap = useMemo(() => buildTurnSessionMap(store.turns), [store.turns]);
+
+	useEffect(() => {
+		useAppStore.getState().setVisibleSession(activeSessionId);
+	}, [activeSessionId]);
+
+	useEffect(() => {
+		const container = scrollContainerRef.current;
+		if (!container) return;
+		let frame = 0;
+		const updateVisibleSession = () => {
+			frame = 0;
+			const viewport = container.getBoundingClientRect();
+			const boxes = [...container.querySelectorAll<HTMLElement>("[data-session-node-id]")].map((element) => {
+				const bounds = element.getBoundingClientRect();
+				return { sessionId: element.dataset.sessionNodeId ?? "", top: bounds.top, bottom: bounds.bottom };
+			}).filter((item) => item.sessionId);
+			const sessionId = sessionAtViewportAnchor(boxes, viewport.top, viewport.bottom);
+			if (sessionId && useAppStore.getState().visibleSessionId !== sessionId) {
+				useAppStore.getState().setVisibleSession(sessionId);
+			}
+		};
+		const scheduleUpdate = () => {
+			if (!frame) frame = window.requestAnimationFrame(updateVisibleSession);
+		};
+		container.addEventListener("scroll", scheduleUpdate, { passive: true });
+		const initialFrame = window.requestAnimationFrame(updateVisibleSession);
+		return () => {
+			container.removeEventListener("scroll", scheduleUpdate);
+			window.cancelAnimationFrame(initialFrame);
+			if (frame) window.cancelAnimationFrame(frame);
+		};
+	}, [activeSessionId, sessionTurns.length, turnSessionMap]);
 	const moveKeyboardTurn = (direction: -1 | 1) => {
 		if (sessionTurns.length === 0) return;
 		const currentIndex = keyboardTurnId ? sessionTurns.findIndex((turn) => turn.id === keyboardTurnId) : direction < 0 ? sessionTurns.length : -1;
@@ -66,10 +111,31 @@ export const ChatPane: React.FC = () => {
 	useEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
 			const container = scrollContainerRef.current;
-			if (container) container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+			const pendingTurnId = window.sessionStorage.getItem("rhyza-focus-turn");
+			const pendingTurn = pendingTurnId ? document.getElementById(`turn-${pendingTurnId}`) : null;
+			if (pendingTurn) {
+				pendingTurn.scrollIntoView({ behavior: "smooth", block: "center" });
+				window.sessionStorage.removeItem("rhyza-focus-turn");
+			} else if (container) {
+				container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+			}
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [activeSessionId]);
+
+	useEffect(() => {
+		const focusTurn = (event: Event) => {
+			const turnId = (event as CustomEvent<{ turnId?: string }>).detail?.turnId;
+			if (!turnId) return;
+			const turn = document.getElementById(`turn-${turnId}`);
+			if (!turn) return;
+			turn.scrollIntoView({ behavior: "smooth", block: "center" });
+			setKeyboardTurnId(turnId);
+			window.sessionStorage.removeItem("rhyza-focus-turn");
+		};
+		window.addEventListener("rhyza:focus-turn", focusTurn);
+		return () => window.removeEventListener("rhyza:focus-turn", focusTurn);
+	}, []);
 
 	useEffect(() => {
 		const bridge = getKnowbranchBridge();
@@ -155,6 +221,7 @@ export const ChatPane: React.FC = () => {
 			content: "",
 			status: "retrieving",
 			summary: "Retrieving workspace context",
+			activities: startTurnActivity(undefined, "retrieval", "Retrieving workspace context", now),
 			createdAt: now,
 		});
 		store.setSessionStatus(targetSessionId, "running");
@@ -173,31 +240,35 @@ export const ChatPane: React.FC = () => {
 				"Title generation",
 			).catch((): SummaryResponse => ({ error: "Title generation timed out." }));
 			const sourceHits = await bridge.sourceSearch({ query: agentPrompt, limit: 8 });
-			const targetTurns = useAppStore.getState().turns.filter((turn) => turn.sessionId === targetSessionId && turn.id !== userTurnId && turn.id !== assistantTurnId);
+			const retrievedTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+			store.updateTurn(assistantTurnId, {
+				activities: startTurnActivity(
+					finishTurnActivity(retrievedTurn?.activities, "retrieval", "complete", `${sourceHits.length} source match${sourceHits.length === 1 ? "" : "es"}`),
+					"agent",
+					"Generating response",
+				),
+			});
+			const currentTurns = useAppStore.getState().turns;
+			const transcript = buildPriorAgentTranscript(currentTurns, targetSessionId, [userTurnId, assistantTurnId]);
 			const knowledgeContext = buildKnowledgeContext(agentPrompt, useAppStore.getState().entities, useAppStore.getState().relations, useAppStore.getState().diagrams, sourceHits);
 			store.updateTurn(assistantTurnId, { status: "running", summary: "Pi agent is running" });
 			const targetSession = useAppStore.getState().sessions.find((session) => session.id === targetSessionId);
 			streamingTurnIds.current.set(targetSessionId, assistantTurnId);
-			const transcript = [...targetTurns, {
-				id: userTurnId,
-				sessionId: targetSessionId,
-				role: "user" as const,
-				content: prompt,
-				status: "complete" as const,
-				summary: summarize(prompt),
-				createdAt: now,
-			}];
 			const result = await bridge.agentPrompt({
 				frontendSessionId: targetSessionId,
 				parentFrontendSessionId: targetSession?.parentId ?? undefined,
 				forkedFromTurnId: targetSession?.forkedFromTurnId,
-				transcript: transcript.map((turn) => ({ id: turn.id, role: turn.role, content: turn.content, images: turn.images })),
+				transcript,
 				prompt: agentPrompt,
 				images: promptImages,
 				knowledgeContext,
 				thinkingLevel: store.settings.thinkingLevel,
 				model: selectedModel,
 				writable: true,
+			});
+			const agentTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+			store.updateTurn(assistantTurnId, {
+				activities: finishTurnActivity(agentTurn?.activities, "agent", result.ok ? "complete" : "error", result.ok ? undefined : result.error),
 			});
 			if (result.usage) store.updateTurn(assistantTurnId, { usage: result.usage });
 			if (!result.ok) throw new Error(result.error || "Pi SDK request failed.");
@@ -209,7 +280,12 @@ export const ChatPane: React.FC = () => {
 				status: "finalizing",
 				summary: summarize(response),
 			});
-			const extraction = store.settings.autoExtract && store.settings.knowledgeMode !== "read_only"
+			const shouldExtractKnowledge = store.settings.autoExtract && store.settings.knowledgeMode !== "read_only";
+			if (shouldExtractKnowledge) {
+				const currentTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+				store.updateTurn(assistantTurnId, { activities: startTurnActivity(currentTurn?.activities, "knowledge", "Updating workspace knowledge") });
+			}
+			const extraction = shouldExtractKnowledge
 				? await withTimeout(bridge.extractKnowledge({
 					question: agentPrompt,
 					answer: response,
@@ -227,6 +303,18 @@ export const ChatPane: React.FC = () => {
 					error: error instanceof Error ? error.message : String(error),
 				}))
 				: { entities: [], relations: [], diagrams: [], usage: undefined };
+			if (shouldExtractKnowledge) {
+				const currentTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+				const extractedCount = extraction.entities.length + extraction.relations.length + extraction.diagrams.length;
+				store.updateTurn(assistantTurnId, {
+					activities: finishTurnActivity(
+						currentTurn?.activities,
+						"knowledge",
+						extraction.error ? "error" : "complete",
+						extraction.error ?? `${extractedCount} knowledge candidate${extractedCount === 1 ? "" : "s"}`,
+					),
+				});
+			}
 			store.addTurnUsage(assistantTurnId, extraction.usage);
 			const currentSources = useAppStore.getState().sources;
 			const prefetchedSourceRefs = sourceHits.map((hit) => {
@@ -240,9 +328,7 @@ export const ChatPane: React.FC = () => {
 			if (generatedSummary.summary) {
 				store.updateTurn(userTurnId, { summary: generatedSummary.summary });
 				const session = useAppStore.getState().sessions.find((item) => item.id === targetSessionId);
-				if (session?.continuationTitlePending) {
-					store.renameContinuation(targetSessionId, generatedSummary.summary);
-				} else if (session?.title === "New session" || session?.titlePending || session?.refreshTitleOnNextPrompt) {
+				if (session?.title === "New session" || session?.titlePending || session?.refreshTitleOnNextPrompt) {
 					store.renameSession(targetSessionId, generatedSummary.summary);
 				}
 			}
@@ -250,11 +336,13 @@ export const ChatPane: React.FC = () => {
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			const failedTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
 			store.updateTurn(assistantTurnId, {
 				content: message,
 				status: "complete_with_unsynced_knowledge",
 				summary: "Request failed",
 				completedAt: new Date().toISOString(),
+				activities: failRunningTurnActivities(failedTurn?.activities, message),
 			});
 			store.setSessionStatus(targetSessionId, "error");
 			setSendError(message);
@@ -285,16 +373,47 @@ export const ChatPane: React.FC = () => {
 			bridge.generateSummary({ text: forkText, model }),
 		]);
 		const current = useAppStore.getState();
-		current.addSessionTitleUsage(result.originalSessionId, originalTitle.usage, true);
-		current.addSessionTitleUsage(result.forkSessionId, forkTitle.usage);
-		current.renameContinuation(result.originalSessionId, originalTitle.summary ?? "Original path");
+		if (result.originalSessionId !== result.branchPointSessionId) {
+			current.addSessionTitleUsage(result.originalSessionId, originalTitle.usage);
+		}
+		current.addSessionTitleUsage(result.branchPointSessionId, forkTitle.usage);
+		const originalSession = current.sessions.find((session) => session.id === result.originalSessionId);
+		if (result.originalSessionId !== result.branchPointSessionId) {
+			current.renameSession(result.originalSessionId, originalTitle.summary ?? originalSession?.title ?? "Conversation");
+		}
+		const branchPoint = current.sessions.find((session) => session.id === result.branchPointSessionId);
+		current.renameSession(result.branchPointSessionId, forkTitle.summary ?? branchPoint?.title ?? "Conversation");
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
 	};
 
 	const sendSelectionQuestion = (question: string, selected = selection) => {
 		if (!selected || !question.trim()) return;
-		const result = store.forkSession(selected.turnId);
-		if (!result) return;
+		const current = useAppStore.getState();
+		const target = selectionContinuationTarget(current, selected.turnId);
+		if (!target) {
+			setSendError("This passage could not be mapped to a conversation node.");
+			return;
+		}
+		if (target.mode === "append") {
+			const snapshot = createSelectionAppendDebugSnapshot(current, selected.turnId, target);
+			const dumpWriter = getKnowbranchBridge()?.forkDebugDump;
+			if (typeof dumpWriter === "function") {
+				void dumpWriter({ kind: "selection-append", timestamp: snapshot.timestamp, selectedTurnId: selected.turnId, snapshot }).then(
+					(response) => setForkDebugStatus({ ok: true, message: `No fork was created (leaf node). Decision dump: ${response.path}` }),
+					(error: unknown) => setForkDebugStatus({ ok: false, message: `Selection dump failed: ${error instanceof Error ? error.message : String(error)}` }),
+				);
+			} else {
+				setForkDebugStatus({ ok: false, message: "Selection dump unavailable. Restart Electron to load the updated preload bridge." });
+			}
+			setSelection(null);
+			void handleSend({ sessionId: target.sessionId, selectedText: selected.text, quotedTurnId: selected.turnId, question });
+			return;
+		}
+		const result = current.forkSession(selected.turnId);
+		if (!result) {
+			setSendError("The selected conversation point could not be forked.");
+			return;
+		}
 		setSelection(null);
 		void handleSend({ sessionId: result.forkSessionId, selectedText: selected.text, quotedTurnId: selected.turnId, question });
 	};
@@ -329,6 +448,7 @@ export const ChatPane: React.FC = () => {
 
 	return (
 		<div className="chat-pane">
+			<ConversationFind turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
 			<header className="chat-topbar">
 				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1><span>{store.settings.defaultModel || "GitHub Copilot"}</span></div>
 				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && "is-active")} onClick={store.toggleRightPane} title="Toggle knowledge panel" aria-label="Toggle knowledge panel"><PanelRight size={17} /></button>
@@ -348,6 +468,7 @@ export const ChatPane: React.FC = () => {
 					<TurnMessage
 						key={turn.id}
 						turn={turn}
+						sessionNodeId={turnSessionMap.get(turn.id) ?? turn.sessionId}
 						isKeyboardActive={turn.id === keyboardTurnId}
 						entities={store.entities}
 						relations={store.relations}
@@ -368,6 +489,7 @@ export const ChatPane: React.FC = () => {
 			</div>
 			{selection && <SelectionAskPopover selection={selection} onAsk={sendSelectionQuestion} onClose={() => setSelection(null)} />}
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
+			{forkDebugStatus && <div className={clsx("fork-debug-status", !forkDebugStatus.ok && "is-error")} role="status">{forkDebugStatus.message}</div>}
 			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} isSending={isSending} error={sendError} runtimeCaption={isElectronRuntime() ? `Pi SDK / GitHub Copilot${store.settings.defaultModel ? ` / ${store.settings.defaultModel}` : ""}` : "Electron runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
 			{knowledgePreview && <KnowledgePreviewDialog preview={knowledgePreview} onClose={closePreview} />}
 		</div>
