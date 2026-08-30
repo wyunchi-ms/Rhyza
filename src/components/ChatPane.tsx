@@ -263,6 +263,7 @@ export const ChatPane: React.FC = () => {
 				images: promptImages,
 				knowledgeContext,
 				thinkingLevel: store.settings.thinkingLevel,
+				diagramMode: store.settings.diagramRenderer,
 				model: selectedModel,
 				writable: true,
 			});

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Accessibility, Brain, Cloud, Copy, ExternalLink, Settings2 } from "lucide-react";
+import { Accessibility, Brain, Cloud, Copy, ExternalLink, Moon, Network, Palette, Settings2, Sun } from "lucide-react";
 import type React from "react";
 import {
 	githubCopilotProviderId,
@@ -8,6 +8,7 @@ import {
 } from "../hooks/useKnowbranchBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
+import archifyVendor from "../../resources/skills/archify/RHYZA_VENDOR.json";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
@@ -64,6 +65,28 @@ const Settings: React.FC = () => {
 			</div>
 
 			<div className="settings-sections">
+				<section>
+					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+						<Palette size={16} /> Appearance
+					</h2>
+					<fieldset className="theme-settings border border-gray-200 rounded-2xl p-6 bg-white shadow-sm">
+						<legend className="sr-only">App theme</legend>
+						<div className="theme-options">
+							<label className={clsx(settings.theme === "light" && "is-selected")}>
+								<input type="radio" name="app-theme" value="light" checked={settings.theme === "light"} onChange={() => updateSettings({ theme: "light" })} />
+								<Sun size={18} aria-hidden="true" />
+								<span><strong>Light</strong><small>Bright surfaces and dark text</small></span>
+							</label>
+							<label className={clsx(settings.theme === "dark" && "is-selected")}>
+								<input type="radio" name="app-theme" value="dark" checked={settings.theme === "dark"} onChange={() => updateSettings({ theme: "dark" })} />
+								<Moon size={18} aria-hidden="true" />
+								<span><strong>Dark</strong><small>Dim surfaces for low-light use</small></span>
+							</label>
+						</div>
+						<p className="text-xs text-secondary mt-4">Interactive diagrams follow the app theme automatically.</p>
+					</fieldset>
+				</section>
+
 				<section>
 					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
 						<Cloud size={16} /> AI Provider
@@ -141,6 +164,27 @@ const Settings: React.FC = () => {
 							</select>
 						</div>
 					</div>
+				</section>
+
+				<section>
+					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+						<Network size={16} /> Diagrams
+					</h2>
+					<fieldset className="diagram-renderer-settings border border-gray-200 rounded-2xl p-6 bg-white shadow-sm">
+						<legend className="sr-only">Diagram renderer</legend>
+						<div className="diagram-renderer-options">
+							<label className={clsx(settings.diagramRenderer === "archify" && "is-selected")}>
+								<input type="radio" name="diagram-renderer" value="archify" checked={settings.diagramRenderer === "archify"} onChange={() => updateSettings({ diagramRenderer: "archify" })} />
+								<span><strong>Archify <b className="diagram-renderer-version">v{archifyVendor.version}</b></strong><small>Interactive · showcase quality · more time and tokens · schema v{archifyVendor.schemaVersion}</small></span>
+								<em>Default</em>
+							</label>
+							<label className={clsx(settings.diagramRenderer === "mermaid" && "is-selected")}>
+								<input type="radio" name="diagram-renderer" value="mermaid" checked={settings.diagramRenderer === "mermaid"} onChange={() => updateSettings({ diagramRenderer: "mermaid" })} />
+								<span><strong>Mermaid</strong><small>Fast · compact · original diagram flow</small></span>
+							</label>
+						</div>
+						<p className="text-xs text-secondary mt-4">Archify failures still fall back to a Mermaid view generated from the same topology.</p>
+					</fieldset>
 				</section>
 
 				<section>

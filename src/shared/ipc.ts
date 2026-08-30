@@ -17,6 +17,7 @@ export const ipcChannels = {
 	agentPrompt: "knowbranch:agent-prompt",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
+	renderArchify: "knowbranch:render-archify",
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
@@ -117,6 +118,7 @@ export interface AgentPromptRequest {
 		modelId: string;
 	};
 	writable?: boolean;
+	diagramMode?: "archify" | "mermaid";
 }
 
 export interface AgentPromptImage {
@@ -189,9 +191,11 @@ export interface KnowledgeRelationCandidate {
 
 export interface KnowledgeDiagramCandidate {
 	name: string;
-	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency";
+	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency" | "workflow" | "dataflow" | "lifecycle";
 	existingDiagramId?: string;
 	mermaidSource: string;
+	archifySource?: string;
+	archifyType?: "architecture" | "workflow" | "sequence" | "dataflow" | "lifecycle";
 	nodes: Array<{ key: string; label: string; type?: string }>;
 	edges: Array<{ sourceKey: string; targetKey: string; label?: string }>;
 }
@@ -210,6 +214,15 @@ export interface KnowledgeExtractionResponse {
 	diagrams: KnowledgeDiagramCandidate[];
 	error?: string;
 	usage?: AgentUsage;
+}
+
+export interface ArchifyRenderRequest { source: string }
+export interface ArchifyRenderResponse {
+	ok: boolean;
+	html?: string;
+	error?: string;
+	diagnostics?: unknown[];
+	fallbackMermaid?: string;
 }
 
 export interface OpenExternalRequest { url: string }
@@ -277,6 +290,7 @@ export interface KnowbranchBridge {
 	agentPrompt(request: AgentPromptRequest): Promise<AgentPromptResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
 	extractKnowledge(request: KnowledgeExtractionRequest): Promise<KnowledgeExtractionResponse>;
+	renderArchify(request: ArchifyRenderRequest): Promise<ArchifyRenderResponse>;
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
@@ -372,7 +386,18 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		};
 	}
 	request.writable = value.writable === true;
+	if (value.diagramMode === "archify" || value.diagramMode === "mermaid") {
+		request.diagramMode = value.diagramMode;
+	}
 	return request;
+}
+
+export function validateArchifyRenderRequest(value: unknown): ArchifyRenderRequest {
+	if (!isRecord(value) || typeof value.source !== "string" || !value.source.trim()) {
+		throw new Error("Archify source is required.");
+	}
+	if (value.source.length > 1_000_000) throw new Error("Archify source exceeds the 1 MB limit.");
+	return { source: value.source };
 }
 
 export function validateAppStateSaveRequest(value: unknown): AppStateSaveRequest {
@@ -397,7 +422,7 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 	}
 	const request: KnowledgeExtractionRequest = {
 		question: value.question.slice(0, 8_000),
-		answer: value.answer.slice(0, 24_000),
+		answer: value.answer.slice(0, 100_000),
 		existingEntities: value.existingEntities.slice(0, 200).flatMap((entity) =>
 			isRecord(entity) && typeof entity.id === "string" && typeof entity.name === "string" && typeof entity.summary === "string"
 				? [{

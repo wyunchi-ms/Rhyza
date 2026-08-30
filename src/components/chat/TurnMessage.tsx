@@ -10,6 +10,8 @@ import { usageTokens } from "../../utils/branchUsage";
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { MermaidDiagram } from "../MermaidDiagram";
+import { ArchifyDiagram } from "../ArchifyDiagram";
+import { isArchifyCodeBlock } from "../../shared/archify";
 
 export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
 	turn: Turn;
@@ -209,6 +211,9 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 				const source = rawSource.replace(/\n$/, "");
 				if (!compact && isMermaidCodeBlock(className, source)) {
 					return <MermaidDiagram source={source} />;
+				}
+				if (!compact && isArchifyCodeBlock(className)) {
+					return <ArchifyDiagram source={source} />;
 				}
 				const isBlock = Boolean(className) || rawSource.includes("\n");
 				return isBlock

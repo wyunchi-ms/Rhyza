@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Changes from "./pages/Changes";
@@ -14,7 +14,9 @@ import { startPerformanceDiagnostics } from "./utils/performanceDiagnostics";
 const App: React.FC = () => {
 	const appearance = useAppStore((state) => state.settings);
 	useKnowledgeReconciliation();
-	useEffect(() => {
+	useLayoutEffect(() => {
+		document.documentElement.dataset.theme = appearance.theme;
+		document.documentElement.style.colorScheme = appearance.theme;
 		document.documentElement.style.fontSize = `${appearance.fontScale * 100}%`;
 		document.documentElement.classList.toggle("reduce-motion", appearance.reduceMotion);
 		document.documentElement.classList.toggle("high-contrast", appearance.highContrast);

@@ -4,11 +4,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DiagramViewer } from "../components/DiagramViewer";
 import { MermaidDiagram } from "../components/MermaidDiagram";
+import { ArchifyDiagram } from "../components/ArchifyDiagram";
 import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
 import { withTimeout } from "../utils/common";
+import { isArchifyCodeBlock } from "../shared/archify";
 
 const Knowledge = () => {
 	const store = useAppStore();
@@ -96,7 +98,7 @@ function EntityPreview({ entity, onEdit }: { entity: Entity; onEdit: () => void 
 }
 
 function MarkdownPreview({ content }: { content: string }) {
-	return <div className="entity-markdown-preview-body markdown-body">{content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: ({ className, children, ...props }) => { const source = String(children).replace(/\n$/, ""); return isMermaidCodeBlock(className, source) ? <MermaidDiagram source={source} /> : className || source.includes("\n") ? <pre><code className={className} {...props}>{children}</code></pre> : <code className={className} {...props}>{children}</code>; } }}>{content}</ReactMarkdown> : <p className="text-secondary">Add content to start this entity note.</p>}</div>;
+	return <div className="entity-markdown-preview-body markdown-body">{content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: ({ className, children, ...props }) => { const source = String(children).replace(/\n$/, ""); return isMermaidCodeBlock(className, source) ? <MermaidDiagram source={source} /> : isArchifyCodeBlock(className) ? <ArchifyDiagram source={source} /> : className || source.includes("\n") ? <pre><code className={className} {...props}>{children}</code></pre> : <code className={className} {...props}>{children}</code>; } }}>{content}</ReactMarkdown> : <p className="text-secondary">Add content to start this entity note.</p>}</div>;
 }
 
 function EntityCenterEditor({ draft, onDraftChange, onSave, onCancel }: { draft: Entity; onDraftChange: (draft: Entity) => void; onSave: () => void; onCancel: () => void }) {
@@ -267,7 +269,7 @@ function DiagramEditor({ diagram, entities, onOpenEntity, onDeleted }: { diagram
 	return <form className="p-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.mermaidSource.trim()) saveDiagram(draft); }}>
 		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">Diagram</span><h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2></div><button type="button" title="Archive diagram" className="secondary-button shrink-0 text-red-600" onClick={() => { if (window.confirm(`Archive diagram “${diagram.name}”?`)) { softDeleteDiagram(diagram.id); onDeleted(); } }}><Trash2 size={14} /> Archive</button></div>
 		<label className="form-label">Name<input className="field mt-1" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-		<label className="form-label">Type<select className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}><option value="architecture">Architecture</option><option value="structure">Structure</option><option value="flowchart">Flowchart</option><option value="sequence">Sequence</option><option value="swimlane">Swimlane</option><option value="dependency">Dependency</option></select></label>
+		<label className="form-label">Type<select className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}><option value="architecture">Architecture</option><option value="workflow">Workflow</option><option value="dataflow">Data flow</option><option value="lifecycle">Lifecycle</option><option value="structure">Structure</option><option value="flowchart">Flowchart</option><option value="sequence">Sequence</option><option value="swimlane">Swimlane</option><option value="dependency">Dependency</option></select></label>
 		<section aria-labelledby="diagram-linked-heading">
 			<div className="entity-section-heading">
 				<h3 id="diagram-linked-heading" className="form-label">Connected entities</h3>
@@ -294,9 +296,11 @@ function DiagramEditor({ diagram, entities, onOpenEntity, onDeleted }: { diagram
 				<div className="entity-relation-form-actions"><button type="button" className="secondary-button" onClick={() => setEntityLinkForm(null)}>Cancel</button><button type="button" className="command-button" disabled={!entityLinkForm.nodeId || !entityLinkForm.entityId} onClick={saveEntityLink}>{entityLinkForm.editing ? "Save changes" : "Connect entity"}</button></div>
 			</div>}
 		</section>
-		<label className="form-label">Mermaid source<textarea required spellCheck={false} className="field mt-1 min-h-52 font-mono text-xs" value={draft.mermaidSource} onChange={(event) => setDraft({ ...draft, mermaidSource: event.target.value })} /></label>
+		{draft.archifySource
+			? <><label className="form-label">Archify JSON source<textarea required spellCheck={false} className="field mt-1 min-h-52 font-mono text-xs" value={draft.archifySource} onChange={(event) => setDraft({ ...draft, archifySource: event.target.value })} /></label><details><summary className="text-xs text-secondary cursor-pointer">Mermaid fallback</summary><textarea readOnly spellCheck={false} className="field mt-2 min-h-36 font-mono text-xs" value={draft.mermaidSource} /></details></>
+			: <label className="form-label">Mermaid source<textarea required spellCheck={false} className="field mt-1 min-h-52 font-mono text-xs" value={draft.mermaidSource} onChange={(event) => setDraft({ ...draft, mermaidSource: event.target.value })} /></label>}
 		<p className="text-xs text-secondary">{draft.nodes.length} indexed nodes · {draft.edges.length} indexed edges</p>
-		<button type="submit" className="command-button w-full justify-center" disabled={!draft.mermaidSource.trim()}>Save Mermaid diagram</button>
+		<button type="submit" className="command-button w-full justify-center" disabled={draft.archifySource ? !draft.archifySource.trim() : !draft.mermaidSource.trim()}>Save {draft.archifySource ? "Archify" : "Mermaid"} diagram</button>
 	</form>;
 }
 

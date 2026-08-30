@@ -83,6 +83,7 @@ function diagnosticRegion(target: EventTarget | null): string {
 	if (!(target instanceof Element)) return "unknown";
 	for (const [selector, name] of [
 		[".mermaid-diagram", "diagram"],
+		[".archify-diagram", "interactive-diagram"],
 		[".chat-scroll", "chat"],
 		[".chat-composer", "composer"],
 		[".app-sidebar", "sidebar"],

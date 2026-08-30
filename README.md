@@ -3,7 +3,7 @@
 > An AI-native workspace for connected knowledge work.
 > Turn questions into working knowledge.
 
-Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存不断分叉的问题路径，并把对话中值得复用的 Entity、Relation 和 Mermaid Diagram 沉淀到 Workspace 级知识库中。
+Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存不断分叉的问题路径，并把对话中值得复用的 Entity、Relation 和 Diagram 沉淀到 Workspace 级知识库中。
 
 当前仓库是 mini hackathon MVP，主要面向 Windows 开发和验证。
 
@@ -13,7 +13,8 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 - 从历史中间 Turn 继续，保留原路径和新分支，并生成分支标题。
 - 为会话节点标记待处理、进行中、已完成或暂不处理。
 - 将本地代码、文档和其他文本目录添加为 Sources，供 Agent 搜索和读取。
-- 保守提取稳定 Entity、Relation 和 Mermaid Diagram，避免为每个术语创建知识对象。
+- 默认用 Archify 生成经过本地校验、可交互的 Diagram，并保存 JSON 源与 Mermaid fallback；也可切回原始 Mermaid 快速模式。
+- 保守提取稳定 Entity、Relation 和 Diagram，避免为每个术语创建知识对象。
 - 在 Agent 回复中链接已有 Entity 和 Diagram，并在右侧面板显示详情。
 - 查看、编辑、软删除和撤销知识变更。
 - 为 Git Workspace 创建隔离 Worktree，并查看 Diff 或导出 patch。
@@ -62,7 +63,7 @@ cd Rhyza
 npm ci
 ```
 
-`npm ci` 会安装 React、Electron、Pi SDK、Mermaid 等全部依赖。首次安装 Electron 时需要下载 Electron binary，耗时取决于网络环境。
+`npm ci` 会安装 React、Electron、Pi SDK、Mermaid 等全部依赖。Archify skill/runtime 已位于 `resources/skills/archify`，不需要另行安装或启动服务。首次安装 Electron 时需要下载 Electron binary，耗时取决于网络环境。
 
 如果使用 HTTPS：
 
@@ -157,7 +158,17 @@ Workspace 有两个作用：
 - **Thinking level**：控制模型推理强度；模型不支持某档位时可能由 Provider 降级或报错。
 - **Confidence threshold**：当前只保存 UI 配置，尚未接入 Finalizer 的过滤逻辑。
 
-### 4. 添加 Sources
+### 4. 选择 Diagram 模式
+
+进入 **Settings → Diagrams**，在两个绘图引擎中选择一个：
+
+- **Archify（默认）**：Pi/GPT 会加载随应用注册的 Archify skill，生成有类型的 JSON，并在 Electron 主进程中以 `showcase` 质量校验、编译为沙箱化的交互 HTML。这条路径会比 Mermaid 花更多时间、工具调用和 token。
+- **Mermaid**：后续回答使用原始 Mermaid 流程。已有 Archify Diagram 也会立即显示从同一拓扑本地生成的 Mermaid fallback。
+- Archify 的确定性校验或渲染失败时，当前 Diagram 自动降级为 Mermaid，并显示可展开的错误原因；模型生成的任意 HTML 不会直接进入 Renderer。
+
+Archify 的版本、宿主定制边界和升级流程见 [Archify integration and upgrades](docs/archify-integration.md)。
+
+### 5. 添加 Sources
 
 进入 **Sources → Add sources**，可一次选择一个或多个本地目录。Source 可以位于 Workspace 内，也可以是完全独立的目录。
 
@@ -188,6 +199,7 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `~/.pi-graph/workspaces/<hash>.json` | Session、Turn、Entity、Relation、Diagram、ChangeSet、设置和布局。 |
 | `~/.pi-graph/sources/<hash>.json` | 对应 Workspace 的 Source Catalog 和文件清单。 |
 | `~/.pi-graph/worktrees/` | Rhyza 创建的 Git Worktree。 |
+| `~/.pi-graph/diagnostics/performance-YYYY-MM-DD.jsonl` | UI、主进程操作和 Archify 分阶段结构化诊断日志。 |
 | `~/.pi/agent/auth.json` | Pi Provider 凭据，包括 GitHub Copilot OAuth Token。 |
 | `~/.pi/agent/models-store.json` | Pi 动态模型目录缓存。 |
 
@@ -206,6 +218,8 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `npm run smoke:ipc` | 验证 IPC payload 和安全边界。 |
 | `npm run smoke:mvp` | 验证核心知识与分支状态逻辑。 |
 | `npm run smoke:state-store` | 验证 Workspace 状态隔离、迁移和防串档逻辑。 |
+| `npm run smoke:archify` | 用官方示例验证 Archify showcase 交付和 Mermaid fallback。 |
+| `npm run diagnostics:analyze` | 汇总 UI 卡顿热力图、慢操作和最近的 Archify 渲染/降级阶段。 |
 | `npm run electron:smoke` | 构建并运行 Electron 端到端烟雾检查。 |
 
 提交前建议运行：
@@ -218,6 +232,8 @@ npm run smoke:state-store
 npm run electron:smoke
 ```
 
+Archify 日志默认写入上述 JSONL，只包含源内容哈希、大小、图类型、拓扑数量、耗时、CLI 退出码和诊断码，不保存完整 Diagram JSON 或生成的 HTML。需要在开发终端实时查看时，先设置 `RHYZA_ARCHIFY_DEBUG=1` 再启动 Electron。
+
 ## 目录结构
 
 ```text
@@ -225,6 +241,7 @@ src/                    React Renderer、页面、组件和 Zustand Store
 src/shared/             Main/Renderer 共用 IPC 类型与校验
 electron/main/          Electron Main、Pi SDK、Sources、持久化和 Worktree
 electron/preload.*      contextBridge 白名单 API
+resources/skills/archify/ 内嵌 Archify skill、schema、校验器和渲染器
 scripts/                Smoke tests 和迁移工具
 demo-video/             Hackathon Demo 脚本、素材和成片
 ```
@@ -254,3 +271,7 @@ demo-video/             Hackathon Demo 脚本、素材和成片
 ### Electron binary 下载失败或很慢
 
 确认 npm registry 和 Electron 下载地址可访问，并检查企业代理、防火墙或 VPN 配置。依赖安装完成后无需单独安装全局 Electron。
+
+## 第三方许可
+
+内嵌 Archify runtime 来自 [tt-a1i/archify](https://github.com/tt-a1i/archify)，使用 MIT License。完整版权说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 `resources/skills/archify/LICENSE`。

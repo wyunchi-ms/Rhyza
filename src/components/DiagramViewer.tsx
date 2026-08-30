@@ -2,9 +2,11 @@ import { Download, FileCode2, FileImage, Image as ImageIcon } from "lucide-react
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Diagram } from "../types";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { ArchifyDiagram } from "./ArchifyDiagram";
 
 export function DiagramViewer({ diagram, compact = false, showHeader = true }: { diagram: Diagram; compact?: boolean; showHeader?: boolean }) {
 	const [rendered, setRendered] = useState<{ source: string; svg: string }>({ source: "", svg: "" });
+	const [archifyHtml, setArchifyHtml] = useState<{ source: string; html: string }>({ source: "", html: "" });
 	const [exportOpen, setExportOpen] = useState(false);
 	const exportMenuRef = useRef<HTMLDivElement | null>(null);
 	const displaySource = compact ? preferVerticalFlowchart(diagram.mermaidSource) : diagram.mermaidSource;
@@ -12,6 +14,10 @@ export function DiagramViewer({ diagram, compact = false, showHeader = true }: {
 	const handleSvgRendered = useCallback((svg: string) => {
 		setRendered({ source: displaySource, svg });
 	}, [displaySource]);
+	const handleArchifyRendered = useCallback((html: string) => {
+		setArchifyHtml({ source: diagram.archifySource ?? "", html });
+	}, [diagram.archifySource]);
+	const renderedArchifyHtml = archifyHtml.source === diagram.archifySource ? archifyHtml.html : "";
 	useEffect(() => {
 		if (!exportOpen) return;
 		const close = (event: MouseEvent | KeyboardEvent) => {
@@ -32,6 +38,8 @@ export function DiagramViewer({ diagram, compact = false, showHeader = true }: {
 				<div ref={exportMenuRef} className="diagram-export">
 					<button type="button" onClick={() => setExportOpen((open) => !open)} aria-haspopup="menu" aria-expanded={exportOpen} title="Download diagram" aria-label="Download diagram" className="icon-button"><Download size={16} /></button>
 					{exportOpen && <div className="diagram-export-menu" role="menu">
+						{diagram.archifySource && <ExportOption diagram={diagram} format="archify" content={diagram.archifySource} onExported={() => setExportOpen(false)} />}
+						{diagram.archifySource && <ExportOption diagram={diagram} format="html" content={renderedArchifyHtml} onExported={() => setExportOpen(false)} />}
 						<ExportOption diagram={diagram} format="mermaid" content={diagram.mermaidSource} onExported={() => setExportOpen(false)} />
 						<ExportOption diagram={diagram} format="svg" content={renderedSvg} onExported={() => setExportOpen(false)} />
 						<ExportOption diagram={diagram} format="png" content={renderedSvg} onExported={() => setExportOpen(false)} />
@@ -39,7 +47,9 @@ export function DiagramViewer({ diagram, compact = false, showHeader = true }: {
 				</div>
 			</div>}
 			<div className={compact ? "diagram-viewer-content" : "flex-1 min-h-0 overflow-auto p-4"} data-diagram-id={diagram.id}>
-				<MermaidDiagram source={displaySource} onSvgRendered={handleSvgRendered} />
+				{diagram.archifySource
+					? <ArchifyDiagram source={diagram.archifySource} onHtmlRendered={handleArchifyRendered} />
+					: <MermaidDiagram source={displaySource} onSvgRendered={handleSvgRendered} />}
 			</div>
 		</div>
 	);
@@ -49,10 +59,10 @@ export function preferVerticalFlowchart(source: string): string {
 	return source.replace(/^(\s*(?:flowchart|graph))\s+(?:LR|RL)\b/im, "$1 TD");
 }
 
-function ExportOption({ diagram, format, content, onExported }: { diagram: Diagram; format: "mermaid" | "svg" | "png"; content: string; onExported: () => void }) {
+function ExportOption({ diagram, format, content, onExported }: { diagram: Diagram; format: "archify" | "html" | "mermaid" | "svg" | "png"; content: string; onExported: () => void }) {
 	const exportDiagram = async () => {
 		if (!content) return;
-		const extension = format === "mermaid" ? "mmd" : format;
+		const extension = format === "mermaid" ? "mmd" : format === "archify" ? "json" : format;
 		const blob = format === "png" ? await svgToPng(content) : new Blob([content], { type: format === "svg" ? "image/svg+xml" : "text/plain" });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement("a");
@@ -62,9 +72,9 @@ function ExportOption({ diagram, format, content, onExported }: { diagram: Diagr
 		URL.revokeObjectURL(url);
 		onExported();
 	};
-	const Icon = format === "mermaid" ? FileCode2 : format === "svg" ? ImageIcon : FileImage;
-	const label = format === "mermaid" ? "Mermaid source" : format.toUpperCase();
-	return <button type="button" role="menuitem" onClick={() => void exportDiagram()} disabled={!content} className="diagram-export-option"><Icon size={16} /><span>{label}</span><small>.{format === "mermaid" ? "mmd" : format}</small></button>;
+	const Icon = format === "mermaid" || format === "archify" ? FileCode2 : format === "svg" ? ImageIcon : FileImage;
+	const label = format === "mermaid" ? "Mermaid fallback" : format === "archify" ? "Archify source" : format === "html" ? "Interactive HTML" : format.toUpperCase();
+	return <button type="button" role="menuitem" onClick={() => void exportDiagram()} disabled={!content} className="diagram-export-option"><Icon size={16} /><span>{label}</span><small>.{format === "mermaid" ? "mmd" : format === "archify" ? "json" : format}</small></button>;
 }
 
 async function svgToPng(svg: string): Promise<Blob> {

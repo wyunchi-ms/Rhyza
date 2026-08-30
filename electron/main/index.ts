@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { PiService } from "./pi-service.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
+import { ArchifyService } from "./archify-service.js";
+import { GptArchifyHarness, resolveBundledArchifySkillRoot } from "./archify-harness.js";
 import {
 	ipcChannels,
 	validateAgentPromptRequest,
@@ -20,6 +22,7 @@ import {
 	validateWorkspaceDiffRequest,
 	validateSummaryRequest,
 	validateKnowledgeExtractionRequest,
+	validateArchifyRenderRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
 	validateForkDebugDumpRequest,
@@ -59,6 +62,7 @@ let settingsStore: SettingsStore;
 let piService: PiService;
 let sourceService: SourceService;
 let appStateStore: AppStateStore;
+let archifyService: ArchifyService;
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
 const diagnosticsDirectory = path.join(dataRootPath, "diagnostics");
@@ -276,6 +280,12 @@ function registerIpcHandlers(): void {
 			));
 		}),
 	);
+	ipcMain.handle(ipcChannels.renderArchify, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateArchifyRenderRequest(payload);
+			return timedDiagnostic("render-archify", {}, () => archifyService.render(request.source));
+		}),
+	);
 	ipcMain.handle(ipcChannels.openExternal, async (event, payload) =>
 		withValidSender(event, async () => {
 			await shell.openExternal(validateOpenExternalRequest(payload).url);
@@ -326,12 +336,23 @@ app.whenReady().then(async () => {
 		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),
 	);
 	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
+	const archifySkillRoot = resolveBundledArchifySkillRoot({
+		appPath: app.getAppPath(),
+		resourcesPath: process.resourcesPath,
+		isPackaged: app.isPackaged,
+	});
+	const archifyHarness = new GptArchifyHarness(archifySkillRoot);
+	archifyService = new ArchifyService(archifySkillRoot, app.getPath("temp"), async (event) => {
+		if (process.env.RHYZA_ARCHIFY_DEBUG === "1") console.log("ARCHIFY_RENDER", event);
+		await writeDiagnostic("archify-render", event);
+	});
 	piService = new PiService(
 		dataRootPath,
 		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
 		undefined,
 		sourceService,
+		archifyHarness,
 	);
 	registerIpcHandlers();
 	mainLoopDelay.enable();

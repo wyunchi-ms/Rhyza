@@ -1,0 +1,7 @@
+{
+  "upstream": "https://github.com/tt-a1i/archify",
+  "version": "2.16.0-dev.0",
+  "schemaVersion": 1,
+  "sourceRevision": "unrecorded-vendored-snapshot",
+  "integrationGuide": "docs/archify-integration.md"
+}

@@ -24,8 +24,12 @@ export function buildKnowledgeContext(prompt: string, entities: Entity[], relati
 	});
 	const diagramLines = diagrams.filter((diagram) => !diagram.deletedAt && (mentioned.diagramIds.has(diagram.id) || lowerPrompt.includes(diagram.name.toLocaleLowerCase()) || diagram.nodes.some((node) => node.entityId && selectedIds.has(node.entityId)))).slice(0, 5).map((diagram) => {
 		const structure = `Nodes: ${diagram.nodes.map((node) => `${node.label}${node.entityId ? ` [entity:${node.entityId}]` : ""}`).slice(0, 24).join(", ")}\nEdges: ${diagram.edges.map((edge) => `${edge.source}->${edge.target}${edge.label ? ` (${edge.label})` : ""}`).slice(0, 36).join(", ")}`;
-		const mermaid = mentioned.diagramIds.has(diagram.id) && diagram.mermaidSource.trim() ? `\nMermaid source:\n${diagram.mermaidSource.trim().slice(0, 12_000)}` : "";
-		return `${diagram.id} | ${diagram.name} | ${diagram.type} | v${diagram.version}\n${structure}${mermaid}`;
+		const diagramSource = mentioned.diagramIds.has(diagram.id)
+			? diagram.archifySource?.trim()
+				? `\nArchify source:\n${diagram.archifySource.trim().slice(0, 40_000)}`
+				: diagram.mermaidSource.trim() ? `\nMermaid source:\n${diagram.mermaidSource.trim().slice(0, 12_000)}` : ""
+			: "";
+		return `${diagram.id} | ${diagram.name} | ${diagram.type} | v${diagram.version}\n${structure}${diagramSource}`;
 	});
 	const sourceLines = sourceHits.map((hit) => `${hit.path}:${hit.line} | ${hit.preview}`);
 	return [`Entities:\n${entityLines.join("\n\n") || "None"}`, `Relations:\n${relationLines.join("\n") || "None"}`, `Diagrams:\n${diagramLines.join("\n\n") || "None"}`, `Source matches:\n${sourceLines.join("\n") || "None"}`].join("\n\n");

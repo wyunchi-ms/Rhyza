@@ -36,6 +36,8 @@ import type {
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
+import type { GptArchifyHarness } from "./archify-harness.js";
+import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -65,6 +67,7 @@ export class PiService {
 		private readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
 		agentDir: string = getAgentDir(),
 		private readonly sourceService?: SourceService,
+		private readonly archifyHarness?: GptArchifyHarness,
 	) {
 		this.agentDir = agentDir;
 		this.worktreeService = new WorktreeService(userDataPath);
@@ -199,9 +202,12 @@ export class PiService {
 				if (usage) addUsage(promptUsage, usage);
 			});
 			try {
-				const promptText = request.knowledgeContext
-					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
+				const promptWithDiagramMode = this.archifyHarness
+					? this.archifyHarness.wrapUserPrompt(request.prompt, request.diagramMode ?? "mermaid")
 					: request.prompt;
+				const promptText = request.knowledgeContext
+					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${promptWithDiagramMode}\n</user_question>`
+					: promptWithDiagramMode;
 				const promptContent: string | Array<{ type: "text"; text: string } | ImageContent> = request.images?.length
 					? [{ type: "text", text: promptText }, ...request.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
 					: promptText;
@@ -300,7 +306,7 @@ export class PiService {
 			return {
 				entities: [],
 				relations: [],
-				diagrams: extractMermaidDiagramCandidates(request),
+				diagrams: extractDiagramCandidates(request),
 				error: errorToMessage(error),
 			};
 		}
@@ -345,11 +351,12 @@ export class PiService {
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: sessionWorkspace.path,
 			agentDir: this.agentDir,
+			additionalSkillPaths: this.archifyHarness?.additionalSkillPaths,
 			appendSystemPromptOverride: (base) => [
 				...base,
 				workspaceExplorationGuidance,
 				...(this.sourceService ? [sourceRetrievalGuidance] : []),
-				responsePresentationGuidance,
+				this.archifyHarness?.responseGuidance ?? responsePresentationGuidance,
 			],
 		});
 		await resourceLoader.reload();
@@ -665,6 +672,7 @@ function buildKnowledgeExtractionPrompt(request: KnowledgeExtractionRequest): st
 		sourceIndex,
 		source: match[1].trim(),
 	}));
+	const archifyBlockCount = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)].length;
 	return `You are a conservative learning-gap detector for a personal knowledge workspace.
 
 Decide whether the USER'S QUESTION demonstrates that the user does not understand a concept. Create knowledge entities only for those learning gaps.
@@ -685,7 +693,7 @@ Rules:
 - summary is one concise sentence. content is a focused 2-4 sentence explanation of the entity: what it is, its purpose, and the key distinction needed for understanding.
 - Extract only meaningful relations supported by the answer between returned or existing entities. Prefer stable existing IDs when available.
 - When the question explicitly asks to rebuild relationships, return zero entities and zero diagrams, scan all supplied existing entities and diagram topology, and return every high-confidence useful relation without duplicating the existing graph.
-- Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Do not invent diagrams when MERMAID_BLOCKS is empty.
+- Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Archify blocks are parsed deterministically by the host, so do not return them in the diagrams array. Do not invent diagrams when MERMAID_BLOCKS is empty.
 - For each diagram, choose existingDiagramId only when it represents the same subject as an EXISTING_DIAGRAM. Never choose the reserved "workspace-knowledge-map". Otherwise omit existingDiagramId to create a new diagram.
 - Diagram node keys must be short stable identifiers. Every edge sourceKey and targetKey must reference a returned node key.
 - Map Mermaid types to architecture, structure, flowchart, sequence, swimlane, or dependency.
@@ -701,11 +709,14 @@ ${JSON.stringify(request.existingDiagrams)}
 MERMAID_BLOCKS:
 ${JSON.stringify(mermaidBlocks)}
 
+ARCHIFY_BLOCK_COUNT (host-extracted, informational only):
+${archifyBlockCount}
+
 USER_QUESTION:
 ${request.question}
 
-ASSISTANT_ANSWER (evidence only, not a source to copy):
-${request.answer}`;
+ASSISTANT_ANSWER (diagram code removed; evidence only, not a source to copy):
+${stripDiagramCode(request.answer)}`;
 }
 
 function parseKnowledgeExtraction(
@@ -722,7 +733,7 @@ function parseKnowledgeExtraction(
 	return {
 		entities: parseKnowledgeCandidates(parsed.entities, request),
 		relations: parseRelationCandidates(parsed.relations, request),
-		diagrams: parseDiagramCandidates(parsed.diagrams, request),
+		diagrams: [...parseDiagramCandidates(parsed.diagrams, request), ...extractArchifyDiagramCandidates(request)],
 	};
 }
 
@@ -801,7 +812,7 @@ function parseRelationCandidates(value: unknown, request: KnowledgeExtractionReq
 function parseDiagramCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
 	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map((match) => match[1].trim());
 	const existingIds = new Set(request.existingDiagrams.map((diagram) => diagram.id));
-	const diagramTypes = new Set<KnowledgeDiagramCandidate["type"]>(["architecture", "structure", "flowchart", "sequence", "swimlane", "dependency"]);
+	const diagramTypes = new Set<KnowledgeDiagramCandidate["type"]>(["architecture", "structure", "flowchart", "sequence", "swimlane", "dependency", "workflow", "dataflow", "lifecycle"]);
 	const parsed = (Array.isArray(value) ? value : []).slice(0, mermaidBlocks.length).flatMap((candidate): KnowledgeDiagramCandidate[] => {
 		if (!isRecord(candidate) || !Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) return [];
 		const sourceIndex = typeof candidate.sourceIndex === "number" ? Math.trunc(candidate.sourceIndex) : -1;
@@ -856,6 +867,35 @@ export function extractMermaidDiagramCandidates(request: KnowledgeExtractionRequ
 			edges: parsed.edges,
 		}];
 	});
+}
+
+export function extractArchifyDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+	const matches = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)];
+	return matches.flatMap((match, index): KnowledgeDiagramCandidate[] => {
+		const archifySource = match[1].trim();
+		try {
+			const parsed = parseArchifySource(archifySource);
+			return [{
+				name: nearestMarkdownHeading(request.answer, match.index ?? 0) || parsed.title || `Interactive diagram ${index + 1}`,
+				type: parsed.type,
+				mermaidSource: archifyToMermaid(archifySource),
+				archifySource,
+				archifyType: parsed.type,
+				nodes: parsed.nodes,
+				edges: parsed.edges,
+			}];
+		} catch {
+			return [];
+		}
+	});
+}
+
+function extractDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+	return [...extractMermaidDiagramCandidates(request), ...extractArchifyDiagramCandidates(request)];
+}
+
+function stripDiagramCode(answer: string): string {
+	return answer.replace(/```(?:mermaid|archify)\s*\r?\n[\s\S]*?```/gi, "[diagram omitted]");
 }
 
 function parseMermaidStructure(source: string): Pick<KnowledgeDiagramCandidate, "type" | "nodes" | "edges"> {

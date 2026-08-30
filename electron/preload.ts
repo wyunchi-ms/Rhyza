@@ -35,6 +35,7 @@ const bridge: KnowbranchBridge = {
 		ipcRenderer.invoke(ipcChannels.agentPrompt, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
+	renderArchify: (request) => ipcRenderer.invoke(ipcChannels.renderArchify, request),
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),

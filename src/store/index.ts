@@ -20,6 +20,7 @@ import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } fr
 import { forkSessionAtTurn } from "../utils/sessionFork";
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { syncSessionExecutionStatus } from "../utils/sessionRuntime";
+import { archifyToMermaid, parseArchifySource } from "../shared/archify";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -73,6 +74,7 @@ interface AppState {
 }
 
 const defaultSettings: Settings = {
+	theme: "light",
 	provider: "GitHub Copilot",
 	defaultModel: "",
 	autoExtract: true,
@@ -84,6 +86,7 @@ const defaultSettings: Settings = {
 	highContrast: false,
 	fontScale: 1,
 	maxConcurrentRequests: 5,
+	diagramRenderer: "archify",
 };
 
 let persistenceWorkspacePath: string | null = null;
@@ -557,11 +560,12 @@ export const useAppStore = create<AppState>()(
 			},
 			saveDiagram: (diagram) => {
 				const before = get().diagrams.find((item) => item.id === diagram.id);
-				if (!before || before.deletedAt || !isMermaidSource(diagram.mermaidSource)) return;
+				if (!before || before.deletedAt || !isMermaidSource(diagram.mermaidSource) || (diagram.archifySource !== undefined && !isArchifySource(diagram.archifySource))) return;
 				const timestamp = new Date().toISOString();
+				const normalizedDiagram = diagram.archifySource ? normalizeEditedArchifyDiagram(diagram, before) : diagram;
 				const after: Diagram = {
-					...diagram,
-					name: diagram.name.trim() || before.name,
+					...normalizedDiagram,
+					name: normalizedDiagram.name.trim() || before.name,
 					version: before.version + 1,
 					updatedAt: timestamp,
 					versions: [...before.versions, {
@@ -745,8 +749,18 @@ export function loadWorkspaceState(serialized: string | null): void {
 		diagrams: migrateMermaidDiagrams(saved.diagrams ?? []),
 		sources: saved.sources ?? [],
 		changesets: saved.changesets ?? [],
-		settings: { ...defaultSettings, ...saved.settings },
+		settings: normalizeSettings(saved.settings),
 	});
+}
+
+function normalizeSettings(settings: Partial<Settings> | undefined): Settings {
+	const legacy = (settings ?? {}) as Partial<Settings> & { enhancedDiagrams?: unknown };
+	const { enhancedDiagrams, ...current } = legacy;
+	const diagramRenderer = current.diagramRenderer === "archify" || current.diagramRenderer === "mermaid"
+		? current.diagramRenderer
+		: enhancedDiagrams === false ? "mermaid" : "archify";
+	const theme = current.theme === "dark" ? "dark" : "light";
+	return { ...defaultSettings, ...current, theme, diagramRenderer };
 }
 
 function addTokenUsage(left: import("../types").TokenUsage | undefined, right: import("../types").TokenUsage) {
@@ -830,6 +844,8 @@ function applyExtractedDiagrams(
 			nodes,
 			edges,
 			mermaidSource: candidate.mermaidSource,
+			archifySource: candidate.archifySource,
+			archifyType: candidate.archifyType,
 			sourceRefs: [...(existing?.sourceRefs ?? []), { sessionId, turnId }],
 			version,
 			versions: [
@@ -906,6 +922,43 @@ function isMermaidSource(source: unknown): source is string {
 		.map((line) => line.trim())
 		.find((line) => line && !line.startsWith("%%"));
 	return Boolean(firstLine && /^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|gitGraph|C4\w*)\b/i.test(firstLine));
+}
+
+function isArchifySource(source: unknown): source is string {
+	if (typeof source !== "string" || source.length > 1_000_000) return false;
+	try {
+		parseArchifySource(source);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function normalizeEditedArchifyDiagram(diagram: Diagram, before: Diagram): Diagram {
+	const source = diagram.archifySource!;
+	const parsed = parseArchifySource(source);
+	const nodeIds = new Map<string, string>();
+	const nodes = parsed.nodes.map((node) => {
+		const previous = before.nodes.find((item) => normalizeLabel(item.label) === normalizeLabel(node.label));
+		const id = previous?.id ?? createId("diagram_node");
+		nodeIds.set(node.key, id);
+		return { id, entityId: previous?.entityId, label: node.label, type: node.type };
+	});
+	const edges = parsed.edges.flatMap((edge) => {
+		const sourceId = nodeIds.get(edge.sourceKey);
+		const targetId = nodeIds.get(edge.targetKey);
+		if (!sourceId || !targetId) return [];
+		const previous = before.edges.find((item) => item.source === sourceId && item.target === targetId && normalizeLabel(item.label ?? "") === normalizeLabel(edge.label ?? ""));
+		return [{ id: previous?.id ?? createId("diagram_edge"), source: sourceId, target: targetId, relationId: previous?.relationId, label: edge.label }];
+	});
+	return {
+		...diagram,
+		type: parsed.type,
+		archifyType: parsed.type,
+		mermaidSource: archifyToMermaid(source),
+		nodes,
+		edges,
+	};
 }
 
 function manualChangeSet(operation: ChangeOperation): ChangeSet {

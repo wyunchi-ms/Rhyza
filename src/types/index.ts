@@ -153,10 +153,12 @@ export interface DiagramVersion {
 export interface Diagram {
 	id: string;
 	name: string;
-	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency";
+	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency" | "workflow" | "dataflow" | "lifecycle";
 	nodes: DiagramNode[];
 	edges: DiagramEdge[];
 	mermaidSource: string;
+	archifySource?: string;
+	archifyType?: "architecture" | "workflow" | "sequence" | "dataflow" | "lifecycle";
 	sourceRefs?: SourceRef[];
 	version: number;
 	versions: DiagramVersion[];
@@ -199,6 +201,7 @@ export interface ChangeSet {
 }
 
 export interface Settings {
+	theme: "light" | "dark";
 	provider: string;
 	defaultModel: string;
 	autoExtract: boolean;
@@ -210,4 +213,5 @@ export interface Settings {
 	highContrast: boolean;
 	fontScale: number;
 	maxConcurrentRequests: number;
+	diagramRenderer: "archify" | "mermaid";
 }
