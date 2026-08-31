@@ -39,6 +39,7 @@ body {
 .sidebar-icon-button, .topbar-button, .response-collapse { display: inline-flex; width: 2rem; height: 2rem; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 6px; color: #6b6b6b; }
 .sidebar-icon-button:hover, .topbar-button:hover, .response-collapse:hover { background: #ececec; color: #212121; }
 .sidebar-reopen { position: absolute; left: 0.75rem; top: 0.75rem; z-index: 50; display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; border-radius: 6px; background: #fff; color: #5d5d5d; box-shadow: 0 1px 4px rgb(0 0 0 / 10%); }
+.sidebar-scrim { display: none; }
 .global-search-backdrop { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: flex-start; justify-content: center; background: rgb(15 23 42 / 28%); padding: min(12vh, 7rem) 1rem 1rem; backdrop-filter: blur(2px); }
 .global-search-dialog { display: flex; width: min(42rem, 100%); max-height: min(42rem, calc(100vh - 8rem)); flex-direction: column; overflow: hidden; border: 1px solid #d8dee7; border-radius: 14px; background: #fff; box-shadow: 0 28px 80px rgb(15 23 42 / 28%); animation: global-search-in 150ms ease-out; }
 .global-search-input-row { display: flex; min-height: 3.75rem; flex: 0 0 auto; align-items: center; gap: 0.65rem; border-bottom: 1px solid #e7eaf0; padding: 0 0.8rem 0 1rem; color: #64748b; }
@@ -375,7 +376,11 @@ body {
 .theme-options label { display: grid; min-width: 0; cursor: pointer; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 0.65rem; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; padding: 0.85rem; color: #64748b; transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
 .theme-options label:hover { border-color: #99d8ce; background: #f8fffd; }
 .theme-options label.is-selected { border-color: #10a37f; background: #f0fdfa; color: #0f766e; box-shadow: 0 0 0 1px rgb(16 163 127 / 12%); }
-.theme-options input { width: 1rem; height: 1rem; accent-color: #10a37f; }
+.theme-options input { display: grid; width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; appearance: none; place-content: center; border: 1.5px solid #94a3b8; border-radius: 50%; background: transparent; }
+.theme-options input::before { width: 0.54rem; height: 0.54rem; content: ""; transform: scale(0); border-radius: 50%; background: #0f9f7e; transition: transform 120ms ease; }
+.theme-options input:checked { border-color: #0f9f7e; }
+.theme-options input:checked::before { transform: scale(1); }
+.theme-options input:focus-visible { outline: 2px solid rgb(16 163 127 / 55%); outline-offset: 2px; }
 .theme-options span { min-width: 0; }
 .theme-options strong, .theme-options small { display: block; }
 .theme-options strong { color: #0f172a; font-size: 0.82rem; font-weight: 750; }
@@ -625,6 +630,9 @@ html[data-theme="dark"] .theme-options label:hover,
 html[data-theme="dark"] .diagram-renderer-options label:hover { border-color: #3a8f7d; background: #192723; }
 html[data-theme="dark"] .theme-options label.is-selected,
 html[data-theme="dark"] .diagram-renderer-options label.is-selected { border-color: #2bb892; background: #14251f; box-shadow: 0 0 0 1px rgb(43 184 146 / 16%); }
+html[data-theme="dark"] .theme-options input { border-color: #71717a; }
+html[data-theme="dark"] .theme-options input:checked { border-color: #2dd4bf; }
+html[data-theme="dark"] .theme-options input::before { background: #2dd4bf; }
 html[data-theme="dark"] .archify-diagram,
 html[data-theme="dark"] .archify-diagram > iframe,
 html[data-theme="dark"] .archify-preview-dialog > iframe { border-color: #34363a; background: #101521; }
@@ -665,6 +673,9 @@ html[data-theme="dark"] textarea::placeholder { color: #71717a; }
 
 @media (max-width: 900px) {
 	.panel-resize-handle { display: none; }
+	.app-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 70; width: min(17rem, calc(100vw - 3.5rem)) !important; flex-basis: auto !important; box-shadow: 12px 0 30px rgb(15 23 42 / 18%); }
+	.app-sidebar.is-collapsed { width: 0 !important; border-right: 0; box-shadow: none; }
+	.sidebar-scrim { position: fixed; inset: 0; z-index: 60; display: block; width: 100%; height: 100%; cursor: default; background: rgb(15 23 42 / 24%); }
 	.session-tree { width: 13rem; }
 	.knowledge-pane { position: absolute; inset-block: 0; right: 0; z-index: 30; width: min(20rem, calc(100% - 4rem)); box-shadow: -8px 0 24px rgb(15 23 42 / 12%); }
 	.knowledge-page-header { grid-template-columns: 1fr auto; gap: 0.75rem; }

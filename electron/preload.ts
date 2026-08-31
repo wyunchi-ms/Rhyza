@@ -40,6 +40,7 @@ const bridge: KnowbranchBridge = {
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
+	archifyParseFailure: (report) => ipcRenderer.invoke(ipcChannels.archifyParseFailure, report),
 	forkDebugDump: (request) => ipcRenderer.invoke(ipcChannels.forkDebugDump, request),
 	onAuthEvent: (listener: (event: AuthBridgeEvent) => void) => {
 		const wrapped = (_event: Electron.IpcRendererEvent, payload: AuthBridgeEvent) =>

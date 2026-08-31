@@ -8,7 +8,8 @@ import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.j
 
 const renderTimeoutMs = 120_000;
 const maxArtifactBytes = 5_000_000;
-const maxCacheEntries = 20;
+const maxCacheEntries = 3;
+const maxCacheBytes = 10_000_000;
 
 export interface ArchifyDiagnosticEvent {
 	timestamp: string;
@@ -38,6 +39,7 @@ type ArchifyDiagnosticSink = (event: ArchifyDiagnosticEvent) => void | Promise<v
 
 export class ArchifyService {
 	private readonly cache = new Map<string, ArchifyRenderResponse>();
+	private cacheBytes = 0;
 
 	constructor(
 		private readonly skillRoot: string,
@@ -79,6 +81,7 @@ export class ArchifyService {
 					delete spec.meta.output;
 					spec.meta.visual_preset = "classic";
 				}
+				applyEstimatedComponentWidths(spec);
 				await writeFile(inputPath, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
 				const cliPath = path.join(this.skillRoot, "bin", "archify.mjs");
 				const showcase = await this.deliverWithLayoutRepairs({
@@ -109,8 +112,7 @@ export class ArchifyService {
 					throw new Error("Rendered Archify artifact exceeds the 5 MB safety limit.");
 				}
 				const response: ArchifyRenderResponse = { ok: true, html, fallbackMermaid };
-				this.cache.set(cacheKey, response);
-				while (this.cache.size > maxCacheEntries) this.cache.delete(this.cache.keys().next().value!);
+				this.remember(cacheKey, response);
 				await this.trace({
 					timestamp: new Date().toISOString(), requestId, phase: "success", durationMs: Date.now() - startedAt,
 					diagramType: parsed.type, normalized: parsed.normalized, htmlBytes,
@@ -155,7 +157,7 @@ export class ArchifyService {
 			await this.trace(cliDiagnosticEvent(options.requestId, options.quality, result, receipt, cliStartedAt, attempt));
 			if (result.exitCode === 0 || attempt === 3) break;
 			const error = receiptError(receipt, result.stderr);
-			const repairCount = applySuggestedLabelPositions(options.spec, error);
+			const repairCount = applySuggestedLabelPositions(options.spec, error) + applySuggestedComponentWidths(options.spec, error);
 			if (repairCount === 0) break;
 			await writeFile(options.inputPath, `${JSON.stringify(options.spec, null, 2)}\n`, "utf8");
 			await this.trace({
@@ -174,6 +176,24 @@ export class ArchifyService {
 			// Diagnostics must never change rendering behavior.
 		}
 	}
+
+	private remember(cacheKey: string, response: ArchifyRenderResponse): void {
+		const previous = this.cache.get(cacheKey);
+		if (previous) this.cacheBytes -= cacheEntryBytes(previous);
+		this.cache.set(cacheKey, response);
+		this.cacheBytes += cacheEntryBytes(response);
+		while (this.cache.size > maxCacheEntries || this.cacheBytes > maxCacheBytes) {
+			const oldestKey = this.cache.keys().next().value;
+			if (!oldestKey) break;
+			const oldest = this.cache.get(oldestKey);
+			this.cache.delete(oldestKey);
+			if (oldest) this.cacheBytes -= cacheEntryBytes(oldest);
+		}
+	}
+}
+
+function cacheEntryBytes(response: ArchifyRenderResponse): number {
+	return Buffer.byteLength(response.html ?? "", "utf8") + Buffer.byteLength(response.fallbackMermaid ?? "", "utf8");
 }
 
 function cliDiagnosticEvent(
@@ -214,6 +234,59 @@ export function applySuggestedLabelPositions(spec: Record<string, unknown>, erro
 		repairCount += 1;
 	}
 	return repairCount;
+}
+
+/** Applies the minimum readable width reported by Archify, plus a small guard band. */
+export function applySuggestedComponentWidths(spec: Record<string, unknown>, error: string): number {
+	if (spec.diagram_type !== "architecture" || !Array.isArray(spec.components)) return 0;
+	const requiredWidths = new Map<string, number>();
+	for (const match of error.matchAll(/(?:Sublabel|Label) "[^"\r\n]+"(?: \([^)]*\))? needs ~(\d+)px[^\r\n]*component "([^"]+)" provides \d+px/g)) {
+		requiredWidths.set(match[2], Math.max(requiredWidths.get(match[2]) ?? 0, Number(match[1])));
+	}
+	for (const match of error.matchAll(/Label "[^"\r\n]+" \(~(\d+)px\) is wider than component "([^"]+)" \(\d+px\)/g)) {
+		requiredWidths.set(match[2], Math.max(requiredWidths.get(match[2]) ?? 0, Number(match[1])));
+	}
+	let repairCount = 0;
+	for (const component of spec.components) {
+		if (!isRecord(component) || typeof component.id !== "string") continue;
+		const minimumWidth = requiredWidths.get(component.id);
+		if (!minimumWidth) continue;
+		const size = Array.isArray(component.size) ? component.size : [];
+		const width = typeof size[0] === "number" ? size[0] : 0;
+		const height = typeof size[1] === "number" ? size[1] : 72;
+		const repairedWidth = Math.max(width, minimumWidth + 12);
+		if (repairedWidth === width) continue;
+		component.size = [repairedWidth, height];
+		repairCount += 1;
+	}
+	return repairCount;
+}
+
+/**
+ * First-pass sizing based on the visible copy. The renderer's own diagnostics
+ * remain authoritative and can widen components further on the retry path.
+ */
+export function applyEstimatedComponentWidths(spec: Record<string, unknown>): number {
+	if (spec.diagram_type !== "architecture" || !Array.isArray(spec.components)) return 0;
+	let repairCount = 0;
+	for (const component of spec.components) {
+		if (!isRecord(component)) continue;
+		const label = typeof component.label === "string" ? component.label : "";
+		const sublabel = typeof component.sublabel === "string" ? component.sublabel : "";
+		const minimumWidth = Math.max(112, Math.ceil(estimateTextWidth(label, 6.5) + 16), Math.ceil(estimateTextWidth(sublabel, 3.8) + 12));
+		const size = Array.isArray(component.size) ? component.size : [];
+		const width = typeof size[0] === "number" ? size[0] : 0;
+		const height = typeof size[1] === "number" ? size[1] : 72;
+		const repairedWidth = Math.max(width, minimumWidth);
+		if (repairedWidth === width) continue;
+		component.size = [repairedWidth, height];
+		repairCount += 1;
+	}
+	return repairCount;
+}
+
+function estimateTextWidth(text: string, asciiWidth: number): number {
+	return [...text].reduce((width, char) => width + (/[^\x00-\x7f]/.test(char) ? asciiWidth * 1.6 : char === " " ? asciiWidth * 0.5 : asciiWidth), 0);
 }
 
 function diagnosticCodes(diagnostics: unknown[]): string[] {

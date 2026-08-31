@@ -26,6 +26,16 @@ const Knowledge = () => {
 	const selected = filtered.find((entity) => entity.id === store.selectedEntityId) ?? filtered[0] ?? null;
 	const filteredDiagrams = activeDiagrams.filter((item) => `${item.name} ${item.type}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 	const diagram = filteredDiagrams.find((item) => item.id === selectedDiagramId) ?? filteredDiagrams[0] ?? null;
+	const resourceCount = mode === "entities" ? activeEntities.length : activeDiagrams.length;
+	const filteredResourceCount = mode === "entities" ? filtered.length : filteredDiagrams.length;
+	const searchTerm = search.trim();
+	const rebuildDisabled = activeEntities.length < 2 || rebuildState.status === "running";
+	const rebuildTitle = activeEntities.length < 2
+		? "Add at least two entities before rebuilding relations."
+		: "Ask the current LLM to scan all entities and diagrams, rebuild entity relations, and relink diagrams";
+	const listEmptyMessage = resourceCount === 0
+		? `No ${mode} yet.`
+		: `No ${mode} match “${searchTerm}”.`;
 	useEffect(() => {
 		if (diagram && diagram.id !== selectedDiagramId) setSelectedDiagramId(diagram.id);
 	}, [diagram, selectedDiagramId]);
@@ -71,21 +81,21 @@ const Knowledge = () => {
 					<button type="button" role="tab" aria-selected={mode === "diagrams"} className={mode === "diagrams" ? "is-active" : ""} onClick={() => { setMode("diagrams"); setSearch(""); }}><Network size={17} /><span>Diagrams</span><small>{activeDiagrams.length}</small></button>
 				</div>
 				<div className="knowledge-header-actions">
-					<button type="button" className="knowledge-rebuild-button" disabled={activeEntities.length < 2 || rebuildState.status === "running"} onClick={() => void rebuildRelations()} title="Ask the current LLM to scan all entities and diagrams, rebuild entity relations, and relink diagrams"><RefreshCw size={15} className={rebuildState.status === "running" ? "animate-spin" : ""} /><span>{rebuildState.status === "running" ? "Rebuilding…" : "Rebuild relations"}</span></button>
-					<label className="knowledge-search"><span className="sr-only">Search {mode}</span><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${mode}`} /></label>
+					<button type="button" className="knowledge-rebuild-button" disabled={rebuildDisabled} onClick={() => void rebuildRelations()} title={rebuildTitle}><RefreshCw size={15} className={rebuildState.status === "running" ? "animate-spin" : ""} /><span>{rebuildState.status === "running" ? "Rebuilding…" : "Rebuild relations"}</span></button>
+					<label className="knowledge-search"><span className="sr-only">Search {mode}</span><Search size={16} /><input disabled={resourceCount === 0} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={resourceCount === 0 ? `No ${mode} to search` : `Search ${mode}`} /></label>
 					{rebuildState.message && <p className={`knowledge-rebuild-feedback is-${rebuildState.status}`} role="status">{rebuildState.message}</p>}
 				</div>
 			</header>
 			<div className="knowledge-browser">
 				<aside className="knowledge-resource-pane" aria-label={`${mode} list`}>
-					<div className="knowledge-resource-heading"><strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong><span>{mode === "entities" ? filtered.length : filteredDiagrams.length} shown</span></div>
+					<div className="knowledge-resource-heading"><strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong><span>{filteredResourceCount} shown</span></div>
 					<div className="knowledge-resource-list">
 						{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={selected?.id === entity.id ? "is-selected" : ""}><span><strong>{entity.name}</strong><small>{entity.summary}</small></span><em>{entity.type} · v{entity.version}</em></button>) : filteredDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={diagram?.id === item.id ? "is-selected" : ""}><span><strong>{item.name}</strong><small>{item.nodes.length} nodes · {item.edges.length} edges</small></span><em>{item.type} · v{item.version}</em></button>)}
-						{(mode === "entities" ? filtered.length : filteredDiagrams.length) === 0 && <div className="knowledge-list-empty">No matching {mode}.</div>}
+						{filteredResourceCount === 0 && <div className="knowledge-list-empty">{listEmptyMessage}</div>}
 					</div>
 				</aside>
 				<main className="knowledge-detail-area">
-					{mode === "entities" && selected && entityDraft ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail">{isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />}</section><aside className="knowledge-inspector"><EntityMetaPanel entity={selected} onOpenDiagram={(diagramId) => { store.setSelectedDiagram(diagramId); setSelectedDiagramId(diagramId); setSearch(""); setMode("diagrams"); }} /></aside></div> : mode === "diagrams" && diagram ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail"><DiagramViewer diagram={diagram} /></section><aside className="knowledge-inspector"><DiagramEditor diagram={diagram} entities={activeEntities} onOpenEntity={(entityId) => { store.setSelectedEntity(entityId); setSearch(""); setMode("entities"); }} onDeleted={() => setSelectedDiagramId(null)} /></aside></div> : <div className="empty-state h-full">{mode === "entities" ? "No entities yet. Complete a chat turn to build your knowledge base." : "Mermaid diagrams from agent responses will appear here."}</div>}
+					{mode === "entities" && selected && entityDraft ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail">{isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />}</section><aside className="knowledge-inspector"><EntityMetaPanel entity={selected} onOpenDiagram={(diagramId) => { store.setSelectedDiagram(diagramId); setSelectedDiagramId(diagramId); setSearch(""); setMode("diagrams"); }} /></aside></div> : mode === "diagrams" && diagram ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail"><DiagramViewer diagram={diagram} /></section><aside className="knowledge-inspector"><DiagramEditor diagram={diagram} entities={activeEntities} onOpenEntity={(entityId) => { store.setSelectedEntity(entityId); setSearch(""); setMode("entities"); }} onDeleted={() => setSelectedDiagramId(null)} /></aside></div> : <div className="empty-state h-full">{resourceCount === 0 ? mode === "entities" ? "No entities yet. Complete a chat turn to build your knowledge base." : "No diagrams yet. Mermaid diagrams from agent responses will appear here." : `No ${mode} match “${searchTerm}”.`}</div>}
 				</main>
 			</div>
 		</div>

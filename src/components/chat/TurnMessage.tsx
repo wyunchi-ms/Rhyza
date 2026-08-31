@@ -184,15 +184,16 @@ function LinkifiedContent({ turn, entities, relations, diagrams, onEntityClick, 
 	onTextSelection?: (text: string, rect: DOMRect) => void;
 }) {
 	const references = useMemo(() => buildKnowledgeReferences(entities, relations, diagrams), [entities, relations, diagrams]);
-	return <MarkdownContent content={turn.content} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />;
+	return <MarkdownContent content={turn.content} finalized={!(["retrieving", "running", "finalizing"].includes(turn.status))} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />;
 }
 
 type KnowledgeReference = { kind: "entity" | "diagram"; id: string; labels: string[]; title: string; type: string; summary: string; relationCount: number; sourceCount: number };
 const emptyKnowledgeReferences: KnowledgeReference[] = [];
 
-function MarkdownContent({ content, compact = false, references, onEntityClick, onDiagramClick, onTextSelection }: {
+function MarkdownContent({ content, compact = false, finalized = true, references, onEntityClick, onDiagramClick, onTextSelection }: {
 	content: string;
 	compact?: boolean;
+	finalized?: boolean;
 	references?: KnowledgeReference[];
 	onEntityClick?: (id: string) => void;
 	onDiagramClick?: (id: string) => void;
@@ -212,7 +213,7 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 				if (!compact && isMermaidCodeBlock(className, source)) {
 					return <MermaidDiagram source={source} />;
 				}
-				if (!compact && isArchifyCodeBlock(className)) {
+				if (!compact && finalized && isArchifyCodeBlock(className)) {
 					return <ArchifyDiagram source={source} />;
 				}
 				const isBlock = Boolean(className) || rawSource.includes("\n");
@@ -222,7 +223,7 @@ function MarkdownContent({ content, compact = false, references, onEntityClick, 
 			},
 			a: ({ href, children }) => <KnowledgeAnchor href={href} references={knowledgeReferences} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick}>{children}</KnowledgeAnchor>,
 		}),
-		[compact, knowledgeReferences, onDiagramClick, onEntityClick],
+		[compact, finalized, knowledgeReferences, onDiagramClick, onEntityClick],
 	);
 	return (
 		<div className={clsx("markdown-body", compact && "markdown-compact")} onMouseUp={(event) => {

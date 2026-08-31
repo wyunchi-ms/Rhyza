@@ -22,6 +22,7 @@ export const ipcChannels = {
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
 	diagnosticReport: "knowbranch:diagnostic-report",
+	archifyParseFailure: "knowbranch:archify-parse-failure",
 	forkDebugDump: "knowbranch:fork-debug-dump",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
@@ -243,6 +244,19 @@ export interface DiagnosticReport {
 	regionStalls: Record<string, number>;
 }
 
+export interface ArchifyParseFailureReport {
+	timestamp: string;
+	source: string;
+	sourceHash: string;
+	sourceBytes: number;
+	error: string;
+	position?: number;
+	line?: number;
+	column?: number;
+	sourceContextStart: number;
+	sourceContext: string;
+}
+
 export interface ForkDebugDumpRequest {
 	kind: "fork" | "selection-append";
 	timestamp: string;
@@ -295,6 +309,7 @@ export interface KnowbranchBridge {
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
+	archifyParseFailure(report: ArchifyParseFailureReport): Promise<{ ok: true }>;
 	forkDebugDump(request: ForkDebugDumpRequest): Promise<{ ok: true; path: string }>;
 	onAuthEvent(listener: (event: AuthBridgeEvent) => void): () => void;
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;

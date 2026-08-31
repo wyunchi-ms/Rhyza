@@ -2,11 +2,13 @@ import { AlertTriangle, Expand, LoaderCircle, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
-import type { ArchifyRenderResponse } from "../shared/ipc";
+import type { ArchifyParseFailureReport, ArchifyRenderResponse } from "../shared/ipc";
 import { archifyToMermaid, parseArchifySource } from "../shared/archify";
 import { prepareArchifyViewerHtml } from "../shared/archify-viewer";
 import { useAppStore } from "../store";
 import { MermaidDiagram } from "./MermaidDiagram";
+
+const reportedParseFailures = new Set<string>();
 
 export function ArchifyDiagram({ source, onHtmlRendered }: { source: string; onHtmlRendered?: (html: string) => void }) {
 	const enabled = useAppStore((state) => state.settings.diagramRenderer === "archify");
@@ -31,6 +33,18 @@ export function ArchifyDiagram({ source, onHtmlRendered }: { source: string; onH
 			return "";
 		}
 	}, [source]);
+
+	useEffect(() => {
+		if (!("error" in parsed) || typeof parsed.error !== "string") return;
+		const bridge = getKnowbranchBridge();
+		if (!bridge) return;
+		const report = describeParseFailure(source, parsed.error);
+		if (reportedParseFailures.has(report.sourceHash)) return;
+		reportedParseFailures.add(report.sourceHash);
+		void bridge.archifyParseFailure(report).catch(() => {
+			reportedParseFailures.delete(report.sourceHash);
+		});
+	}, [parsed, source]);
 
 	useEffect(() => {
 		if (!enabled || !("value" in parsed)) return;
@@ -102,6 +116,32 @@ export function ArchifyDiagram({ source, onHtmlRendered }: { source: string; onH
 			</section>
 		</div>, document.body)}
 	</>;
+}
+
+function describeParseFailure(source: string, error: string): ArchifyParseFailureReport {
+	const location = /position (\d+)(?: \(line (\d+) column (\d+)\))?/.exec(error);
+	const position = location ? Number(location[1]) : undefined;
+	const contextStart = position === undefined ? 0 : Math.max(0, position - 240);
+	return {
+		timestamp: new Date().toISOString(),
+		source,
+		sourceHash: sourceFingerprint(source),
+		sourceBytes: new TextEncoder().encode(source).byteLength,
+		error: error.slice(0, 1_000),
+		...(position === undefined ? {} : { position }),
+		...(location?.[2] ? { line: Number(location[2]), column: Number(location[3]) } : {}),
+		sourceContextStart: contextStart,
+		sourceContext: source.slice(contextStart, contextStart + 480),
+	};
+}
+
+function sourceFingerprint(source: string): string {
+	let hash = 0x811c9dc5;
+	for (let index = 0; index < source.length; index += 1) {
+		hash ^= source.charCodeAt(index);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}-${source.length}`;
 }
 
 function ArchifyFallback({ source, error, message }: { source: string; error?: string; message?: string }) {

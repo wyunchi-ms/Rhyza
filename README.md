@@ -22,6 +22,8 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 
 产品设计详见 [Rhyza Product Design v0.3](Rhyza_Product_Design_v0.3.docx)。
 
+长期产品记忆、交互约束和 Diagram/UI 设计原则见 [Product memory and design principles](docs/product-memory-and-design-principles.md)。
+
 ## 是否需要提前安装 Pi 或 Copilot
 
 | 项目 | 是否需要 | 说明 |

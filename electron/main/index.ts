@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
-import { writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { appendFile, mkdir } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -26,6 +26,7 @@ import {
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
 	validateForkDebugDumpRequest,
+	type ArchifyParseFailureReport,
 	type DiagnosticReport,
 } from "../../src/shared/ipc.js";
 import { AppStateStore } from "./app-state-store.js";
@@ -66,6 +67,7 @@ let archifyService: ArchifyService;
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
 const diagnosticsDirectory = path.join(dataRootPath, "diagnostics");
+const archifyErrorsDirectory = path.join(dataRootPath, "archify-errors");
 const mainLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 let diagnosticsWriteQueue = Promise.resolve();
 
@@ -162,6 +164,12 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.diagnosticReport, async (event, payload) =>
 		withValidSender(event, async () => {
 			await writeDiagnostic("renderer-sample", validateDiagnosticReport(payload));
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.archifyParseFailure, async (event, payload) =>
+		withValidSender(event, async () => {
+			await writeArchifyParseFailure(validateArchifyParseFailureReport(payload));
 			return { ok: true as const };
 		}),
 	);
@@ -374,6 +382,44 @@ function validateDiagnosticReport(value: unknown): DiagnosticReport {
 	const report = value as DiagnosticReport;
 	if (typeof report.timestamp !== "string" || typeof report.route !== "string") throw new Error("Invalid diagnostic report.");
 	return JSON.parse(JSON.stringify(report)) as DiagnosticReport;
+}
+
+function validateArchifyParseFailureReport(value: unknown): ArchifyParseFailureReport {
+	if (!value || typeof value !== "object") throw new Error("Invalid Archify parse failure report.");
+	const report = value as Partial<ArchifyParseFailureReport>;
+	if (
+		typeof report.timestamp !== "string" ||
+		typeof report.source !== "string" || report.source.length > 1_000_000 ||
+		typeof report.sourceHash !== "string" || report.sourceHash.length > 64 ||
+		typeof report.sourceBytes !== "number" || !Number.isSafeInteger(report.sourceBytes) || report.sourceBytes < 0 ||
+		typeof report.error !== "string" || report.error.length > 1_000 ||
+		typeof report.sourceContextStart !== "number" ||
+		typeof report.sourceContext !== "string" || report.sourceContext.length > 600
+	) throw new Error("Invalid Archify parse failure report.");
+	for (const location of [report.position, report.line, report.column, report.sourceContextStart]) {
+		if (location !== undefined && (!Number.isSafeInteger(location) || location < 0)) throw new Error("Invalid Archify parse failure location.");
+	}
+	return JSON.parse(JSON.stringify(report)) as ArchifyParseFailureReport;
+}
+
+async function writeArchifyParseFailure(report: ArchifyParseFailureReport): Promise<void> {
+	await mkdir(archifyErrorsDirectory, { recursive: true });
+	const hash = safeDebugFilePart(report.sourceHash);
+	const existingFiles = await readdir(archifyErrorsDirectory);
+	if (existingFiles.some((name) => name.endsWith(`-${hash}.json`) && !name.endsWith(".source.json"))) return;
+	const receivedAt = new Date();
+	const filenameTimestamp = receivedAt.toISOString().replace(/[:.]/g, "-");
+	const stem = `archify-parse-failure-${filenameTimestamp}-${hash}`;
+	const sourceFile = `${stem}.source.json`;
+	const { source, ...metadata } = report;
+	const payload = {
+		kind: "archify-parse-failure",
+		receivedAt: receivedAt.toISOString(),
+		sourceFile,
+		...metadata,
+	};
+	await writeFile(path.join(archifyErrorsDirectory, sourceFile), source, "utf8");
+	await writeFile(path.join(archifyErrorsDirectory, `${stem}.json`), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
 function mainProcessSnapshot() {

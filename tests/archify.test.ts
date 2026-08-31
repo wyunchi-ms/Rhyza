@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applySuggestedLabelPositions } from "../electron/main/archify-service";
+import { applyEstimatedComponentWidths, applySuggestedComponentWidths, applySuggestedLabelPositions } from "../electron/main/archify-service";
 import { archifyToMermaid, isArchifyCodeBlock, parseArchifySource } from "../src/shared/archify";
 import { prepareArchifyViewerHtml } from "../src/shared/archify-viewer";
 
@@ -84,6 +84,40 @@ test("applies deterministic Archify labelAt repair suggestions", () => {
 	assert.equal(connections[0].labelDy, undefined);
 	assert.deepEqual(connections[1].labelAt, [748, 316]);
 	assert.equal(applySuggestedLabelPositions(spec, error), 0);
+});
+
+test("widens architecture components from Archify readability diagnostics", () => {
+	const spec: Record<string, unknown> = {
+		diagram_type: "architecture",
+		components: [
+			{ id: "execution", size: [112, 72] },
+			{ id: "models", size: [112, 72] },
+			{ id: "storage", size: [120, 72] },
+		],
+	};
+	const error = `Architecture layout validation failed:
+- Sublabel "Execution · Coordinator · Runner" needs ~116px at the 6px legible minimum, but component "execution" provides 112px — shorten the sublabel or widen size.
+- Sublabel "Anthropic · OpenAI · Google · Azure · …" needs ~141px at the 6px legible minimum, but component "models" provides 112px — shorten the sublabel or widen size.
+- Label "SessionStore / Database" (~152px) is wider than component "storage" (120px) — shorten the label or widen size.`;
+	assert.equal(applySuggestedComponentWidths(spec, error), 3);
+	const components = spec.components as Array<Record<string, unknown>>;
+	assert.deepEqual(components.map((component) => component.size), [[128, 72], [153, 72], [164, 72]]);
+	assert.equal(applySuggestedComponentWidths(spec, error), 0);
+});
+
+test("estimates readable architecture widths before validation", () => {
+	const spec: Record<string, unknown> = {
+		diagram_type: "architecture",
+		components: [
+			{ id: "execution", label: "Execution", sublabel: "Execution · Coordinator · Runner", size: [112, 72] },
+			{ id: "models", label: "Models", sublabel: "Anthropic · OpenAI · Google · Azure · …", size: [112, 72] },
+			{ id: "storage", label: "SessionStore / Database", size: [120, 72] },
+		],
+	};
+	assert.equal(applyEstimatedComponentWidths(spec), 3);
+	const components = spec.components as Array<Record<string, unknown>>;
+	assert.deepEqual(components.map((component) => component.size), [[131, 72], [157, 72], [159, 72]]);
+	assert.equal(applyEstimatedComponentWidths(spec), 0);
 });
 
 test("adapts Archify HTML for the app-owned inline viewer", () => {
