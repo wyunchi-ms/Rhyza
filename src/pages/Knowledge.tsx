@@ -11,6 +11,8 @@ import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
 import { withTimeout } from "../utils/common";
 import { isArchifyCodeBlock } from "../shared/archify";
+import { buildKnowledgeInventory } from "../utils/knowledgeExtraction";
+import { errorToMessage } from "../shared/value";
 
 const Knowledge = () => {
 	const store = useAppStore();
@@ -56,8 +58,7 @@ const Knowledge = () => {
 			const response = await withTimeout(bridge.extractKnowledge({
 				question: "Rebuild every meaningful relationship among the existing workspace entities. Use entity descriptions and diagram topology as evidence. Return relations only; do not create or rewrite entities or diagrams.",
 				answer: buildRelationRebuildEvidence(activeEntities, store.relations.filter((relation) => !relation.deletedAt), activeDiagrams),
-				existingEntities: activeEntities.map((entity) => ({ id: entity.id, name: entity.name, aliases: entity.aliases, type: entity.type, summary: entity.summary, content: entity.content, version: entity.version })),
-				existingDiagrams: activeDiagrams.map((item) => ({ id: item.id, name: item.name, type: item.type, nodeLabels: item.nodes.map((node) => node.label) })),
+				...buildKnowledgeInventory(activeEntities, activeDiagrams),
 				model,
 			}), 120_000, "Global relation rebuild");
 			if (response.error && response.relations.length === 0) throw new Error(response.error);
@@ -68,7 +69,7 @@ const Knowledge = () => {
 			const cost = response.usage?.cost ? ` · $${response.usage.cost.toFixed(4)}` : "";
 			setRebuildState({ status: "success", message: `${changes.created} relations created, ${changes.updated} updated, ${Math.max(0, linkedAfter - linkedBefore)} diagram links added${cost}.` });
 		} catch (error) {
-			setRebuildState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+			setRebuildState({ status: "error", message: errorToMessage(error) });
 		}
 	};
 

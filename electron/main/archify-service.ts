@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ArchifyRenderResponse } from "../../src/shared/ipc.js";
 import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
+import { isRecord } from "../../src/shared/value.js";
 
 const renderTimeoutMs = 120_000;
 const maxArtifactBytes = 5_000_000;
@@ -348,8 +349,4 @@ function receiptError(receipt: Record<string, unknown> | undefined, fallback: st
 
 function receiptDiagnostics(receipt: Record<string, unknown> | undefined): unknown[] | undefined {
 	return Array.isArray(receipt?.diagnostics) ? receipt.diagnostics.slice(0, 30) : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

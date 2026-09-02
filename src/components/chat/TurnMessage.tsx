@@ -12,6 +12,7 @@ import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { MermaidDiagram } from "../MermaidDiagram";
 import { ArchifyDiagram } from "../ArchifyDiagram";
 import { isArchifyCodeBlock } from "../../shared/archify";
+import { isTurnActive } from "../../utils/sessionRuntime";
 
 export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
 	turn: Turn;
@@ -68,12 +69,12 @@ function TurnWorkDetails({ turn }: { turn: Turn }) {
 		{activities.length > 0 && <TurnActivityTimeline activities={activities} />}
 		{turn.reasoning && <ReasoningBlock content={turn.reasoning} />}
 		{turn.tools?.length ? <ToolCards tools={turn.tools} /> : null}
-		{!turn.reasoning && !turn.tools?.length && !["retrieving", "running", "finalizing"].includes(turn.status) && <p className="turn-work-note">This model did not expose reasoning or agent tool calls for this turn.</p>}
+		{!turn.reasoning && !turn.tools?.length && !isTurnActive(turn) && <p className="turn-work-note">This model did not expose reasoning or agent tool calls for this turn.</p>}
 	</div></details>;
 }
 
 function fallbackTurnActivities(turn: Turn): TurnActivity[] {
-	if (!["retrieving", "running", "finalizing"].includes(turn.status)) return [];
+	if (!isTurnActive(turn)) return [];
 	const label = turn.status === "retrieving"
 		? "Retrieving workspace context"
 		: turn.status === "finalizing"
@@ -151,7 +152,7 @@ function TurnStatus({ status }: { status: Turn["status"] }) {
 	if (status === "interrupted") {
 		return <div className="mb-3 flex items-center gap-2 text-sm text-amber-700"><AlertCircle size={15} /> Previous run was interrupted</div>;
 	}
-	if (status !== "retrieving" && status !== "running" && status !== "finalizing") return null;
+	if (!isTurnActive(status)) return null;
 	return (
 		<div className="mb-3 flex items-center gap-2 text-sm text-secondary">
 			<LoaderCircle size={15} className="animate-spin" />
@@ -184,7 +185,7 @@ function LinkifiedContent({ turn, entities, relations, diagrams, onEntityClick, 
 	onTextSelection?: (text: string, rect: DOMRect) => void;
 }) {
 	const references = useMemo(() => buildKnowledgeReferences(entities, relations, diagrams), [entities, relations, diagrams]);
-	return <MarkdownContent content={turn.content} finalized={!(["retrieving", "running", "finalizing"].includes(turn.status))} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />;
+	return <MarkdownContent content={turn.content} finalized={!isTurnActive(turn)} references={references} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />;
 }
 
 type KnowledgeReference = { kind: "entity" | "diagram"; id: string; labels: string[]; title: string; type: string; summary: string; relationCount: number; sourceCount: number };

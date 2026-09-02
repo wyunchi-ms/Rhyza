@@ -1,5 +1,6 @@
 import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
+import { isTurnActive } from "./sessionRuntime";
 
 const sampleIntervalMs = 10_000;
 const heartbeatIntervalMs = 1_000;
@@ -56,7 +57,7 @@ export function startPerformanceDiagnostics(): () => void {
 			memoryBytes: memory?.usedJSHeapSize,
 			activeSessionId: state.activeSessionId ?? undefined,
 			turnCount: state.turns.length,
-			runningTurnCount: state.turns.filter((turn) => ["retrieving", "running", "finalizing"].includes(turn.status)).length,
+			runningTurnCount: state.turns.filter(isTurnActive).length,
 			entityCount: state.entities.length,
 			longTasks,
 			heartbeat,

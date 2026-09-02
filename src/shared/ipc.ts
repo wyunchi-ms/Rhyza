@@ -1,3 +1,5 @@
+import { isRecord } from "./value";
+
 export const KNOWBRANCH_BRIDGE_NAME = "knowbranch" as const;
 
 export const ipcChannels = {
@@ -316,10 +318,6 @@ export interface KnowbranchBridge {
 }
 
 const providerIds = new Set<ProviderId>(["github-copilot"]);
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function validateProviderStatusRequest(
 	value: unknown,

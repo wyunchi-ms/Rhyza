@@ -1,3 +1,5 @@
+import { isRecord } from "./value";
+
 export const archifyDiagramTypes = ["architecture", "workflow", "sequence", "dataflow", "lifecycle"] as const;
 
 export type ArchifyDiagramType = (typeof archifyDiagramTypes)[number];
@@ -313,8 +315,4 @@ function readString(...values: unknown[]): string | undefined {
 		if (typeof value === "string" && value.trim()) return value.trim();
 	}
 	return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -19,8 +19,10 @@ import { createId } from "../utils/common";
 import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
 import { forkSessionAtTurn } from "../utils/sessionFork";
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
-import { syncSessionExecutionStatus } from "../utils/sessionRuntime";
+import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
 import { archifyToMermaid, parseArchifySource } from "../shared/archify";
+import { addUsage, emptyUsage } from "../utils/branchUsage";
+import { errorToMessage } from "../shared/value";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -206,7 +208,7 @@ export const useAppStore = create<AppState>()(
 						snapshot: debugSnapshot,
 					}).then(
 						(response) => announceForkDebug({ ok: true, message: `Fork dump: ${response.path}` }),
-						(error: unknown) => announceForkDebug({ ok: false, message: `Fork dump failed: ${error instanceof Error ? error.message : String(error)}` }),
+						(error: unknown) => announceForkDebug({ ok: false, message: `Fork dump failed: ${errorToMessage(error)}` }),
 					);
 				} else {
 					announceForkDebug({ ok: false, message: "Fork dump unavailable. Restart Electron to load the updated preload bridge." });
@@ -266,7 +268,7 @@ export const useAppStore = create<AppState>()(
 				if (!usage) return;
 				set((state) => ({
 					sessions: state.sessions.map((session) => session.id === id
-						? { ...session, titleUsage: addTokenUsage(session.titleUsage, usage) }
+						? { ...session, titleUsage: addUsage(session.titleUsage ?? emptyUsage(), usage) }
 						: session),
 				}));
 			},
@@ -274,7 +276,7 @@ export const useAppStore = create<AppState>()(
 				if (!usage) return;
 				set((state) => ({
 					turns: state.turns.map((turn) => turn.id === id
-						? { ...turn, usage: addTokenUsage(turn.usage, usage) }
+						? { ...turn, usage: addUsage(turn.usage ?? emptyUsage(), usage) }
 						: turn),
 				}));
 			},
@@ -763,21 +765,9 @@ function normalizeSettings(settings: Partial<Settings> | undefined): Settings {
 	return { ...defaultSettings, ...current, theme, diagramRenderer };
 }
 
-function addTokenUsage(left: import("../types").TokenUsage | undefined, right: import("../types").TokenUsage) {
-	return {
-		input: (left?.input ?? 0) + right.input,
-		output: (left?.output ?? 0) + right.output,
-		cacheRead: (left?.cacheRead ?? 0) + right.cacheRead,
-		cacheWrite: (left?.cacheWrite ?? 0) + right.cacheWrite,
-		cost: (left?.cost ?? 0) + right.cost,
-	};
-}
-
-const transientTurnStatuses = new Set<Turn["status"]>(["retrieving", "running", "finalizing"]);
-
 function recoverInterruptedTurns(turns: Turn[]): Turn[] {
 	const recoveredAt = new Date().toISOString();
-	return turns.map((turn) => transientTurnStatuses.has(turn.status)
+	return turns.map((turn) => isTurnActive(turn)
 		? {
 			...turn,
 			content: turn.content || "The response was interrupted because the application closed before the agent finished.",
@@ -796,7 +786,7 @@ function recoverInterruptedTurns(turns: Turn[]): Turn[] {
 
 function recoverInterruptedSessions(sessions: SessionNode[], turns: Turn[]): SessionNode[] {
 	const interruptedSessionIds = new Set(turns
-		.filter((turn) => transientTurnStatuses.has(turn.status))
+		.filter(isTurnActive)
 		.map((turn) => turn.sessionId));
 	return sessions.map((session) => ({
 		...session,

@@ -1,5 +1,6 @@
 import type { SourceSearchHit } from "../shared/ipc";
 import type { Diagram, Entity, Relation } from "../types";
+import { isRecord } from "../shared/value";
 
 export function buildKnowledgeContext(prompt: string, entities: Entity[], relations: Relation[], diagrams: Diagram[], sourceHits: SourceSearchHit[]): string {
 	const lowerPrompt = prompt.toLocaleLowerCase();
@@ -55,8 +56,4 @@ export function summarizeToolTarget(value: unknown): string | undefined {
 		if (typeof candidate === "string" && candidate.trim()) return candidate.trim().replace(/\s+/g, " ").slice(0, 160);
 	}
 	return undefined;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

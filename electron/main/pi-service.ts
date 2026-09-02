@@ -38,6 +38,7 @@ import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import type { GptArchifyHarness } from "./archify-harness.js";
 import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
+import { errorToMessage, isRecord } from "../../src/shared/value.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -961,10 +962,6 @@ function cleanMermaidLabel(value: string): string {
 		.slice(0, 160);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function cleanCandidateText(value: unknown, limit: number): string {
 	return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, limit) : "";
 }
@@ -989,8 +986,4 @@ function sanitizeForRenderer(value: unknown): unknown {
 			return nestedValue;
 		}),
 	);
-}
-
-function errorToMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

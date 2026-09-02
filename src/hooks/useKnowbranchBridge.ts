@@ -5,6 +5,7 @@ import type {
 	ProviderStatusResponse,
 	WorkspaceInfo,
 } from "../shared/ipc";
+import { errorToMessage } from "../shared/value";
 
 export const githubCopilotProviderId = "github-copilot" as const;
 
@@ -84,8 +85,4 @@ export function useElectronProviderState() {
 		setAuthEvents,
 		setError,
 	};
-}
-
-function errorToMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

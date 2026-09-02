@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isRecord } from "../../src/shared/value.js";
 
 const maxStateBytes = 50 * 1024 * 1024;
 
@@ -230,10 +231,6 @@ function stateContentCounts(value: string): { total: number } {
 			0,
 		),
 	};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isMissingFileError(error: unknown): boolean {
