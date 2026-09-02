@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promi
 import path from "node:path";
 import { promisify } from "node:util";
 import type { SourceInfo, SourceSearchHit, SourceSearchRequest } from "../../src/shared/ipc.js";
+import { rankSourceEvidence, sourcePathAuthority } from "../../src/shared/source-ranking.js";
 
 const execFileAsync = promisify(execFile);
 const ignoredDirectories = new Set([".git", "node_modules", "dist", "build", "bin", "obj", ".next", ".cache"]);
@@ -89,24 +90,28 @@ export class SourceService {
 			(source) => source.status === "indexed" && (!request.sourceId || source.id === request.sourceId),
 		);
 		const hits: SourceSearchHit[] = [];
+		const candidateLimit = Math.max(200, limit * 20);
 		for (const source of sources) {
-			for (const relativePath of source.files) {
-				if (hits.length >= limit) return hits;
+			const rankedFiles = [...source.files].sort((left, right) => sourcePathAuthority(right) - sourcePathAuthority(left));
+			for (const relativePath of rankedFiles) {
+				if (hits.length >= candidateLimit) break;
 				try {
 					const content = await readFile(path.join(source.path, relativePath), "utf8");
 					const lines = content.split(/\r?\n/);
+					let fileHits = 0;
 					for (let index = 0; index < lines.length; index += 1) {
 						const searchable = `${relativePath} ${lines[index]}`.toLocaleLowerCase();
 						if (!terms.some((term) => searchable.includes(term))) continue;
 						hits.push({ sourceId: source.id, path: relativePath, line: index + 1, preview: lines[index].trim().slice(0, 240) });
-						if (hits.length >= limit) return hits;
+						fileHits += 1;
+						if (fileHits >= 3 || hits.length >= candidateLimit) break;
 					}
 				} catch {
 					// Files can disappear between indexing and searching.
 				}
 			}
 		}
-		return hits;
+		return rankSourceEvidence(hits, request.query, limit);
 	}
 
 	async read(sourceId: string, relativePath: string, lineStart = 1, lineEnd?: number, workspacePath?: string): Promise<SourceReadResult> {

@@ -23,6 +23,7 @@ import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntim
 import { archifyToMermaid, parseArchifySource } from "../shared/archify";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { errorToMessage } from "../shared/value";
+import { prioritizeKnowledgeSourceRefs, sourceRefsForKnowledgeScope } from "../utils/knowledgeExtraction";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -303,9 +304,11 @@ export const useAppStore = create<AppState>()(
 				const nextEntities = [...state.entities];
 				const nextRelations = [...state.relations];
 				const mentions: EntityMention[] = [];
-				const evidence = dedupeSourceRefs([{ sessionId, turnId }, ...sourceRefs]);
+				const evidence = prioritizeKnowledgeSourceRefs([{ sessionId, turnId }, ...sourceRefs], content);
 
 				for (const candidate of candidates.slice(0, 3)) {
+					const candidateQuery = `${candidate.name} ${candidate.summary}`;
+					const candidateEvidence = sourceRefsForKnowledgeScope(candidate.sourceScope, evidence, candidateQuery);
 					const existing = nextEntities.find(
 						(entity) =>
 							!entity.deletedAt &&
@@ -323,7 +326,8 @@ export const useAppStore = create<AppState>()(
 								summary: candidate.summary,
 								content: candidate.content,
 								confidence: candidate.confidence === "explicit" ? "confirmed" : existing.confidence,
-								sourceRefs: dedupeSourceRefs([...existing.sourceRefs, ...evidence]),
+								sourceScope: candidate.sourceScope,
+								sourceRefs: sourceRefsForKnowledgeScope(candidate.sourceScope, [...existing.sourceRefs, ...candidateEvidence], candidateQuery),
 								version: existing.version + 1,
 								updatedAt: timestamp,
 							};
@@ -341,7 +345,8 @@ export const useAppStore = create<AppState>()(
 						summary: candidate.summary,
 						content: candidate.content,
 						confidence: candidate.confidence === "explicit" ? "confirmed" : "inferred",
-						sourceRefs: evidence,
+						sourceScope: candidate.sourceScope,
+						sourceRefs: candidateEvidence,
 						version: 1,
 						updatedAt: timestamp,
 					};

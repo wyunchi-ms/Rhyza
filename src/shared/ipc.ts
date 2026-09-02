@@ -1,4 +1,4 @@
-import { isRecord } from "./value";
+import { isRecord } from "./value.js";
 
 export const KNOWBRANCH_BRIDGE_NAME = "knowbranch" as const;
 
@@ -7,6 +7,9 @@ export const ipcChannels = {
 	providerLogin: "knowbranch:provider-login",
 	providerLogout: "knowbranch:provider-logout",
 	modelCatalog: "knowbranch:model-catalog",
+	pluginList: "knowbranch:plugin-list",
+	pluginInstall: "knowbranch:plugin-install",
+	pluginRemove: "knowbranch:plugin-remove",
 	getWorkspace: "knowbranch:get-workspace",
 	selectWorkspace: "knowbranch:select-workspace",
 	sourceList: "knowbranch:source-list",
@@ -81,6 +84,20 @@ export interface ModelCatalogResponse {
 	models: ModelInfo[];
 	configured: boolean;
 	error?: string;
+}
+
+export interface PiPluginInfo {
+	source: string;
+	scope: "user" | "project";
+	installed: boolean;
+	installedPath?: string;
+}
+
+export interface PiPluginInstallRequest { source: string }
+export interface PiPluginRemoveRequest { source: string }
+export interface PiPluginMutationResponse {
+	ok: true;
+	plugins: PiPluginInfo[];
 }
 
 export interface WorkspaceInfo {
@@ -180,6 +197,7 @@ export interface KnowledgeCandidate {
 	summary: string;
 	content: string;
 	confidence: "explicit" | "inferred";
+	sourceScope: "workspace" | "general" | "mixed";
 }
 
 export interface KnowledgeRelationCandidate {
@@ -206,7 +224,7 @@ export interface KnowledgeDiagramCandidate {
 export interface KnowledgeExtractionRequest {
 	question: string;
 	answer: string;
-	existingEntities: Array<{ id: string; name: string; aliases: string[]; type: string; summary: string; content: string; version: number }>;
+	existingEntities: Array<{ id: string; name: string; aliases: string[]; type: string; summary: string; content: string; sourceScope?: "workspace" | "general" | "mixed"; version: number }>;
 	existingDiagrams: Array<{ id: string; name: string; type: string; nodeLabels: string[] }>;
 	model?: { providerId: ProviderId; modelId: string };
 }
@@ -294,6 +312,9 @@ export interface KnowbranchBridge {
 	providerLogin(request: ProviderLoginRequest): Promise<ProviderActionResponse>;
 	providerLogout(request: ProviderLogoutRequest): Promise<ProviderActionResponse>;
 	modelCatalog(request?: ModelCatalogRequest): Promise<ModelCatalogResponse>;
+	pluginList(): Promise<PiPluginInfo[]>;
+	pluginInstall(request: PiPluginInstallRequest): Promise<PiPluginMutationResponse>;
+	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;
 	getWorkspace(): Promise<WorkspaceInfo>;
 	selectWorkspace(): Promise<WorkspaceInfo>;
 	sourceList(): Promise<SourceInfo[]>;
@@ -330,6 +351,23 @@ export function validateProviderStatusRequest(
 
 export const validateProviderLoginRequest = validateProviderStatusRequest;
 export const validateProviderLogoutRequest = validateProviderStatusRequest;
+
+export function validatePiPluginSource(value: unknown): { source: string } {
+	if (!isRecord(value) || typeof value.source !== "string") {
+		throw new Error("A Pi package source is required.");
+	}
+	const source = value.source.trim();
+	if (!source || source.length > 2_048 || /[\u0000-\u001f\u007f]/.test(source)) {
+		throw new Error("Invalid Pi package source.");
+	}
+	const supported = /^(npm:|git:|https?:\/\/|ssh:\/\/|git:\/\/)/i.test(source)
+		|| /^[a-zA-Z]:[\\/]/.test(source)
+		|| source.startsWith("/");
+	if (!supported) {
+		throw new Error("Use an npm:, git:, HTTPS, SSH, or absolute local path source.");
+	}
+	return { source };
+}
 
 export function validateModelCatalogRequest(value: unknown): ModelCatalogRequest {
 	if (value === undefined) {
@@ -445,6 +483,7 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 					type: typeof entity.type === "string" ? entity.type.slice(0, 60) : "Concept",
 					summary: entity.summary.slice(0, 500),
 					content: typeof entity.content === "string" ? entity.content.slice(0, 2_000) : "",
+					sourceScope: entity.sourceScope === "workspace" || entity.sourceScope === "general" || entity.sourceScope === "mixed" ? entity.sourceScope : undefined,
 					version: typeof entity.version === "number" ? entity.version : 1,
 				}]
 				: [],

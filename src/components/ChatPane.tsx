@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { PanelRight, Sparkles } from "lucide-react";
+import { LoaderCircle, PanelRight, Sparkles } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import {
 	githubCopilotProviderId,
@@ -19,8 +19,9 @@ import { buildPriorAgentTranscript } from "../utils/agentTranscript";
 import { selectionContinuationTarget } from "../utils/sessionFork";
 import { createSelectionAppendDebugSnapshot, forkDebugEventName, type ForkDebugEventDetail } from "../utils/forkDebug";
 import { failRunningTurnActivities, finishTurnActivity, startTurnActivity } from "../utils/turnActivity";
-import { buildKnowledgeInventory, sourceHitsToRefs } from "../utils/knowledgeExtraction";
+import { buildKnowledgeInventory, prioritizeKnowledgeSourceRefs, sourceHitsToRefs } from "../utils/knowledgeExtraction";
 import { isSessionRunning } from "../utils/sessionRuntime";
+import { branchSwitchEndEvent, branchSwitchStartEvent } from "../utils/branchSwitch";
 import { errorToMessage } from "../shared/value";
 import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
 import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionAskPopover";
@@ -39,6 +40,7 @@ export const ChatPane: React.FC = () => {
 	const [forkDebugStatus, setForkDebugStatus] = useState<ForkDebugEventDetail | null>(null);
 	const [images, setImages] = useState<ComposerImage[]>([]);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
+	const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
 	const activeSessionId = store.activeSessionId;
 	const isSending = pendingRequests > 0;
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
@@ -46,6 +48,16 @@ export const ChatPane: React.FC = () => {
 	const { scrollContainerRef, keyboardTurnId, setKeyboardTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn } = useConversationNavigation(store.turns, activeSessionId);
 	const { preview: knowledgePreview, openEntityById: openEntityPreview, openDiagramById: openDiagramPreview, closePreview } = useKnowledgePreview(store.entities, store.diagrams);
 	useEffect(() => { requestScheduler.setLimit(store.settings.maxConcurrentRequests); }, [store.settings.maxConcurrentRequests]);
+	useEffect(() => {
+		const start = () => setIsSwitchingBranch(true);
+		const end = () => setIsSwitchingBranch(false);
+		window.addEventListener(branchSwitchStartEvent, start);
+		window.addEventListener(branchSwitchEndEvent, end);
+		return () => {
+			window.removeEventListener(branchSwitchStartEvent, start);
+			window.removeEventListener(branchSwitchEndEvent, end);
+		};
+	}, []);
 	useEffect(() => {
 		const onForkDebug = (event: Event) => setForkDebugStatus((event as CustomEvent<ForkDebugEventDetail>).detail);
 		window.addEventListener(forkDebugEventName, onForkDebug);
@@ -190,7 +202,10 @@ export const ChatPane: React.FC = () => {
 			}
 			store.addTurnUsage(assistantTurnId, extraction.usage);
 			const prefetchedSourceRefs = sourceHitsToRefs(sourceHits, useAppStore.getState().sources);
-			const sourceRefs = result.sourceRefs?.length ? result.sourceRefs : prefetchedSourceRefs;
+			const sourceRefs = prioritizeKnowledgeSourceRefs(
+				[...prefetchedSourceRefs, ...(result.sourceRefs ?? [])],
+				agentPrompt,
+			);
 			store.finalizeTurn(targetSessionId, assistantTurnId, response, extraction.entities, extraction.relations, extraction.diagrams, sourceRefs);
 			const generatedSummary = await summaryPromise;
 			store.addTurnUsage(assistantTurnId, generatedSummary.usage);
@@ -322,6 +337,7 @@ export const ChatPane: React.FC = () => {
 				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1><span>{store.settings.defaultModel || "GitHub Copilot"}</span></div>
 				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && "is-active")} onClick={store.toggleRightPane} title="Toggle knowledge panel" aria-label="Toggle knowledge panel"><PanelRight size={17} /></button>
 			</header>
+			{isSwitchingBranch && <div className="branch-switch-loading" role="status" aria-live="polite"><LoaderCircle size={22} aria-hidden="true" /><div><strong>Opening branch…</strong><span>Preparing the latest conversation</span></div></div>}
 			<div ref={scrollContainerRef} className="chat-scroll" tabIndex={0} role="region" aria-label="Conversation. Use up and down arrow keys to move between turns." onFocus={() => setKeyboardTurnId((current) => current ?? sessionTurns[sessionTurns.length - 1]?.id ?? null)} onPointerDown={(event) => {
 				const target = event.target as Element | null;
 				if (target?.closest("button, a, input, textarea, select, [contenteditable='true']")) return;

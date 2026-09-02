@@ -11,7 +11,7 @@ import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
 import { withTimeout } from "../utils/common";
 import { isArchifyCodeBlock } from "../shared/archify";
-import { buildKnowledgeInventory } from "../utils/knowledgeExtraction";
+import { buildKnowledgeInventory, prioritizeKnowledgeSourceRefs, sourceHitsToRefs } from "../utils/knowledgeExtraction";
 import { errorToMessage } from "../shared/value";
 
 const Knowledge = () => {
@@ -131,15 +131,52 @@ function EntityCenterEditor({ draft, onDraftChange, onSave, onCancel }: { draft:
 }
 
 function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiagram: (diagramId: string) => void }) {
-	const { softDeleteEntity, saveRelation, softDeleteRelation, setSelectedEntity, relations, entities, diagrams } = useAppStore();
+	const { softDeleteEntity, saveEntity, saveRelation, softDeleteRelation, setSelectedEntity, relations, entities, diagrams, sources: sourceCatalog } = useAppStore();
 	const [relationForm, setRelationForm] = useState<{ relation?: Relation; relatedEntityId: string; type: string; description: string } | null>(null);
+	const [sourceReindexState, setSourceReindexState] = useState<{ status: "idle" | "running" | "success" | "error"; message?: string }>({ status: "idle" });
 	const entityRelations = relations.filter((relation) => !relation.deletedAt && (relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id));
 	const linkedDiagrams = diagrams.filter((diagram) => !diagram.deletedAt).flatMap((diagram) => {
 		const linkedNodes = diagram.nodes.filter((node) => node.entityId === entity.id);
 		return linkedNodes.length ? [{ diagram, linkedNodes }] : [];
 	});
 	const sources = uniqueSourceLocations(entity.sourceRefs);
-	useEffect(() => setRelationForm(null), [entity.id]);
+	const sourceScope = entity.sourceScope ?? "workspace";
+	useEffect(() => {
+		setRelationForm(null);
+		setSourceReindexState({ status: "idle" });
+	}, [entity.id]);
+	const reindexSources = async () => {
+		if (sourceReindexState.status === "running") return;
+		const bridge = getKnowbranchBridge();
+		if (!bridge) return setSourceReindexState({ status: "error", message: "The Electron runtime is required to search sources." });
+		const query = buildEntitySourceQuery(entity);
+		setSourceReindexState({ status: "running", message: "Searching authoritative workspace sources…" });
+		try {
+			const hits = await bridge.sourceSearch({ query, limit: 24 });
+			const durableSessionRefs = entity.sourceRefs.filter((ref) => !ref.path);
+			if (hits.length === 0) {
+				if (sourceScope !== "general") throw new Error("No matching indexed source files were found.");
+				saveEntity({ ...entity, sourceRefs: durableSessionRefs });
+				setSourceReindexState({ status: "success", message: "No workspace evidence found. Conversation provenance was kept; workspace citations remain optional." });
+				return;
+			}
+			const nextRefs = prioritizeKnowledgeSourceRefs(
+				[...durableSessionRefs, ...sourceHitsToRefs(hits, sourceCatalog)],
+				query,
+			);
+			const fileRefCount = nextRefs.filter((ref) => Boolean(ref.path)).length;
+			if (fileRefCount === 0) {
+				if (sourceScope !== "general") throw new Error("No authoritative file evidence was found.");
+				saveEntity({ ...entity, sourceRefs: durableSessionRefs });
+				setSourceReindexState({ status: "success", message: "No authoritative workspace evidence found. Conversation provenance was kept." });
+				return;
+			}
+			saveEntity({ ...entity, sourceScope: sourceScope === "general" ? "mixed" : sourceScope, sourceRefs: nextRefs });
+			setSourceReindexState({ status: "success", message: `Replaced file references with ${fileRefCount} ranked source${fileRefCount === 1 ? "" : "s"}.` });
+		} catch (error) {
+			setSourceReindexState({ status: "error", message: errorToMessage(error) });
+		}
+	};
 	const openRelationEditor = (relation?: Relation) => {
 		const relatedEntityId = relation ? (relation.sourceEntityId === entity.id ? relation.targetEntityId : relation.sourceEntityId) : "";
 		setRelationForm({ relation, relatedEntityId, type: relation?.type ?? "related_to", description: relation?.description ?? "" });
@@ -211,9 +248,21 @@ function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiag
 		</section>
 		<details className="entity-sources-disclosure">
 			<summary><span>Sources</span><span className="entity-sources-summary-meta"><small>{sources.length}</small><ChevronDown size={14} aria-hidden="true" /></span></summary>
-			<div className="entity-sources-content">{sources.map((source) => <div key={sourceLocationKey(source)} className="break-words font-mono text-[11px] leading-4 text-secondary" title={formatSourceLocation(source)}>{formatSourceLocation(source)}</div>)}{sources.length === 0 && <p className="text-xs text-secondary">No sources.</p>}</div>
+			<div className="entity-sources-content">
+				<div className="entity-sources-toolbar"><span>{sourceScope === "general" ? "General knowledge · workspace evidence is optional." : sourceScope === "mixed" ? "General knowledge with workspace-specific evidence." : "Workspace knowledge · implementation and configuration sources rank first."}</span><button type="button" className="secondary-button" disabled={sourceReindexState.status === "running"} onClick={() => void reindexSources()}><RefreshCw size={13} className={sourceReindexState.status === "running" ? "animate-spin" : ""} />{sourceReindexState.status === "running" ? "Reindexing…" : "Reindex"}</button></div>
+				{sourceReindexState.message && <p className={`entity-source-reindex-feedback is-${sourceReindexState.status}`} role="status">{sourceReindexState.message}</p>}
+				{sources.map((source) => <div key={sourceLocationKey(source)} className="break-words font-mono text-[11px] leading-4 text-secondary" title={formatSourceLocation(source)}>{formatSourceLocation(source)}</div>)}{sources.length === 0 && <p className="text-xs text-secondary">No sources.</p>}
+			</div>
 		</details>
 	</div>;
+}
+
+function buildEntitySourceQuery(entity: Entity): string {
+	return [entity.name, ...entity.aliases, entity.type, entity.summary]
+		.join(" ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 1_500);
 }
 
 function uniqueSourceLocations(sourceRefs: SourceRef[]): SourceRef[] {

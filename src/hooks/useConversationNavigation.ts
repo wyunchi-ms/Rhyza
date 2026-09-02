@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../store";
 import type { Turn } from "../types";
 import { buildTurnSessionMap, sessionAtViewportAnchor } from "../utils/sessionVisibility";
+import { announceBranchSwitchEnd } from "../utils/branchSwitch";
 
 /** Coordinates the conversation viewport, keyboard cursor, and tree viewport marker. */
 export function useConversationNavigation(turns: Turn[], activeSessionId: string | null) {
@@ -12,7 +13,14 @@ export function useConversationNavigation(turns: Turn[], activeSessionId: string
 
 	useEffect(() => { useAppStore.getState().setVisibleSession(activeSessionId); }, [activeSessionId]);
 	useEffect(() => trackVisibleSession(scrollContainerRef.current), [activeSessionId, sessionTurns.length, turnSessionMap]);
-	useEffect(() => scrollToInitialTurn(scrollContainerRef.current), [activeSessionId]);
+	// Position a newly selected branch before the browser paints it. Waiting for an
+	// effect/frame exposes the first turn and lets the container's smooth-scroll CSS
+	// animate through the entire transcript.
+	const lastSessionTurnId = sessionTurns[sessionTurns.length - 1]?.id;
+	useLayoutEffect(
+		() => scrollToInitialTurn(scrollContainerRef.current),
+		[activeSessionId, lastSessionTurnId],
+	);
 	useEffect(() => {
 		const focusTurn = (event: Event) => {
 			const turnId = (event as CustomEvent<{ turnId?: string }>).detail?.turnId;
@@ -67,15 +75,26 @@ function trackVisibleSession(container: HTMLDivElement | null): () => void {
 }
 
 function scrollToInitialTurn(container: HTMLDivElement | null): () => void {
-	const frame = window.requestAnimationFrame(() => {
+	if (!container) return () => undefined;
+	container.classList.add("is-positioning");
+	const position = () => {
 		const pendingTurnId = window.sessionStorage.getItem("rhyza-focus-turn");
 		const pendingTurn = pendingTurnId ? document.getElementById(`turn-${pendingTurnId}`) : null;
 		if (pendingTurn) {
-			pendingTurn.scrollIntoView({ behavior: "smooth", block: "center" });
-			window.sessionStorage.removeItem("rhyza-focus-turn");
-		} else if (container) {
-			container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+			pendingTurn.scrollIntoView({ behavior: "auto", block: "center" });
+		} else {
+			container.scrollTop = container.scrollHeight - container.clientHeight;
 		}
+	};
+	position();
+	const frame = window.requestAnimationFrame(() => {
+		position();
+		window.sessionStorage.removeItem("rhyza-focus-turn");
+		container.classList.remove("is-positioning");
+		announceBranchSwitchEnd();
 	});
-	return () => window.cancelAnimationFrame(frame);
+	return () => {
+		window.cancelAnimationFrame(frame);
+		container.classList.remove("is-positioning");
+	};
 }

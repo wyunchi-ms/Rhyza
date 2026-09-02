@@ -8,6 +8,7 @@ import { useAppStore } from "../store";
 import type { SessionNode, SessionProgressStatus, TokenUsage } from "../types";
 import { allocateBranchUsage, formatTokens, usageTokens } from "../utils/branchUsage";
 import { runningSessionIds } from "../utils/sessionRuntime";
+import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
 
 const progressOptions: Array<{
 	value?: SessionProgressStatus;
@@ -26,13 +27,27 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 	const { sessions, turns, activeSessionId, visibleSessionId, setActiveSession, createRootSession, renameSession, setSessionProgressStatus, deleteSession } =
 		useAppStore();
 	const treeRef = useRef<HTMLDivElement>(null);
+	const branchSwitchFrameRef = useRef<number | null>(null);
 	const scrollTargetSessionId = visibleSessionId ?? activeSessionId;
 	const usage = allocateBranchUsage(sessions, turns);
 	const runningIds = runningSessionIds(turns);
 	const navigate = useNavigate();
 	const selectSession = (id: string) => {
-		setActiveSession(id);
-		navigate("/");
+		if (id === activeSessionId) {
+			navigate("/");
+			return;
+		}
+		if (branchSwitchFrameRef.current !== null) window.cancelAnimationFrame(branchSwitchFrameRef.current);
+		announceBranchSwitchStart(id);
+		// Yield one complete frame so the loading overlay is painted before the
+		// potentially expensive conversation tree is reconciled.
+		branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
+			branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
+				branchSwitchFrameRef.current = null;
+				setActiveSession(id);
+				navigate("/");
+			});
+		});
 	};
 	const createSession = () => {
 		createRootSession();
@@ -45,6 +60,10 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 		const highlighted = nodes ? [...nodes].find((element) => element.dataset.sessionTreeId === scrollTargetSessionId) : undefined;
 		highlighted?.scrollIntoView({ block: "nearest" });
 	}, [scrollTargetSessionId]);
+	useEffect(() => () => {
+		if (branchSwitchFrameRef.current !== null) window.cancelAnimationFrame(branchSwitchFrameRef.current);
+		announceBranchSwitchEnd();
+	}, []);
 	const regenerateBranchTitles = async (parentId: string) => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;

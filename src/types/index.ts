@@ -108,6 +108,8 @@ export interface Entity {
 	summary: string;
 	content: string;
 	confidence: Confidence;
+	/** Whether this entity depends on this repository, general knowledge, or both. */
+	sourceScope?: "workspace" | "general" | "mixed";
 	sourceRefs: SourceRef[];
 	version: number;
 	updatedAt: string;

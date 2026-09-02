@@ -1,6 +1,7 @@
 import clsx from "clsx";
-import { Accessibility, Brain, Cloud, Copy, ExternalLink, Moon, Network, Palette, Settings2, Sun } from "lucide-react";
+import { Accessibility, Brain, Cloud, Copy, ExternalLink, LoaderCircle, Moon, Network, Package, Palette, Settings2, ShieldAlert, Sun, Trash2 } from "lucide-react";
 import type React from "react";
+import { useEffect, useState } from "react";
 import {
 	githubCopilotProviderId,
 	getKnowbranchBridge,
@@ -8,6 +9,8 @@ import {
 } from "../hooks/useKnowbranchBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
+import type { PiPluginInfo } from "../shared/ipc";
+import { errorToMessage } from "../shared/value";
 import archifyVendor from "../../resources/skills/archify/RHYZA_VENDOR.json";
 
 const Settings: React.FC = () => {
@@ -65,6 +68,13 @@ const Settings: React.FC = () => {
 			</div>
 
 			<div className="settings-sections">
+				<section>
+					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+						<Package size={16} /> Pi Plugins
+					</h2>
+					<PluginSettings />
+				</section>
+
 				<section>
 					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
 						<Palette size={16} /> Appearance
@@ -273,6 +283,104 @@ const Settings: React.FC = () => {
 		</div>
 	);
 };
+
+function PluginSettings() {
+	const bridge = getKnowbranchBridge();
+	const [plugins, setPlugins] = useState<PiPluginInfo[]>([]);
+	const [source, setSource] = useState("");
+	const [busySource, setBusySource] = useState<string | null>(bridge ? "list" : null);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!bridge) return;
+		let cancelled = false;
+		bridge.pluginList()
+			.then((items) => { if (!cancelled) setPlugins(items); })
+			.catch((loadError) => { if (!cancelled) setError(errorToMessage(loadError)); })
+			.finally(() => { if (!cancelled) setBusySource(null); });
+		return () => { cancelled = true; };
+	}, [bridge]);
+
+	const install = async () => {
+		if (!bridge || !source.trim()) return;
+		const requestedSource = source.trim();
+		setBusySource(requestedSource);
+		setError(null);
+		try {
+			const result = await bridge.pluginInstall({ source: requestedSource });
+			setPlugins(result.plugins);
+			setSource("");
+		} catch (installError) {
+			setError(errorToMessage(installError));
+		} finally {
+			setBusySource(null);
+		}
+	};
+
+	const remove = async (pluginSource: string) => {
+		if (!bridge) return;
+		setBusySource(pluginSource);
+		setError(null);
+		try {
+			const result = await bridge.pluginRemove({ source: pluginSource });
+			setPlugins(result.plugins);
+		} catch (removeError) {
+			setError(errorToMessage(removeError));
+		} finally {
+			setBusySource(null);
+		}
+	};
+
+	return (
+		<div className="pi-plugins-card">
+			<div className="pi-plugin-warning" role="note">
+				<ShieldAlert size={17} aria-hidden="true" />
+				<p>Pi packages may execute code with full access to your computer. Install only packages whose source you trust.</p>
+			</div>
+			<form className="pi-plugin-install" onSubmit={(event) => { event.preventDefault(); void install(); }}>
+				<label htmlFor="pi-plugin-source">Package source</label>
+				<div>
+					<input id="pi-plugin-source" className="field" value={source} onChange={(event) => setSource(event.target.value)} disabled={!bridge || busySource !== null} placeholder="npm:@scope/package or git:github.com/user/repo" />
+					<button type="submit" className="command-button" disabled={!bridge || !source.trim() || busySource !== null}>
+						{busySource && busySource !== "list" ? <LoaderCircle className="pi-plugin-spinner" size={14} /> : <Package size={14} />}
+						Install
+					</button>
+				</div>
+				<p>Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.</p>
+			</form>
+			<div className="pi-plugin-list-header">
+				<h3>Installed packages <span>{plugins.length}</span></h3>
+				<button type="button" className="secondary-button" onClick={() => void bridge?.openExternal({ url: "https://www.npmjs.com/search?q=keywords%3Api-package" })} disabled={!bridge}>
+					<ExternalLink size={13} /> Browse packages
+				</button>
+			</div>
+			{error && <p className="pi-plugin-error" role="alert">{error}</p>}
+			{busySource === "list" ? (
+				<p className="pi-plugin-empty"><LoaderCircle className="pi-plugin-spinner" size={15} /> Loading installed packages…</p>
+			) : plugins.length === 0 ? (
+				<p className="pi-plugin-empty">No Pi packages are configured yet.</p>
+			) : (
+				<ul className="pi-plugin-list">
+					{plugins.map((plugin) => (
+						<li key={`${plugin.scope}:${plugin.source}`}>
+							<div><strong>{pluginDisplayName(plugin.source)}</strong><code>{plugin.source}</code><small>{plugin.scope === "project" ? "Workspace" : "User"} · {plugin.installed ? "Installed" : "Missing on disk"}</small></div>
+							<button type="button" className="secondary-button pi-plugin-remove" disabled={busySource !== null || plugin.scope === "project"} title={plugin.scope === "project" ? "Project packages are managed by the workspace .pi/settings.json file." : "Remove package"} onClick={() => void remove(plugin.source)}>
+								{busySource === plugin.source ? <LoaderCircle className="pi-plugin-spinner" size={13} /> : <Trash2 size={13} />} Remove
+							</button>
+						</li>
+					))}
+				</ul>
+			)}
+			<p className="pi-plugin-reload-note">Installing or removing a package reloads Agent sessions; the next message uses the new plugin set.</p>
+		</div>
+	);
+}
+
+function pluginDisplayName(source: string): string {
+	const withoutPrefix = source.replace(/^(npm:|git:)/i, "").replace(/[\\/]$/, "");
+	const withoutVersion = withoutPrefix.replace(/@[^/@]+$/, "");
+	return withoutVersion.split(/[\\/]/).filter(Boolean).pop() ?? source;
+}
 
 function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 	if (event.type === "device_code") {

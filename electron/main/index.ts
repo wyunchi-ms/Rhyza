@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
 import { readdir, writeFile } from "node:fs/promises";
@@ -6,6 +7,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PiService } from "./pi-service.js";
+import { PiPluginService } from "./pi-plugin-service.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
 import { ArchifyService } from "./archify-service.js";
@@ -17,6 +19,7 @@ import {
 	validateProviderLoginRequest,
 	validateProviderLogoutRequest,
 	validateProviderStatusRequest,
+	validatePiPluginSource,
 	validateIdRequest,
 	validateSourceSearchRequest,
 	validateWorkspaceDiffRequest,
@@ -56,11 +59,15 @@ interface ElectronSmokeEvidence {
 	stateSessions: number;
 	stateTurns: number;
 	knowledgeReferenceCount: number;
+	activeChatTurnCount: number;
+	chatAtEnd: boolean;
+	branchLoadingVisible: boolean;
 }
 
 let mainWindow: BrowserWindow | undefined;
 let settingsStore: SettingsStore;
 let piService: PiService;
+let piPluginService: PiPluginService;
 let sourceService: SourceService;
 let appStateStore: AppStateStore;
 let archifyService: ArchifyService;
@@ -204,6 +211,25 @@ function registerIpcHandlers(): void {
 		withValidSender(event, () =>
 			piService.getModelCatalog(validateModelCatalogRequest(payload)),
 		),
+	);
+	ipcMain.handle(ipcChannels.pluginList, async (event) =>
+		withValidSender(event, () => piPluginService.list()),
+	);
+	ipcMain.handle(ipcChannels.pluginInstall, async (event, payload) =>
+		withValidSender(event, async () => {
+			const { source } = validatePiPluginSource(payload);
+			const plugins = await piPluginService.install(source);
+			piService.reloadInstalledPlugins();
+			return { ok: true as const, plugins };
+		}),
+	);
+	ipcMain.handle(ipcChannels.pluginRemove, async (event, payload) =>
+		withValidSender(event, async () => {
+			const { source } = validatePiPluginSource(payload);
+			const plugins = await piPluginService.remove(source);
+			piService.reloadInstalledPlugins();
+			return { ok: true as const, plugins };
+		}),
 	);
 	ipcMain.handle(ipcChannels.getWorkspace, async (event) =>
 		withValidSender(event, async () => ({
@@ -362,6 +388,10 @@ app.whenReady().then(async () => {
 		sourceService,
 		archifyHarness,
 	);
+	piPluginService = new PiPluginService(
+		getAgentDir(),
+		() => settingsStore.getWorkspacePath(),
+	);
 	registerIpcHandlers();
 	mainLoopDelay.enable();
 	setInterval(() => {
@@ -488,9 +518,12 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 				const deadline = Date.now() + ${smokeTimeoutMs - 1_000};
 				let evidence;
 				while (Date.now() < deadline) {
+					await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 					const serializedState = window.knowbranch?.appStateLoad?.() ?? null;
 					let parsedState = {};
 					try { parsedState = serializedState ? (JSON.parse(serializedState).state ?? {}) : {}; } catch {}
+					const chat = document.querySelector('.chat-scroll');
+					const activeChatTurnCount = chat?.querySelectorAll('[data-turn-id]').length ?? 0;
 					evidence = {
 						title: document.title,
 						bodyText: document.body?.innerText?.slice(0, 200) ?? '',
@@ -500,8 +533,17 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 						stateSessions: Array.isArray(parsedState.sessions) ? parsedState.sessions.length : 0,
 						stateTurns: Array.isArray(parsedState.turns) ? parsedState.turns.length : 0,
 						knowledgeReferenceCount: document.querySelectorAll('a[href^="#knowledge/"]').length,
+						activeChatTurnCount,
+						chatAtEnd: !chat || activeChatTurnCount === 0 || Math.abs(chat.scrollHeight - chat.clientHeight - chat.scrollTop) <= 2,
+						branchLoadingVisible: false,
 					};
-					if (evidence.bodyText.trim() && evidence.isElectron) return evidence;
+					if (evidence.bodyText.trim() && evidence.isElectron) {
+						window.dispatchEvent(new Event('rhyza:branch-switch-start'));
+						await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+						evidence.branchLoadingVisible = document.querySelector('.branch-switch-loading') !== null;
+						window.dispatchEvent(new Event('rhyza:branch-switch-end'));
+						return evidence;
+					}
 					await new Promise((resolve) => setTimeout(resolve, 100));
 				}
 				return evidence;
@@ -515,6 +557,12 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 			throw new Error(
 				`window.knowbranch.isElectron was not true; evidence=${JSON.stringify(evidence)}`,
 			);
+		}
+		if (!evidence.chatAtEnd) {
+			throw new Error(`Active conversation did not open at its final turn; evidence=${JSON.stringify(evidence)}`);
+		}
+		if (!evidence.branchLoadingVisible) {
+			throw new Error(`Branch loading feedback did not render; evidence=${JSON.stringify(evidence)}`);
 		}
 		console.log(`ELECTRON_SMOKE ${JSON.stringify(evidence)}`);
 		clearSmokeTimeout();

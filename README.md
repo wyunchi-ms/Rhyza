@@ -37,6 +37,7 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 Rhyza 默认使用 Pi 的凭据目录 `~/.pi/agent`：
 
 - 如果之前通过 Pi 登录过 GitHub Copilot，`~/.pi/agent/auth.json` 中的凭据通常可以直接复用。
+- Rhyza 的 **Settings → Pi Plugins** 会读取同一目录中的 `settings.json`，因此也会显示用户原来通过 Pi 配置的 packages。
 - 如果只在 VS Code、GitHub CLI 或其他 Copilot 客户端中登录过，Rhyza 可能仍会显示未登录；请在 Rhyza 的 **Settings → AI Provider** 中重新执行一次 Sign In。
 - 不需要在 `.env` 中填写 Copilot Token 或 API Key。
 - 当前 UI 默认使用 `github.com`。GitHub Enterprise 自定义域名的输入界面尚未开放。
@@ -148,7 +149,13 @@ Workspace 有两个作用：
 
 凭据由 Pi SDK 保存到 `~/.pi/agent/auth.json`，不会发送给 Renderer，也不应提交到 Git。
 
-### 3. 配置知识策略
+### 3. 管理 Pi 插件
+
+进入 **Settings → Pi Plugins** 可以查看、安装和移除 Pi packages。支持 `npm:`、`git:`、HTTPS/SSH Git URL 和本地绝对路径；操作直接使用内置 Pi SDK，不要求预先安装 Pi CLI。npm 或 Git 来源仍需要本机具备相应的 Node.js/npm 或 Git 环境。
+
+Pi packages 中的扩展会以当前用户权限执行代码，skills 也会影响 Agent 行为，因此只应安装经过审查和信任的来源。安装或移除后，Rhyza 会重建当前 Agent 会话，使下一条消息使用新的插件集合。
+
+### 4. 配置知识策略
 
 进入 **Settings → Knowledge policy**：
 
@@ -160,7 +167,7 @@ Workspace 有两个作用：
 - **Thinking level**：控制模型推理强度；模型不支持某档位时可能由 Provider 降级或报错。
 - **Confidence threshold**：当前只保存 UI 配置，尚未接入 Finalizer 的过滤逻辑。
 
-### 4. 选择 Diagram 模式
+### 5. 选择 Diagram 模式
 
 进入 **Settings → Diagrams**，在两个绘图引擎中选择一个：
 
@@ -170,7 +177,7 @@ Workspace 有两个作用：
 
 Archify 的版本、宿主定制边界和升级流程见 [Archify integration and upgrades](docs/archify-integration.md)。
 
-### 5. 添加 Sources
+### 6. 添加 Sources
 
 进入 **Sources → Add sources**，可一次选择一个或多个本地目录。Source 可以位于 Workspace 内，也可以是完全独立的目录。
 

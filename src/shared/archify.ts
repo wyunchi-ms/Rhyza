@@ -1,4 +1,4 @@
-import { isRecord } from "./value";
+import { isRecord } from "./value.js";
 
 export const archifyDiagramTypes = ["architecture", "workflow", "sequence", "dataflow", "lifecycle"] as const;
 

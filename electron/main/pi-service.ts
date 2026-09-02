@@ -478,6 +478,10 @@ export class PiService {
 			this.disposeSession(frontendSessionId);
 		}
 	}
+
+	reloadInstalledPlugins(): void {
+		this.disposeAllSessions();
+	}
 }
 
 function toModelInfo(model: PiModel): ModelInfo {
@@ -692,6 +696,7 @@ Rules:
 - Never overwrite an existing entity with a generic restatement. Preserve useful existing details and user-authored specificity.
 - summary and content must describe the entity itself as standalone knowledge. Never quote, paraphrase, or refer to "the answer", "the project", "the user", or the conversation.
 - summary is one concise sentence. content is a focused 2-4 sentence explanation of the entity: what it is, its purpose, and the key distinction needed for understanding.
+- Classify each entity's sourceScope. Use "workspace" when its identity or stated behavior is defined by this repository (files, modules, project-specific components/configuration), "general" for stable common knowledge independent of this repository (products, protocols, languages, established patterns), and "mixed" only when both are essential. General entities must not acquire workspace file citations merely because the conversation happened in this project.
 - Extract only meaningful relations supported by the answer between returned or existing entities. Prefer stable existing IDs when available.
 - When the question explicitly asks to rebuild relationships, return zero entities and zero diagrams, scan all supplied existing entities and diagram topology, and return every high-confidence useful relation without duplicating the existing graph.
 - Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Archify blocks are parsed deterministically by the host, so do not return them in the diagrams array. Do not invent diagrams when MERMAID_BLOCKS is empty.
@@ -699,7 +704,7 @@ Rules:
 - Diagram node keys must be short stable identifiers. Every edge sourceKey and targetKey must reference a returned node key.
 - Map Mermaid types to architecture, structure, flowchart, sequence, swimlane, or dependency.
 - Return valid JSON only, with this exact shape:
-{"entities":[{"existingEntityId":"optional-id","name":"...","type":"Concept|Component|Pattern|Technology|File","summary":"...","content":"...","confidence":"explicit|inferred"}],"relations":[{"sourceEntityId":"optional-id","targetEntityId":"optional-id","sourceName":"...","targetName":"...","type":"calls|depends_on|contains|implements|related_to","description":"...","confidence":"explicit|inferred"}],"diagrams":[{"sourceIndex":0,"name":"...","type":"sequence","existingDiagramId":"optional-id","nodes":[{"key":"user","label":"User","type":"actor"}],"edges":[{"sourceKey":"user","targetKey":"service","label":"request"}]}]}
+{"entities":[{"existingEntityId":"optional-id","name":"...","type":"Concept|Component|Pattern|Technology|File","summary":"...","content":"...","confidence":"explicit|inferred","sourceScope":"workspace|general|mixed"}],"relations":[{"sourceEntityId":"optional-id","targetEntityId":"optional-id","sourceName":"...","targetName":"...","type":"calls|depends_on|contains|implements|related_to","description":"...","confidence":"explicit|inferred"}],"diagrams":[{"sourceIndex":0,"name":"...","type":"sequence","existingDiagramId":"optional-id","nodes":[{"key":"user","label":"User","type":"actor"}],"edges":[{"sourceKey":"user","targetKey":"service","label":"request"}]}]}
 
 EXISTING_ENTITIES:
 ${JSON.stringify(request.existingEntities)}
@@ -770,8 +775,14 @@ function parseKnowledgeCandidates(
 			summary,
 			content,
 			confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
+			sourceScope: parseKnowledgeSourceScope(candidate.sourceScope, type),
 		}];
 	});
+}
+
+function parseKnowledgeSourceScope(value: unknown, type: string): KnowledgeCandidate["sourceScope"] {
+	if (value === "workspace" || value === "general" || value === "mixed") return value;
+	return /^(?:component|file)$/i.test(type) ? "workspace" : "general";
 }
 
 export function isDurableKnowledgeEntityCandidate(name: string, type: string): boolean {

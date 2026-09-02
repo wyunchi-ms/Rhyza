@@ -22,6 +22,9 @@ const bridge: KnowbranchBridge = {
 		ipcRenderer.invoke(ipcChannels.providerLogout, request),
 	modelCatalog: (request?: ModelCatalogRequest) =>
 		ipcRenderer.invoke(ipcChannels.modelCatalog, request),
+	pluginList: () => ipcRenderer.invoke(ipcChannels.pluginList),
+	pluginInstall: (request) => ipcRenderer.invoke(ipcChannels.pluginInstall, request),
+	pluginRemove: (request) => ipcRenderer.invoke(ipcChannels.pluginRemove, request),
 	getWorkspace: () => ipcRenderer.invoke(ipcChannels.getWorkspace),
 	selectWorkspace: () => ipcRenderer.invoke(ipcChannels.selectWorkspace),
 	sourceList: () => ipcRenderer.invoke(ipcChannels.sourceList),
