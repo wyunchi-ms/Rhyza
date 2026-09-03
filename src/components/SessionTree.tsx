@@ -9,6 +9,7 @@ import type { SessionNode, SessionProgressStatus, TokenUsage } from "../types";
 import { allocateBranchUsage, formatTokens, usageTokens } from "../utils/branchUsage";
 import { runningSessionIds } from "../utils/sessionRuntime";
 import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
+import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 const progressOptions: Array<{
 	value?: SessionProgressStatus;
@@ -44,7 +45,9 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 		branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
 			branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
 				branchSwitchFrameRef.current = null;
+				const updateStartedAt = performance.now();
 				setActiveSession(id);
+				recordPerformanceTiming("branch-state-update", performance.now() - updateStartedAt);
 				navigate("/");
 			});
 		});

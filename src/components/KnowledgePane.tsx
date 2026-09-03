@@ -1,13 +1,12 @@
 import { Database, Network, X } from "lucide-react";
 import clsx from "clsx";
 import { useAppStore } from "../store";
-import { useKnowledgePreview } from "../hooks/useKnowledgePreview";
-import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
+import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
 
 export const KnowledgePane = () => {
 	const store = useAppStore();
-	const { preview, openEntity, openDiagram, closePreview } = useKnowledgePreview(store.entities, store.diagrams);
+	const { openEntity, openDiagram } = useKnowledgePreviewActions();
 	const viewportWidth = useViewportWidth();
 	const paneMax = Math.min(560, Math.max(320, viewportWidth * 0.45));
 	const paneSize = usePanelSize("knowbranch-layout-knowledge-width", 320, 280, paneMax);
@@ -45,7 +44,6 @@ export const KnowledgePane = () => {
 				</section>
 			</div>
 		</aside>
-		{preview && <KnowledgePreviewDialog preview={preview} onClose={closePreview} />}
 		</>
 	);
 };

@@ -62,6 +62,10 @@ interface ElectronSmokeEvidence {
 	activeChatTurnCount: number;
 	chatAtEnd: boolean;
 	branchLoadingVisible: boolean;
+	entityPreviewOpened: boolean;
+	entityPreviewClosed: boolean;
+	entityPreviewOpenMs?: number;
+	entityPreviewCloseMs?: number;
 }
 
 let mainWindow: BrowserWindow | undefined;
@@ -536,12 +540,30 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 						activeChatTurnCount,
 						chatAtEnd: !chat || activeChatTurnCount === 0 || Math.abs(chat.scrollHeight - chat.clientHeight - chat.scrollTop) <= 2,
 						branchLoadingVisible: false,
+						entityPreviewOpened: false,
+						entityPreviewClosed: false,
 					};
 					if (evidence.bodyText.trim() && evidence.isElectron) {
 						window.dispatchEvent(new Event('rhyza:branch-switch-start'));
 						await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 						evidence.branchLoadingVisible = document.querySelector('.branch-switch-loading') !== null;
 						window.dispatchEvent(new Event('rhyza:branch-switch-end'));
+						const entityLink = document.querySelector('a[href^="#knowledge/entity/"]');
+						if (entityLink instanceof HTMLElement) {
+							const openStartedAt = performance.now();
+							entityLink.click();
+							await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+							evidence.entityPreviewOpened = document.querySelector('.knowledge-entity-preview-dialog') !== null;
+							evidence.entityPreviewOpenMs = Math.round((performance.now() - openStartedAt) * 10) / 10;
+							const closeButton = document.querySelector('.knowledge-preview-header button');
+							if (closeButton instanceof HTMLElement) {
+								const closeStartedAt = performance.now();
+								closeButton.click();
+								await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+								evidence.entityPreviewClosed = document.querySelector('.knowledge-preview-dialog') === null;
+								evidence.entityPreviewCloseMs = Math.round((performance.now() - closeStartedAt) * 10) / 10;
+							}
+						}
 						return evidence;
 					}
 					await new Promise((resolve) => setTimeout(resolve, 100));
@@ -563,6 +585,9 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 		}
 		if (!evidence.branchLoadingVisible) {
 			throw new Error(`Branch loading feedback did not render; evidence=${JSON.stringify(evidence)}`);
+		}
+		if (evidence.knowledgeReferenceCount > 0 && (!evidence.entityPreviewOpened || !evidence.entityPreviewClosed)) {
+			throw new Error(`Entity preview did not open and close cleanly; evidence=${JSON.stringify(evidence)}`);
 		}
 		console.log(`ELECTRON_SMOKE ${JSON.stringify(evidence)}`);
 		clearSmokeTimeout();

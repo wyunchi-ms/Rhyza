@@ -1,6 +1,7 @@
 import type React from "react";
 import { ChatPane } from "../components/ChatPane";
 import { KnowledgePane } from "../components/KnowledgePane";
+import { KnowledgePreviewHost } from "../hooks/useKnowledgePreview";
 
 const Workspace: React.FC = () => {
 	return (
@@ -9,6 +10,7 @@ const Workspace: React.FC = () => {
 				<ChatPane />
 				<KnowledgePane />
 			</div>
+			<KnowledgePreviewHost />
 		</div>
 	);
 };

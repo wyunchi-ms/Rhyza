@@ -7,10 +7,38 @@ import { summarizeToolTarget } from "../utils/knowledgeContext";
 import { isTurnActive } from "../utils/sessionRuntime";
 import { isRecord } from "../shared/value";
 import { getKnowbranchBridge } from "./useKnowbranchBridge";
+import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 /** Owns the bridge-to-turn projection so chat surfaces do not duplicate stream semantics. */
 export function useAgentEventStream() {
 	const streamingTurns = useRef(new Map<string, string>());
+	const pendingText = useRef(new Map<string, { content: string; reasoning: string; eventCount: number }>());
+	const flushTimer = useRef<number | null>(null);
+	const flushPendingText = useCallback(() => {
+		if (flushTimer.current !== null) window.clearTimeout(flushTimer.current);
+		flushTimer.current = null;
+		const startedAt = performance.now();
+		let eventCount = 0;
+		for (const [turnId, pending] of pendingText.current) {
+			const store = useAppStore.getState();
+			const current = store.turns.find((turn) => turn.id === turnId);
+			if (!current) continue;
+			store.updateTurn(turnId, {
+				...(pending.content ? { content: `${current.content}${pending.content}` } : {}),
+				...(pending.reasoning ? { reasoning: `${current.reasoning ?? ""}${pending.reasoning}` } : {}),
+			});
+			eventCount += pending.eventCount;
+		}
+		pendingText.current.clear();
+		if (eventCount) recordPerformanceTiming("stream-batch-commit", performance.now() - startedAt);
+	}, []);
+	const queueText = useCallback((turnId: string, field: "content" | "reasoning", text: string) => {
+		const pending = pendingText.current.get(turnId) ?? { content: "", reasoning: "", eventCount: 0 };
+		pending[field] += text;
+		pending.eventCount += 1;
+		pendingText.current.set(turnId, pending);
+		if (flushTimer.current === null) flushTimer.current = window.setTimeout(flushPendingText, 75);
+	}, [flushPendingText]);
 
 	useEffect(() => {
 		const bridge = getKnowbranchBridge();
@@ -25,9 +53,16 @@ export function useAgentEventStream() {
 					&& isTurnActive(turn),
 				)?.id;
 			if (!turnId) return;
+			if (event.message && event.type === "message_update") {
+				queueText(turnId, event.streamKind === "reasoning" ? "reasoning" : "content", event.message);
+				return;
+			}
+			flushPendingText();
 			applyAgentEvent(turnId, event);
 		});
-	}, []);
+	}, [flushPendingText, queueText]);
+
+	useEffect(() => () => flushPendingText(), [flushPendingText]);
 
 	const registerStreamingTurn = useCallback((sessionId: string, turnId: string) => {
 		streamingTurns.current.set(sessionId, turnId);

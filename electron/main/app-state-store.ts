@@ -21,7 +21,12 @@ const emptyIndex: WorkspaceIndex = { version: 1, workspaces: {} };
 export class AppStateStore {
 	private readonly indexPath: string;
 	private readonly workspaceDirectory: string;
-	private writeQueue: Promise<void> = Promise.resolve();
+	private readonly pendingSaves = new Map<string, {
+		workspacePath: string;
+		value: string;
+		waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>;
+	}>();
+	private draining = false;
 
 	constructor(private readonly dataRoot: string) {
 		this.indexPath = path.join(dataRoot, "workspaces.json");
@@ -49,31 +54,63 @@ export class AppStateStore {
 		}
 	}
 
-	async save(workspacePath: string, value: string): Promise<void> {
+	save(workspacePath: string, value: string): Promise<void> {
 		const key = workspaceKey(workspacePath);
-		validateState(value, key);
-		this.writeQueue = this.writeQueue
-			.catch(() => undefined)
-			.then(async () => {
-				await mkdir(this.workspaceDirectory, { recursive: true });
-				const stateFile = path.join("workspaces", `${workspaceId(key)}.json`);
-				const statePath = path.join(this.dataRoot, stateFile);
+		try {
+			validateState(value, key);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		return new Promise<void>((resolve, reject) => {
+			const pending = this.pendingSaves.get(key);
+			if (pending) {
+				pending.value = value;
+				pending.waiters.push({ resolve, reject });
+			} else {
+				this.pendingSaves.set(key, { workspacePath: key, value, waiters: [{ resolve, reject }] });
+			}
+			void this.drainSaves();
+		});
+	}
+
+	private async drainSaves(): Promise<void> {
+		if (this.draining) return;
+		this.draining = true;
+		try {
+			while (this.pendingSaves.size > 0) {
+				const [key, pending] = this.pendingSaves.entries().next().value!;
+				this.pendingSaves.delete(key);
 				try {
-					const previous = await readFile(statePath, "utf8");
-					assertNotDestructiveEmptyState(previous, value);
-					if (previous !== value) await copyFile(statePath, `${statePath}.backup`);
+					await this.writeState(pending.workspacePath, pending.value);
+					pending.waiters.forEach(({ resolve }) => resolve());
 				} catch (error) {
-					if (!isMissingFileError(error)) throw error;
+					pending.waiters.forEach(({ reject }) => reject(error));
 				}
-				await writeFile(statePath, value, "utf8");
-				const index = await this.readIndex();
-				for (const candidate of Object.keys(index.workspaces)) {
-					if (candidate !== key && sameWorkspace(candidate, key)) delete index.workspaces[candidate];
-				}
-				index.workspaces[key] = { stateFile, updatedAt: new Date().toISOString() };
-				await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
-			});
-		return this.writeQueue;
+			}
+		} finally {
+			this.draining = false;
+			if (this.pendingSaves.size > 0) void this.drainSaves();
+		}
+	}
+
+	private async writeState(workspacePath: string, value: string): Promise<void> {
+		await mkdir(this.workspaceDirectory, { recursive: true });
+		const stateFile = path.join("workspaces", `${workspaceId(workspacePath)}.json`);
+		const statePath = path.join(this.dataRoot, stateFile);
+		try {
+			const previous = await readFile(statePath, "utf8");
+			assertNotDestructiveEmptyState(previous, value);
+			if (previous !== value) await copyFile(statePath, `${statePath}.backup`);
+		} catch (error) {
+			if (!isMissingFileError(error)) throw error;
+		}
+		await writeFile(statePath, value, "utf8");
+		const index = await this.readIndex();
+		for (const candidate of Object.keys(index.workspaces)) {
+			if (candidate !== workspacePath && sameWorkspace(candidate, workspacePath)) delete index.workspaces[candidate];
+		}
+		index.workspaces[workspacePath] = { stateFile, updatedAt: new Date().toISOString() };
+		await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
 	}
 
 	async migrateLegacyState(workspacePath: string | null, legacyStatePath: string): Promise<boolean> {

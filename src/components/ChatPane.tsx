@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { LoaderCircle, PanelRight, Sparkles } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
 	githubCopilotProviderId,
 	getKnowbranchBridge,
@@ -10,7 +10,7 @@ import { useAppStore } from "../store";
 import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
 import type { Turn } from "../types";
 import { requestScheduler } from "../utils/requestScheduler";
-import { useKnowledgePreview } from "../hooks/useKnowledgePreview";
+import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
 import { useAgentEventStream } from "../hooks/useAgentEventStream";
 import { useConversationNavigation } from "../hooks/useConversationNavigation";
 import { createId, summarize, withTimeout } from "../utils/common";
@@ -23,16 +23,17 @@ import { buildKnowledgeInventory, prioritizeKnowledgeSourceRefs, sourceHitsToRef
 import { isSessionRunning } from "../utils/sessionRuntime";
 import { branchSwitchEndEvent, branchSwitchStartEvent } from "../utils/branchSwitch";
 import { errorToMessage } from "../shared/value";
-import { KnowledgePreviewDialog } from "./KnowledgePreviewDialog";
 import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionAskPopover";
 import { ChatComposer, type ComposerImage } from "./chat/ChatComposer";
 import { ConversationFind } from "./chat/ConversationFind";
 import { TurnMessage } from "./chat/TurnMessage";
 import { TurnNavigator } from "./TurnNavigator";
+import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
 export const ChatPane: React.FC = () => {
+	const renderStartedAt = performance.now();
 	const store = useAppStore();
 	const [input, setInput] = useState("");
 	const [pendingRequests, setPendingRequests] = useState(0);
@@ -46,7 +47,10 @@ export const ChatPane: React.FC = () => {
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
 	const { registerStreamingTurn, unregisterStreamingTurn } = useAgentEventStream();
 	const { scrollContainerRef, keyboardTurnId, setKeyboardTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn } = useConversationNavigation(store.turns, activeSessionId);
-	const { preview: knowledgePreview, openEntityById: openEntityPreview, openDiagramById: openDiagramPreview, closePreview } = useKnowledgePreview(store.entities, store.diagrams);
+	const { openEntityById: openEntityPreview, openDiagramById: openDiagramPreview } = useKnowledgePreviewActions();
+	useLayoutEffect(() => {
+		recordPerformanceTiming("chat-render-commit", performance.now() - renderStartedAt);
+	});
 	useEffect(() => { requestScheduler.setLimit(store.settings.maxConcurrentRequests); }, [store.settings.maxConcurrentRequests]);
 	useEffect(() => {
 		const start = () => setIsSwitchingBranch(true);
@@ -376,7 +380,6 @@ export const ChatPane: React.FC = () => {
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
 			{forkDebugStatus && <div className={clsx("fork-debug-status", !forkDebugStatus.ok && "is-error")} role="status">{forkDebugStatus.message}</div>}
 			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} isSending={isSending} error={sendError} runtimeCaption={isElectronRuntime() ? `Pi SDK / GitHub Copilot${store.settings.defaultModel ? ` / ${store.settings.defaultModel}` : ""}` : "Electron runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
-			{knowledgePreview && <KnowledgePreviewDialog preview={knowledgePreview} onClose={closePreview} />}
 		</div>
 	);
 };

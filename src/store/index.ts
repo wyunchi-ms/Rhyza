@@ -24,6 +24,7 @@ import { archifyToMermaid, parseArchifySource } from "../shared/archify";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { errorToMessage } from "../shared/value";
 import { prioritizeKnowledgeSourceRefs, sourceRefsForKnowledgeScope } from "../utils/knowledgeExtraction";
+import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -113,14 +114,18 @@ const workspaceStorage: StateStorage = {
 			return undefined;
 		}
 		if (!persistenceWorkspacePath) return undefined;
+		const prepareStartedAt = performance.now();
 		const stampedValue = stampWorkspaceState(value, persistenceWorkspacePath);
+		recordPerformanceTiming("state-persist-prepare", performance.now() - prepareStartedAt, stampedValue.length);
 		if (!useAppStore.persist.hasHydrated()) {
 			const currentValue = bridge.appStateLoad();
 			if (persistedStateScore(stampedValue) <= persistedStateScore(currentValue)) return undefined;
 		}
+		const saveStartedAt = performance.now();
 		return bridge.appStateSave({ value: stampedValue, workspacePath: persistenceWorkspacePath }).then(
-				() => undefined,
+				() => { recordPerformanceTiming("state-persist-roundtrip", performance.now() - saveStartedAt, stampedValue.length); },
 				(error: unknown) => {
+					recordPerformanceTiming("state-persist-roundtrip-error", performance.now() - saveStartedAt, stampedValue.length);
 					console.error("Failed to persist workspace state.", error);
 				},
 			);
@@ -131,8 +136,10 @@ const workspaceStorage: StateStorage = {
 };
 
 function stampWorkspaceState(value: string, workspacePath: string): string {
-	const parsed = JSON.parse(value) as Record<string, unknown>;
-	return JSON.stringify({ ...parsed, workspacePath });
+	if (!value.startsWith("{")) throw new Error("Persisted workspace state must be a JSON object.");
+	// createJSONStorage already serialized the complete store. Prefix the safety
+	// stamp without parsing and serializing the ~1 MB payload a second time.
+	return `{"workspacePath":${JSON.stringify(workspacePath)},${value.slice(1)}`;
 }
 
 function persistedStateScore(serialized: string | null): number {

@@ -3,6 +3,7 @@ import { useAppStore } from "../store";
 import type { Turn } from "../types";
 import { buildTurnSessionMap, sessionAtViewportAnchor } from "../utils/sessionVisibility";
 import { announceBranchSwitchEnd } from "../utils/branchSwitch";
+import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 /** Coordinates the conversation viewport, keyboard cursor, and tree viewport marker. */
 export function useConversationNavigation(turns: Turn[], activeSessionId: string | null) {
@@ -78,6 +79,7 @@ function scrollToInitialTurn(container: HTMLDivElement | null): () => void {
 	if (!container) return () => undefined;
 	container.classList.add("is-positioning");
 	const position = () => {
+		const startedAt = performance.now();
 		const pendingTurnId = window.sessionStorage.getItem("rhyza-focus-turn");
 		const pendingTurn = pendingTurnId ? document.getElementById(`turn-${pendingTurnId}`) : null;
 		if (pendingTurn) {
@@ -85,6 +87,7 @@ function scrollToInitialTurn(container: HTMLDivElement | null): () => void {
 		} else {
 			container.scrollTop = container.scrollHeight - container.clientHeight;
 		}
+		recordPerformanceTiming("branch-scroll-position", performance.now() - startedAt);
 	};
 	position();
 	const frame = window.requestAnimationFrame(() => {

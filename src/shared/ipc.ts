@@ -262,6 +262,7 @@ export interface DiagnosticReport {
 	longTasks: { count: number; totalMs: number; maxMs: number };
 	heartbeat: { delayedCount: number; totalDelayMs: number; maxDelayMs: number };
 	regionStalls: Record<string, number>;
+	timings?: Record<string, { count: number; totalMs: number; maxMs: number; totalBytes?: number; maxBytes?: number }>;
 }
 
 export interface ArchifyParseFailureReport {

@@ -60,6 +60,10 @@ try {
 	assert.ok(stateFile);
 	assert.equal(await readFile(path.join(dataRoot, `${stateFile}.backup`), "utf8"), populated);
 
+	const burst = Array.from({ length: 20 }, (_, index) => updated.replace("turn-2", `turn-burst-${index}`));
+	await Promise.all(burst.map((value) => store.save(workspacePath, value)));
+	assert.equal(store.load(workspacePath), burst.at(-1));
+
 	const legacyUsage = { input: 100, output: 20, cacheRead: 30, cacheWrite: 40, cost: 0.002 };
 	const legacyState = JSON.stringify({
 		workspacePath: recoveryWorkspacePath,
