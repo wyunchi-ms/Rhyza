@@ -8,6 +8,7 @@ import type {
 	Entity,
 	EntityMention,
 	Relation,
+	RightPaneView,
 	SessionNode,
 	SessionProgressStatus,
 	Settings,
@@ -39,6 +40,8 @@ interface AppState {
 	settings: Settings;
 	sidebarOpen: boolean;
 	rightPaneOpen: boolean;
+	rightPaneView: RightPaneView;
+	inspectedTurnId: string | null;
 	selectedEntityId: string | null;
 	selectedDiagramId: string | null;
 
@@ -48,6 +51,8 @@ interface AppState {
 	setSelectedDiagram: (id: string | null) => void;
 	toggleSidebar: () => void;
 	toggleRightPane: () => void;
+	openTurnInspector: (turnId: string, view: Exclude<RightPaneView, "todo">) => void;
+	closeRightPane: () => void;
 	createRootSession: () => string;
 	forkSession: (turnId: string) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
 	renameSession: (id: string, title: string, keepPending?: boolean) => void;
@@ -92,6 +97,13 @@ const defaultSettings: Settings = {
 	maxConcurrentRequests: 5,
 	diagramRenderer: "archify",
 };
+
+function withoutModelRequestTelemetry(turn: Turn): Turn {
+	if (!turn.modelRequests) return turn;
+	const persistedTurn = { ...turn };
+	delete persistedTurn.modelRequests;
+	return persistedTurn;
+}
 
 let persistenceWorkspacePath: string | null = null;
 
@@ -174,15 +186,21 @@ export const useAppStore = create<AppState>()(
 			settings: defaultSettings,
 			sidebarOpen: true,
 			rightPaneOpen: false,
+			rightPaneView: "todo",
+			inspectedTurnId: null,
 			selectedEntityId: null,
 			selectedDiagramId: null,
 
 			setActiveSession: (id) => set({ activeSessionId: id, visibleSessionId: id }),
 			setVisibleSession: (id) => set({ visibleSessionId: id }),
-			setSelectedEntity: (id) => set({ selectedEntityId: id, selectedDiagramId: null, rightPaneOpen: true }),
-			setSelectedDiagram: (id) => set({ selectedDiagramId: id, selectedEntityId: null, rightPaneOpen: true }),
+			setSelectedEntity: (id) => set({ selectedEntityId: id, selectedDiagramId: null }),
+			setSelectedDiagram: (id) => set({ selectedDiagramId: id, selectedEntityId: null }),
 			toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-			toggleRightPane: () => set((state) => ({ rightPaneOpen: !state.rightPaneOpen })),
+			toggleRightPane: () => set((state) => state.rightPaneOpen && state.rightPaneView === "todo"
+				? { rightPaneOpen: false }
+				: { rightPaneOpen: true, rightPaneView: "todo" }),
+			openTurnInspector: (turnId, view) => set({ inspectedTurnId: turnId, rightPaneView: view, rightPaneOpen: true }),
+			closeRightPane: () => set({ rightPaneOpen: false }),
 
 			createRootSession: () => {
 				const id = createId("session");
@@ -731,7 +749,7 @@ export const useAppStore = create<AppState>()(
 			partialize: (state) => ({
 				sessions: state.sessions,
 				activeSessionId: state.activeSessionId,
-				turns: state.turns,
+				turns: state.turns.map(withoutModelRequestTelemetry),
 				entities: state.entities,
 				relations: state.relations,
 				diagrams: state.diagrams,

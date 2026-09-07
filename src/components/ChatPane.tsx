@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { LoaderCircle, PanelRight, Sparkles } from "lucide-react";
+import { ListChecks, LoaderCircle, Sparkles } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
 	githubCopilotProviderId,
@@ -15,7 +15,7 @@ import { useAgentEventStream } from "../hooks/useAgentEventStream";
 import { useConversationNavigation } from "../hooks/useConversationNavigation";
 import { createId, summarize, withTimeout } from "../utils/common";
 import { buildKnowledgeContext } from "../utils/knowledgeContext";
-import { buildPriorAgentTranscript } from "../utils/agentTranscript";
+import { buildAgentTranscriptBeforeTurn } from "../utils/agentTranscript";
 import { selectionContinuationTarget } from "../utils/sessionFork";
 import { createSelectionAppendDebugSnapshot, forkDebugEventName, type ForkDebugEventDetail } from "../utils/forkDebug";
 import { failRunningTurnActivities, finishTurnActivity, startTurnActivity } from "../utils/turnActivity";
@@ -27,6 +27,7 @@ import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionA
 import { ChatComposer, type ComposerImage } from "./chat/ChatComposer";
 import { ConversationFind } from "./chat/ConversationFind";
 import { TurnMessage } from "./chat/TurnMessage";
+import { TurnContextMenu, type TurnContextMenuState } from "./chat/TurnContextMenu";
 import { TurnNavigator } from "./TurnNavigator";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 
@@ -42,6 +43,7 @@ export const ChatPane: React.FC = () => {
 	const [images, setImages] = useState<ComposerImage[]>([]);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
 	const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
+	const [turnContextMenu, setTurnContextMenu] = useState<TurnContextMenuState | null>(null);
 	const activeSessionId = store.activeSessionId;
 	const isSending = pendingRequests > 0;
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
@@ -112,9 +114,9 @@ export const ChatPane: React.FC = () => {
 			sessionId: targetSessionId,
 			role: "assistant",
 			content: "",
-			status: "retrieving",
-			summary: "Retrieving workspace context",
-			activities: startTurnActivity(undefined, "retrieval", "Retrieving workspace context", now),
+			status: "queued",
+			summary: "Queued behind the previous message",
+			activities: startTurnActivity(undefined, "queue", "Waiting for the previous message", now),
 			createdAt: now,
 		});
 		store.setSessionStatus(targetSessionId, "running");
@@ -122,8 +124,18 @@ export const ChatPane: React.FC = () => {
 
 		try {
 			await requestScheduler.enqueue(targetSessionId, async () => {
-			const bridge = getKnowbranchBridge();
-			if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
+				const bridge = getKnowbranchBridge();
+				if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
+				const queuedTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+				store.updateTurn(assistantTurnId, {
+					status: "retrieving",
+					summary: "Retrieving workspace context",
+					activities: startTurnActivity(
+						finishTurnActivity(queuedTurn?.activities, "queue", "complete", "Previous message completed"),
+						"retrieval",
+						"Retrieving workspace context",
+					),
+				});
 			const selectedModel = store.settings.defaultModel
 				? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
 				: undefined;
@@ -142,13 +154,14 @@ export const ChatPane: React.FC = () => {
 				),
 			});
 			const currentTurns = useAppStore.getState().turns;
-			const transcript = buildPriorAgentTranscript(currentTurns, targetSessionId, [userTurnId, assistantTurnId]);
+				const transcript = buildAgentTranscriptBeforeTurn(currentTurns, targetSessionId, userTurnId);
 			const knowledgeContext = buildKnowledgeContext(agentPrompt, useAppStore.getState().entities, useAppStore.getState().relations, useAppStore.getState().diagrams, sourceHits);
 			store.updateTurn(assistantTurnId, { status: "running", summary: "Pi agent is running" });
 			const targetSession = useAppStore.getState().sessions.find((session) => session.id === targetSessionId);
 			registerStreamingTurn(targetSessionId, assistantTurnId);
 			const result = await bridge.agentPrompt({
 				frontendSessionId: targetSessionId,
+				frontendTurnId: assistantTurnId,
 				parentFrontendSessionId: targetSession?.parentId ?? undefined,
 				forkedFromTurnId: targetSession?.forkedFromTurnId,
 				transcript,
@@ -339,7 +352,7 @@ export const ChatPane: React.FC = () => {
 			<ConversationFind turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
 			<header className="chat-topbar">
 				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1><span>{store.settings.defaultModel || "GitHub Copilot"}</span></div>
-				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && "is-active")} onClick={store.toggleRightPane} title="Toggle knowledge panel" aria-label="Toggle knowledge panel"><PanelRight size={17} /></button>
+				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && store.rightPaneView === "todo" && "is-active")} onClick={store.toggleRightPane} title="Show workspace TODOs" aria-label="Show workspace TODOs"><ListChecks size={17} /></button>
 			</header>
 			{isSwitchingBranch && <div className="branch-switch-loading" role="status" aria-live="polite"><LoaderCircle size={22} aria-hidden="true" /><div><strong>Opening branch…</strong><span>Preparing the latest conversation</span></div></div>}
 			<div ref={scrollContainerRef} className="chat-scroll" tabIndex={0} role="region" aria-label="Conversation. Use up and down arrow keys to move between turns." onFocus={() => setKeyboardTurnId((current) => current ?? sessionTurns[sessionTurns.length - 1]?.id ?? null)} onPointerDown={(event) => {
@@ -367,6 +380,7 @@ export const ChatPane: React.FC = () => {
 						onEntityClick={openEntityPreview}
 						onDiagramClick={openDiagramPreview}
 						onTextSelection={(text, rect) => setSelection({ turnId: turn.id, text, x: rect.left + rect.width / 2, y: rect.bottom + 8 })}
+						onOpenContextMenu={({ x, y }) => setTurnContextMenu({ turnId: turn.id, x, y })}
 					/>
 				))}
 				{sessionTurns.length === 0 && (
@@ -376,10 +390,22 @@ export const ChatPane: React.FC = () => {
 					</div>
 				)}
 			</div>
+			{turnContextMenu && (() => {
+				const selectedTurn = store.turns.find((turn) => turn.id === turnContextMenu.turnId);
+				if (!selectedTurn) return null;
+				return <TurnContextMenu menu={turnContextMenu} turn={selectedTurn} onClose={() => setTurnContextMenu(null)} onSelect={(view) => {
+					const selectedIndex = sessionTurns.findIndex((turn) => turn.id === selectedTurn.id);
+					const inspectorTurn = selectedTurn.role === "user"
+						? sessionTurns.slice(selectedIndex + 1).find((turn) => turn.role === "assistant") ?? selectedTurn
+						: selectedTurn;
+					store.openTurnInspector(inspectorTurn.id, view);
+					setTurnContextMenu(null);
+				}} />;
+			})()}
 			{selection && <SelectionAskPopover selection={selection} onAsk={sendSelectionQuestion} onClose={() => setSelection(null)} />}
 			{sessionTurns.length > 1 && <TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />}
 			{forkDebugStatus && <div className={clsx("fork-debug-status", !forkDebugStatus.ok && "is-error")} role="status">{forkDebugStatus.message}</div>}
-			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} isSending={isSending} error={sendError} runtimeCaption={isElectronRuntime() ? `Pi SDK / GitHub Copilot${store.settings.defaultModel ? ` / ${store.settings.defaultModel}` : ""}` : "Electron runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
+			<ChatComposer input={input} images={images} entities={store.entities} diagrams={store.diagrams} contextRequest={sessionTurns.flatMap((turn) => turn.modelRequests ?? []).slice(-1)[0]} isSending={isSending} error={sendError} runtimeCaption={isElectronRuntime() ? "Pi SDK / GitHub Copilot" : "Electron runtime required for agent execution"} onInputChange={setInput} onImagesChange={setImages} onError={setSendError} onSend={() => void handleSend()} />
 		</div>
 	);
 };

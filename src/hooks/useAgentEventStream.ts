@@ -78,8 +78,27 @@ function applyAgentEvent(turnId: string, event: AgentBridgeEvent): void {
 	const store = useAppStore.getState();
 	const current = store.turns.find((turn) => turn.id === turnId);
 	if (!current) return;
+	if (event.type === "model_request" && event.modelRequest) {
+		store.updateTurn(turnId, {
+			modelRequests: [...(current.modelRequests ?? []).filter((request) => request.id !== event.modelRequest!.id), event.modelRequest],
+		});
+		return;
+	}
+	if (event.type === "wire_request" && event.requestId) {
+		store.updateTurn(turnId, {
+			modelRequests: (current.modelRequests ?? []).map((request) => request.id === event.requestId
+				? { ...request, wirePayload: event.wirePayload }
+				: request),
+		});
+		return;
+	}
 	if (event.type === "message_end" && event.usage) {
-		store.updateTurn(turnId, { usage: addUsage(current.usage ?? emptyUsage(), event.usage) });
+		store.updateTurn(turnId, {
+			usage: addUsage(current.usage ?? emptyUsage(), event.usage),
+			modelRequests: (current.modelRequests ?? []).map((request) => request.id === event.requestId
+				? { ...request, usage: event.usage }
+				: request),
+		});
 		return;
 	}
 	if (event.message && event.type === "message_update") {
