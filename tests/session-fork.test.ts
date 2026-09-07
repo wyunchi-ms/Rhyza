@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SessionNode, TokenUsage, Turn } from "../src/types/index.js";
-import { buildPriorAgentTranscript } from "../src/utils/agentTranscript.js";
+import { buildAgentTranscriptBeforeTurn, buildPriorAgentTranscript } from "../src/utils/agentTranscript.js";
 import { allocateBranchUsage } from "../src/utils/branchUsage.js";
 import { createForkDebugSnapshot, createSelectionAppendDebugSnapshot } from "../src/utils/forkDebug.js";
 import { forkSessionAtTurn, selectionContinuationTarget } from "../src/utils/sessionFork.js";
@@ -134,6 +134,17 @@ test("the current prompt is excluded from replay and is sent only once", () => {
 	];
 	const transcript = buildPriorAgentTranscript(turns, "branch", ["current-user", "pending-assistant"]);
 	assert.deepEqual(transcript.map((turn) => turn.id), ["prior-user", "prior-assistant"]);
+});
+
+test("a running prompt cannot see turns that were queued after it", () => {
+	const turns = [
+		makeTurn("first-user", "branch", "user"),
+		makeTurn("first-assistant", "branch", "assistant"),
+		makeTurn("second-user", "branch", "user"),
+		makeTurn("second-assistant", "branch", "assistant"),
+	];
+	assert.deepEqual(buildAgentTranscriptBeforeTurn(turns, "branch", "first-user"), []);
+	assert.deepEqual(buildAgentTranscriptBeforeTurn(turns, "branch", "second-user").map((turn) => turn.id), ["first-user", "first-assistant"]);
 });
 
 function sequentialIds(): (prefix: "session" | "turn") => string {
