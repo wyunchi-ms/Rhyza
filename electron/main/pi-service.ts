@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
 	createAgentSession,
@@ -15,12 +15,14 @@ import { Type } from "typebox";
 import type {
 	AgentBridgeEvent,
 	AgentUsage,
+	AgentModelRequestSnapshot,
 	AgentPromptRequest,
 	AgentPromptResponse,
 	AuthBridgeEvent,
 	ModelCatalogRequest,
 	ModelCatalogResponse,
 	ModelInfo,
+	ModelRequestHistoryResponse,
 	KnowledgeCandidate,
 	KnowledgeDiagramCandidate,
 	KnowledgeRelationCandidate,
@@ -32,6 +34,7 @@ import type {
 	SummaryRequest,
 	SummaryResponse,
 	WorkspaceDiffResponse,
+	WorkspaceTodosResponse,
 } from "../../src/shared/ipc.js";
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
@@ -39,6 +42,7 @@ import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import type { GptArchifyHarness } from "./archify-harness.js";
 import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
+import { readWorkspaceTodos } from "./todo-service.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -49,6 +53,7 @@ interface ActiveSession {
 	workspacePath: string;
 	isolated: boolean;
 	frontendSessionId: string;
+	frontendTurnId?: string;
 	modelKey?: string;
 	unsubscribe: () => void;
 	sourceRefs: Map<string, SourceReference>;
@@ -58,6 +63,7 @@ type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
 
 export class PiService {
 	private readonly agentDir: string;
+	private readonly requestDumpDir: string;
 	private modelRuntimePromise: Promise<ModelRuntime> | undefined;
 	private readonly activeSessions = new Map<string, ActiveSession>();
 	private readonly worktreeService: WorktreeService;
@@ -71,7 +77,46 @@ export class PiService {
 		private readonly archifyHarness?: GptArchifyHarness,
 	) {
 		this.agentDir = agentDir;
+		this.requestDumpDir = path.join(userDataPath, "model-request-dumps");
 		this.worktreeService = new WorktreeService(userDataPath);
+	}
+
+	async getModelRequestHistory(frontendSessionId: string): Promise<ModelRequestHistoryResponse> {
+		const sessionDirectory = path.join(this.requestDumpDir, safeDumpPart(frontendSessionId));
+		const turns: ModelRequestHistoryResponse["turns"] = {};
+		try {
+			const turnDirectories = await readdir(sessionDirectory, { withFileTypes: true });
+			for (const turnDirectory of turnDirectories) {
+				if (!turnDirectory.isDirectory()) continue;
+				const turnId = turnDirectory.name;
+				const directoryPath = path.join(sessionDirectory, turnId);
+				const filenames = (await readdir(directoryPath)).filter((filename) => filename.endsWith(".json"));
+				for (const filename of filenames) {
+					try {
+						const parsed = JSON.parse(await readFile(path.join(directoryPath, filename), "utf8"));
+						if (!isModelRequestSnapshot(parsed) || safeDumpPart(parsed.frontendTurnId) !== turnId) continue;
+						(turns[parsed.frontendTurnId] ??= []).push(parsed);
+					} catch (error) {
+						console.warn(`Could not read model request dump ${filename}: ${errorToMessage(error)}`);
+					}
+				}
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				console.warn(`Could not read model request history: ${errorToMessage(error)}`);
+			}
+		}
+		for (const snapshots of Object.values(turns)) {
+			snapshots.sort((left, right) => left.sequence - right.sequence || left.timestamp.localeCompare(right.timestamp));
+		}
+		return { turns };
+	}
+
+	async getWorkspaceTodos(frontendSessionId: string | undefined, workspacePath: string): Promise<WorkspaceTodosResponse> {
+		const effectiveWorkspacePath = frontendSessionId
+			? this.activeSessions.get(frontendSessionId)?.workspacePath ?? workspacePath
+			: workspacePath;
+		return readWorkspaceTodos(effectiveWorkspacePath);
 	}
 
 	async getProviderStatus(
@@ -336,6 +381,7 @@ export class PiService {
 		const modelKey = model ? `${model.provider}/${model.id}` : undefined;
 		const activeSession = this.activeSessions.get(request.frontendSessionId);
 		if (activeSession?.sourceWorkspacePath === workspacePath) {
+			activeSession.frontendTurnId = request.frontendTurnId;
 			if (model && activeSession.modelKey !== modelKey) {
 				await activeSession.session.setModel(model);
 				activeSession.modelKey = modelKey;
@@ -356,6 +402,7 @@ export class PiService {
 			appendSystemPromptOverride: (base) => [
 				...base,
 				workspaceExplorationGuidance,
+				todoTrackingGuidance,
 				...(this.sourceService ? [sourceRetrievalGuidance] : []),
 				this.archifyHarness?.responseGuidance ?? responsePresentationGuidance,
 			],
@@ -385,15 +432,75 @@ export class PiService {
 			tools: [...builtInTools, ...customTools.map((tool) => tool.name)],
 			customTools,
 		});
-		const unsubscribe = session.subscribe((event) =>
-			this.emitAgentEvent(toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event)),
-		);
+		let requestSequence = 0;
+		let activeRequestId: string | undefined;
+		let activeSnapshot: AgentModelRequestSnapshot | undefined;
+		const originalStream = session.agent.streamFunction;
+		session.agent.streamFunction = async (requestModel, context, options) => {
+			activeRequestId = crypto.randomUUID();
+			const frontendTurnId = created.frontendTurnId ?? "unmapped";
+			const dumpPath = path.join(this.requestDumpDir, safeDumpPart(request.frontendSessionId), safeDumpPart(frontendTurnId), `${String(requestSequence + 1).padStart(3, "0")}-${activeRequestId}.json`);
+			const snapshot: AgentModelRequestSnapshot = {
+				id: activeRequestId,
+				sequence: ++requestSequence,
+				timestamp: new Date().toISOString(),
+				model: requestModel.id,
+				provider: requestModel.provider,
+				api: requestModel.api,
+				thinking: options?.reasoning ?? "off",
+				frontendTurnId,
+				contextWindow: requestModel.contextWindow,
+				dumpPath,
+				context: sanitizeForRenderer(context) as AgentModelRequestSnapshot["context"],
+			};
+			activeSnapshot = snapshot;
+			await writeRequestDump(dumpPath, snapshot);
+			this.emitAgentEvent({
+				type: "model_request",
+				sessionId: session.sessionId,
+				frontendSessionId: request.frontendSessionId,
+				requestId: activeRequestId,
+				modelRequest: snapshot,
+			});
+			return originalStream(requestModel, context, options);
+		};
+		const originalOnPayload = session.agent.onPayload;
+		session.agent.onPayload = async (payload, payloadModel) => {
+			const transformed = originalOnPayload ? await originalOnPayload(payload, payloadModel) : payload;
+			const finalPayload = transformed === undefined ? payload : transformed;
+			const sanitizedPayload = sanitizeForRenderer(finalPayload);
+			if (activeSnapshot) {
+				activeSnapshot = { ...activeSnapshot, wirePayload: sanitizedPayload };
+				if (activeSnapshot.dumpPath) await writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+			}
+			this.emitAgentEvent({
+				type: "wire_request",
+				sessionId: session.sessionId,
+				frontendSessionId: request.frontendSessionId,
+				requestId: activeRequestId,
+				wirePayload: sanitizedPayload,
+			});
+			return transformed;
+		};
+		const unsubscribe = session.subscribe((event) => {
+			this.emitAgentEvent(toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event, activeRequestId));
+			if (event.type === "message_end" && "message" in event && typeof event.message === "object" && event.message !== null && "role" in event.message && event.message.role === "assistant") {
+				const usage = getEventUsage(event);
+				if (activeSnapshot && usage) {
+					activeSnapshot = { ...activeSnapshot, usage };
+					if (activeSnapshot.dumpPath) void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+				}
+				activeRequestId = undefined;
+				activeSnapshot = undefined;
+			}
+		});
 		const created: ActiveSession = {
 			session,
 			sourceWorkspacePath: workspacePath,
 			workspacePath: sessionWorkspace.path,
 			isolated: sessionWorkspace.isolated,
 			frontendSessionId: request.frontendSessionId,
+			frontendTurnId: request.frontendTurnId,
 			modelKey,
 			unsubscribe,
 			sourceRefs,
@@ -510,6 +617,7 @@ function toAgentBridgeEvent(
 	sessionId: string,
 	frontendSessionId: string,
 	event: AgentSessionEvent,
+	requestId?: string,
 ): AgentBridgeEvent {
 	const stream = extractStreamDelta(event);
 	const usage = getEventUsage(event);
@@ -527,6 +635,7 @@ function toAgentBridgeEvent(
 			cacheWrite: usage.cacheWrite,
 			cost: usage.cost,
 		} : undefined,
+		requestId,
 	};
 }
 
@@ -572,6 +681,13 @@ const workspaceExplorationGuidance = `## Workspace exploration
 - Treat agent skill files, CI/workflow definitions, generated output, vendored dependencies, and repository administration files as secondary. Read or cite them only when the question is specifically about those files or they materially affect the implementation being explained.
 - Start with directory discovery when the user does not provide exact file paths. Do not claim that file paths are required unless workspace discovery tools have actually failed.
 - Read-only tools may be used freely for analysis. Modify files only when edit, write, or bash tools are available and the user requested a change.`;
+
+const todoTrackingGuidance = `## Work tracking
+- For implementation or investigation with more than one meaningful step, treat the workspace TODO checklist as a high-priority working artifact.
+- Read an existing TODO.md before starting so its structure and user-authored items are preserved.
+- Create or update TODO.md near the start of multi-step work. Use nested Markdown checkboxes (- [ ] and - [x]) that reflect the real plan.
+- Mark items complete immediately after verification, add newly discovered work, and leave unfinished or blocked work unchecked.
+- Keep the checklist concise and operational. Do not create one for a trivial one-step answer.`;
 
 const sourceRetrievalGuidance = `## Attached sources
 - search_sources and read_source access repositories and documentation attached to this workspace but outside the current working directory.
@@ -987,14 +1103,40 @@ function sanitizeForRenderer(value: unknown): unknown {
 		JSON.stringify(value, (key, nestedValue: unknown) => {
 			const lowerKey = key.toLowerCase();
 			if (
-				lowerKey.includes("token") ||
-				lowerKey.includes("apikey") ||
-				lowerKey.includes("api_key") ||
-				lowerKey.includes("authorization")
+				/^(?:token|access_token|refresh_token|id_token|apikey|api_key|authorization|password|secret|credential)$/.test(lowerKey)
 			) {
 				return "[redacted]";
+			}
+			if (lowerKey === "data" && typeof nestedValue === "string" && nestedValue.length > 1024) {
+				return `[binary data omitted: ${nestedValue.length.toLocaleString()} characters]`;
 			}
 			return nestedValue;
 		}),
 	);
+}
+
+function isModelRequestSnapshot(value: unknown): value is AgentModelRequestSnapshot & { frontendTurnId: string } {
+	if (!isRecord(value) || !isRecord(value.context) || !Array.isArray(value.context.messages)) return false;
+	return typeof value.id === "string"
+		&& typeof value.sequence === "number"
+		&& Number.isFinite(value.sequence)
+		&& typeof value.timestamp === "string"
+		&& typeof value.model === "string"
+		&& typeof value.provider === "string"
+		&& typeof value.api === "string"
+		&& typeof value.thinking === "string"
+		&& typeof value.frontendTurnId === "string";
+}
+
+async function writeRequestDump(dumpPath: string, snapshot: AgentModelRequestSnapshot): Promise<void> {
+	try {
+		await mkdir(path.dirname(dumpPath), { recursive: true });
+		await writeFile(dumpPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+	} catch (error) {
+		console.warn(`Could not write model request dump: ${errorToMessage(error)}`);
+	}
+}
+
+function safeDumpPart(value: string): string {
+	return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "session";
 }
