@@ -15,6 +15,8 @@ import { GptArchifyHarness, resolveBundledArchifySkillRoot } from "./archify-har
 import {
 	ipcChannels,
 	validateAgentPromptRequest,
+	validateModelRequestHistoryRequest,
+	validateWorkspaceTodosRequest,
 	validateModelCatalogRequest,
 	validateProviderLoginRequest,
 	validateProviderLogoutRequest,
@@ -298,6 +300,18 @@ function registerIpcHandlers(): void {
 				request,
 				await settingsStore.requireWorkspacePath(),
 			));
+		}),
+	);
+	ipcMain.handle(ipcChannels.modelRequestHistory, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateModelRequestHistoryRequest(payload);
+			return piService.getModelRequestHistory(request.frontendSessionId);
+		}),
+	);
+	ipcMain.handle(ipcChannels.workspaceTodos, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateWorkspaceTodosRequest(payload);
+			return piService.getWorkspaceTodos(request.frontendSessionId, await settingsStore.requireWorkspacePath());
 		}),
 	);
 	ipcMain.handle(ipcChannels.generateSummary, async (event, payload) =>
