@@ -1,6 +1,6 @@
 import type { SessionNode, Turn } from "../types";
 
-export const activeTurnStatuses: ReadonlySet<Turn["status"]> = new Set(["retrieving", "running", "finalizing"]);
+export const activeTurnStatuses: ReadonlySet<Turn["status"]> = new Set(["queued", "retrieving", "running", "finalizing"]);
 
 export function isTurnActive(turnOrStatus: Turn | Turn["status"]): boolean {
 	return activeTurnStatuses.has(typeof turnOrStatus === "string" ? turnOrStatus : turnOrStatus.status);

@@ -16,6 +16,7 @@ test("session completion is synchronized atomically while queued turns keep it r
 });
 
 test("all consumers share the same active turn definition", () => {
+	assert.equal(isTurnActive("queued"), true);
 	assert.equal(isTurnActive("retrieving"), true);
 	assert.equal(isTurnActive("running"), true);
 	assert.equal(isTurnActive("finalizing"), true);
