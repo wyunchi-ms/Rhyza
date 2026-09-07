@@ -14,7 +14,7 @@ import { ArchifyDiagram } from "../ArchifyDiagram";
 import { isArchifyCodeBlock } from "../../shared/archify";
 import { isTurnActive } from "../../utils/sessionRuntime";
 
-export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, isKeyboardActive }: {
+export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, onOpenContextMenu, isKeyboardActive }: {
 	turn: Turn;
 	sessionNodeId: string;
 	entities: Entity[];
@@ -25,6 +25,7 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
 	onTextSelection: (text: string, rect: DOMRect) => void;
+	onOpenContextMenu: (position: { x: number; y: number }) => void;
 	isKeyboardActive: boolean;
 }) {
 	const isUser = turn.role === "user";
@@ -37,7 +38,7 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 		return () => window.removeEventListener("keydown", close);
 	}, [detailsOpen]);
 	return (
-		<article id={`turn-${turn.id}`} data-turn-id={turn.id} data-session-node-id={sessionNodeId} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")}>
+		<article id={`turn-${turn.id}`} data-turn-id={turn.id} data-session-node-id={sessionNodeId} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")} onContextMenu={(event) => { event.preventDefault(); onOpenContextMenu({ x: event.clientX, y: event.clientY }); }}>
 			{!isUser && <div className="assistant-mark"><Sparkles size={14} /></div>}
 			<div className={clsx("turn-content", isUser ? "items-end" : "w-full")}>
 				<div className={clsx("turn-body", isUser ? "user-bubble" : "assistant-body")}>
@@ -75,12 +76,14 @@ function TurnWorkDetails({ turn }: { turn: Turn }) {
 
 function fallbackTurnActivities(turn: Turn): TurnActivity[] {
 	if (!isTurnActive(turn)) return [];
-	const label = turn.status === "retrieving"
+	const label = turn.status === "queued"
+		? "Waiting for the previous message"
+		: turn.status === "retrieving"
 		? "Retrieving workspace context"
 		: turn.status === "finalizing"
 			? "Updating workspace knowledge"
 			: "Generating response";
-	return [{ id: turn.status === "retrieving" ? "retrieval" : turn.status === "finalizing" ? "knowledge" : "agent", label, status: "running", startedAt: turn.createdAt }];
+	return [{ id: turn.status === "queued" ? "queue" : turn.status === "retrieving" ? "retrieval" : turn.status === "finalizing" ? "knowledge" : "agent", label, status: "running", startedAt: turn.createdAt }];
 }
 
 function TurnActivityTimeline({ activities }: { activities: TurnActivity[] }) {
@@ -156,7 +159,7 @@ function TurnStatus({ status }: { status: Turn["status"] }) {
 	return (
 		<div className="mb-3 flex items-center gap-2 text-sm text-secondary">
 			<LoaderCircle size={15} className="animate-spin" />
-			{status === "finalizing" ? "Organizing knowledge" : status === "retrieving" ? "Retrieving knowledge" : "Agent is working"}
+			{status === "queued" ? "Queued" : status === "finalizing" ? "Organizing knowledge" : status === "retrieving" ? "Retrieving knowledge" : "Agent is working"}
 		</div>
 	);
 }
