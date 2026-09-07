@@ -1,6 +1,9 @@
+import type { AgentModelRequestSnapshot } from "../shared/ipc";
+
 export type Confidence = "confirmed" | "inferred" | "disputed";
 
 export type SessionProgressStatus = "todo" | "in_progress" | "complete" | "parked";
+export type RightPaneView = "todo" | "context" | "raw_context" | "wire" | "usage";
 
 export interface SessionNode {
 	id: string;
@@ -29,6 +32,7 @@ export interface Turn {
 	activities?: TurnActivity[];
 	status:
 		| "idle"
+		| "queued"
 		| "retrieving"
 		| "running"
 		| "finalizing"
@@ -44,6 +48,8 @@ export interface Turn {
 		text: string;
 	};
 	usage?: TokenUsage;
+	/** Every provider request made while producing this assistant turn (including tool loops). */
+	modelRequests?: AgentModelRequestSnapshot[];
 	/** Display-only usage copied with shared fork history; excluded from branch totals. */
 	inheritedUsage?: TokenUsage;
 	createdAt: string;
@@ -64,7 +70,7 @@ export interface TokenUsage {
 }
 
 export interface TurnActivity {
-	id: "retrieval" | "agent" | "knowledge";
+	id: "queue" | "retrieval" | "agent" | "knowledge";
 	label: string;
 	status: "running" | "complete" | "error";
 	startedAt: string;
