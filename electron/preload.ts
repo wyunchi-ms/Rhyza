@@ -36,6 +36,8 @@ const bridge: KnowbranchBridge = {
 	workspaceExportPatch: (request) => ipcRenderer.invoke(ipcChannels.workspaceExportPatch, request),
 	agentPrompt: (request: AgentPromptRequest) =>
 		ipcRenderer.invoke(ipcChannels.agentPrompt, request),
+	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
+	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
 	renderArchify: (request) => ipcRenderer.invoke(ipcChannels.renderArchify, request),
