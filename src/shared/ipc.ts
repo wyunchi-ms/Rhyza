@@ -20,6 +20,8 @@ export const ipcChannels = {
 	workspaceDiff: "knowbranch:workspace-diff",
 	workspaceExportPatch: "knowbranch:workspace-export-patch",
 	agentPrompt: "knowbranch:agent-prompt",
+	modelRequestHistory: "knowbranch:model-request-history",
+	workspaceTodos: "knowbranch:workspace-todos",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
 	renderArchify: "knowbranch:render-archify",
@@ -126,6 +128,7 @@ export interface WorkspaceExportPatchResponse { canceled: boolean; path?: string
 
 export interface AgentPromptRequest {
 	frontendSessionId: string;
+	frontendTurnId?: string;
 	parentFrontendSessionId?: string;
 	forkedFromTurnId?: string;
 	transcript: AgentTranscriptTurn[];
@@ -265,6 +268,51 @@ export interface DiagnosticReport {
 	timings?: Record<string, { count: number; totalMs: number; maxMs: number; totalBytes?: number; maxBytes?: number }>;
 }
 
+/** A provider-neutral context snapshot plus the final provider payload for one LLM call. */
+export interface AgentModelRequestSnapshot {
+	id: string;
+	sequence: number;
+	timestamp: string;
+	model: string;
+	provider: string;
+	api: string;
+	thinking: string;
+	frontendTurnId?: string;
+	contextWindow?: number;
+	dumpPath?: string;
+	context: {
+		systemPrompt?: string;
+		messages: unknown[];
+		tools?: unknown[];
+	};
+	wirePayload?: unknown;
+	usage?: AgentUsage;
+}
+
+export interface ModelRequestHistoryRequest { frontendSessionId: string }
+export interface ModelRequestHistoryResponse { turns: Record<string, AgentModelRequestSnapshot[]> }
+
+export interface WorkspaceTodoNode {
+	id: string;
+	text: string;
+	completed: boolean;
+	line: number;
+	children: WorkspaceTodoNode[];
+}
+export interface WorkspaceTodoFile {
+	path: string;
+	completed: number;
+	total: number;
+	nodes: WorkspaceTodoNode[];
+}
+export interface WorkspaceTodosRequest { frontendSessionId?: string }
+export interface WorkspaceTodosResponse {
+	workspacePath: string;
+	completed: number;
+	total: number;
+	files: WorkspaceTodoFile[];
+}
+
 export interface ArchifyParseFailureReport {
 	timestamp: string;
 	source: string;
@@ -305,6 +353,9 @@ export interface AgentBridgeEvent {
 	streamKind?: "text" | "reasoning";
 	payload?: unknown;
 	usage?: AgentUsage;
+	requestId?: string;
+	modelRequest?: AgentModelRequestSnapshot;
+	wirePayload?: unknown;
 }
 
 export interface KnowbranchBridge {
@@ -326,6 +377,8 @@ export interface KnowbranchBridge {
 	workspaceDiff(request: WorkspaceDiffRequest): Promise<WorkspaceDiffResponse>;
 	workspaceExportPatch(request: WorkspaceDiffRequest): Promise<WorkspaceExportPatchResponse>;
 	agentPrompt(request: AgentPromptRequest): Promise<AgentPromptResponse>;
+	modelRequestHistory(request: ModelRequestHistoryRequest): Promise<ModelRequestHistoryResponse>;
+	workspaceTodos(request?: WorkspaceTodosRequest): Promise<WorkspaceTodosResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
 	extractKnowledge(request: KnowledgeExtractionRequest): Promise<KnowledgeExtractionResponse>;
 	renderArchify(request: ArchifyRenderRequest): Promise<ArchifyRenderResponse>;
@@ -409,6 +462,9 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		prompt: value.prompt,
 		transcript: value.transcript.map(validateTranscriptTurn),
 	};
+	if (typeof value.frontendTurnId === "string" && value.frontendTurnId.trim()) {
+		request.frontendTurnId = value.frontendTurnId.slice(0, 180);
+	}
 	if (images.length) request.images = images;
 	if (typeof value.parentFrontendSessionId === "string") {
 		request.parentFrontendSessionId = value.parentFrontendSessionId;
@@ -442,6 +498,21 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		request.diagramMode = value.diagramMode;
 	}
 	return request;
+}
+
+export function validateModelRequestHistoryRequest(value: unknown): ModelRequestHistoryRequest {
+	if (!isRecord(value) || typeof value.frontendSessionId !== "string" || !value.frontendSessionId.trim()) {
+		throw new Error("A frontend session id is required for model request history.");
+	}
+	return { frontendSessionId: value.frontendSessionId.slice(0, 180) };
+}
+
+export function validateWorkspaceTodosRequest(value: unknown): WorkspaceTodosRequest {
+	if (value === undefined || value === null) return {};
+	if (!isRecord(value)) throw new Error("Invalid workspace TODO request.");
+	return typeof value.frontendSessionId === "string" && value.frontendSessionId.trim()
+		? { frontendSessionId: value.frontendSessionId.slice(0, 180) }
+		: {};
 }
 
 export function validateArchifyRenderRequest(value: unknown): ArchifyRenderRequest {
