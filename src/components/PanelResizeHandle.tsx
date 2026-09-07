@@ -14,17 +14,30 @@ interface PanelResizeHandleProps {
 export function PanelResizeHandle({ side, label, value, min, max, defaultValue, onChange, onCommit }: PanelResizeHandleProps) {
 	const dragRef = useRef<{ pointerId: number; startX: number; startValue: number } | null>(null);
 	const latestValueRef = useRef(value);
+	const resizeFrameRef = useRef<number | null>(null);
 	useEffect(() => { latestValueRef.current = value; }, [value]);
-	useEffect(() => () => document.body.classList.remove("is-resizing-panel"), []);
+	useEffect(() => () => {
+		document.body.classList.remove("is-resizing-panel");
+		if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
+	}, []);
 
 	const resize = (nextValue: number) => {
 		const clamped = Math.round(Math.min(max, Math.max(min, nextValue)));
 		latestValueRef.current = clamped;
-		onChange(clamped);
+		if (resizeFrameRef.current !== null) return;
+		resizeFrameRef.current = window.requestAnimationFrame(() => {
+			resizeFrameRef.current = null;
+			onChange(latestValueRef.current);
+		});
 	};
 	const finishDrag = (event: PointerEvent<HTMLDivElement>) => {
 		if (dragRef.current?.pointerId !== event.pointerId) return;
 		dragRef.current = null;
+		if (resizeFrameRef.current !== null) {
+			window.cancelAnimationFrame(resizeFrameRef.current);
+			resizeFrameRef.current = null;
+		}
+		onChange(latestValueRef.current);
 		document.body.classList.remove("is-resizing-panel");
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
 		onCommit(latestValueRef.current);
@@ -36,6 +49,11 @@ export function PanelResizeHandle({ side, label, value, min, max, defaultValue, 
 		const widthDirection = side === "left" ? separatorDirection : -separatorDirection;
 		const nextValue = value + widthDirection * (event.shiftKey ? 32 : 8);
 		resize(nextValue);
+		if (resizeFrameRef.current !== null) {
+			window.cancelAnimationFrame(resizeFrameRef.current);
+			resizeFrameRef.current = null;
+		}
+		onChange(latestValueRef.current);
 		onCommit(latestValueRef.current);
 	};
 
