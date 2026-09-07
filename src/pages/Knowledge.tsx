@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DiagramViewer } from "../components/DiagramViewer";
+import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
 import { MermaidDiagram } from "../components/MermaidDiagram";
 import { ArchifyDiagram } from "../components/ArchifyDiagram";
 import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
@@ -91,7 +92,7 @@ const Knowledge = () => {
 				<aside className="knowledge-resource-pane" aria-label={`${mode} list`}>
 					<div className="knowledge-resource-heading"><strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong><span>{filteredResourceCount} shown</span></div>
 					<div className="knowledge-resource-list">
-						{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={selected?.id === entity.id ? "is-selected" : ""}><span><strong>{entity.name}</strong><small>{entity.summary}</small></span><em>{entity.type} · v{entity.version}</em></button>) : filteredDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={diagram?.id === item.id ? "is-selected" : ""}><span><strong>{item.name}</strong><small>{item.nodes.length} nodes · {item.edges.length} edges</small></span><em>{item.type} · v{item.version}</em></button>)}
+						{mode === "entities" ? filtered.map((entity) => <button type="button" key={entity.id} onClick={() => store.setSelectedEntity(entity.id)} className={selected?.id === entity.id ? "is-selected" : ""}><span><strong>{entity.name}</strong><small>{entity.summary}</small></span><em>{entity.type} · v{entity.version}</em></button>) : filteredDiagrams.map((item) => <button type="button" key={item.id} onClick={() => setSelectedDiagramId(item.id)} className={diagram?.id === item.id ? "is-selected" : ""}><div className="knowledge-diagram-list-title"><DiagramTypeIcon type={item.type} size={17} aria-hidden="true" /><span><strong>{item.name}</strong><small>{item.nodes.length} nodes · {item.edges.length} edges</small></span></div><em>{item.type} · v{item.version}</em></button>)}
 						{filteredResourceCount === 0 && <div className="knowledge-list-empty">{listEmptyMessage}</div>}
 					</div>
 				</aside>
@@ -239,7 +240,7 @@ function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiag
 			<div className="entity-connected-heading"><h3 className="section-label">Connected diagrams</h3><span>{linkedDiagrams.length}</span></div>
 			<div className="entity-diagram-list">
 				{linkedDiagrams.map(({ diagram, linkedNodes }) => <button key={diagram.id} type="button" className="entity-diagram-link" onClick={() => onOpenDiagram(diagram.id)} aria-label={`Open diagram ${diagram.name}`}>
-					<Network size={15} aria-hidden="true" />
+					<DiagramTypeIcon type={diagram.type} size={15} aria-hidden="true" />
 					<span><strong>{diagram.name}</strong><small>{diagram.type} · {linkedNodes.length} linked {linkedNodes.length === 1 ? "node" : "nodes"}</small></span>
 					<ArrowRight size={14} aria-hidden="true" />
 				</button>)}

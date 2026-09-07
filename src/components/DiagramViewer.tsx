@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Diagram } from "../types";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { ArchifyDiagram } from "./ArchifyDiagram";
+import { DiagramTypeIcon } from "./DiagramTypeIcon";
 
 export function DiagramViewer({ diagram, compact = false, showHeader = true }: { diagram: Diagram; compact?: boolean; showHeader?: boolean }) {
 	const [rendered, setRendered] = useState<{ source: string; svg: string }>({ source: "", svg: "" });
@@ -34,7 +35,7 @@ export function DiagramViewer({ diagram, compact = false, showHeader = true }: {
 	return (
 		<div className={compact ? "diagram-viewer diagram-viewer-compact" : "diagram-viewer h-full min-h-0 flex flex-col"}>
 			{showHeader && <div className="h-12 border-b border-gray-100 flex items-center justify-between px-4">
-				<div><span className="font-bold text-primary">{diagram.name}</span></div>
+				<div className="flex min-w-0 items-center gap-2"><DiagramTypeIcon type={diagram.type} size={17} className="shrink-0 text-teal-700" aria-hidden="true" /><span className="truncate font-bold text-primary">{diagram.name}</span></div>
 				<div ref={exportMenuRef} className="diagram-export">
 					<button type="button" onClick={() => setExportOpen((open) => !open)} aria-haspopup="menu" aria-expanded={exportOpen} title="Download diagram" aria-label="Download diagram" className="icon-button"><Download size={16} /></button>
 					{exportOpen && <div className="diagram-export-menu" role="menu">
