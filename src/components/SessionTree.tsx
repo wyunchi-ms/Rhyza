@@ -24,7 +24,7 @@ const progressOptions: Array<{
 	{ value: "parked", label: "On hold", description: "Keep this node for later", icon: PauseCircle },
 ];
 
-export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
+export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.ReactNode }> = ({ embedded = false, viewControl }) => {
 	const { sessions, turns, activeSessionId, visibleSessionId, setActiveSession, createRootSession, renameSession, setSessionProgressStatus, deleteSession } =
 		useAppStore();
 	const treeRef = useRef<HTMLDivElement>(null);
@@ -98,6 +98,8 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 					<h2>Chats</h2>
 					<UsageLabel usage={usage.total} prefix="Total" />
 				</div>
+				<div className="session-tree-header-actions">
+				{viewControl}
 				<button
 					type="button"
 					onClick={createSession}
@@ -107,6 +109,7 @@ export const SessionTree: React.FC<{ embedded?: boolean }> = ({ embedded = false
 				>
 					<Plus size={16} />
 				</button>
+				</div>
 			</div>
 			<div className="flex-1 overflow-y-auto px-2 pb-2">
 				{rootSessions.map((root) => (
