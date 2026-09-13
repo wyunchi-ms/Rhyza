@@ -351,7 +351,7 @@ export const ChatPane: React.FC = () => {
 		<div className="chat-pane">
 			<ConversationFind turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
 			<header className="chat-topbar">
-				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1><span>{store.settings.defaultModel || "GitHub Copilot"}</span></div>
+				<div className="min-w-0"><h1>{activeSession?.title ?? "New chat"}</h1></div>
 				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && store.rightPaneView === "todo" && "is-active")} onClick={store.toggleRightPane} title="Show workspace TODOs" aria-label="Show workspace TODOs"><ListChecks size={17} /></button>
 			</header>
 			{isSwitchingBranch && <div className="branch-switch-loading" role="status" aria-live="polite"><LoaderCircle size={22} aria-hidden="true" /><div><strong>Opening branch…</strong><span>Preparing the latest conversation</span></div></div>}

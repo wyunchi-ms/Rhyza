@@ -87,6 +87,8 @@ export interface ToolExecution {
 	startedAt: string;
 	completedAt?: string;
 	durationMs?: number;
+	output?: string;
+	warning?: boolean;
 }
 
 export interface EntityMention {

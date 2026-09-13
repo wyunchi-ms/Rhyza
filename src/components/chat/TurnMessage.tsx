@@ -149,17 +149,24 @@ const DetailRow = ({ label, value, title }: { label: string; value?: number | st
 function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 	const running = tools.filter((tool) => tool.status === "running").length;
 	const errors = tools.filter((tool) => tool.status === "error").length;
-	const summary = running ? `${running} running` : errors ? `${errors} failed` : "completed";
+	const warnings = tools.filter((tool) => tool.status !== "error" && tool.warning).length;
+	const summary = running
+		? `${running} running`
+		: [errors ? `${errors} failed` : "", warnings ? `${warnings} warning${warnings === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "completed";
 	return (
-		<details className="tools-section mb-3">
+		<details className={clsx("tools-section mb-3", errors ? "has-errors" : warnings ? "has-warnings" : !running && "has-complete")}>
 			<summary>
-				{running ? <LoaderCircle size={14} className="animate-spin" /> : errors ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
+				{running ? <LoaderCircle size={14} className="animate-spin" /> : errors ? <AlertCircle size={14} /> : warnings ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
 				<strong>Tools</strong>
 				<small>{tools.length} call{tools.length === 1 ? "" : "s"} · {summary}</small>
 				<ChevronDown size={14} className="tools-chevron" />
 			</summary>
 			<div className="tools-section-content space-y-2">
-				{tools.map((tool) => <details key={tool.id} className="tool-card"><summary><span className="tool-card-icon">{tool.status === "running" ? <LoaderCircle size={14} className="animate-spin" /> : tool.status === "error" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small>{tool.durationMs === undefined ? tool.status : formatDuration(tool.durationMs)}</small><ChevronDown size={14} /></summary><div className="tool-card-details">Status: {tool.status}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</div></details>)}
+				{tools.map((tool) => {
+					const severity = tool.status === "error" ? "error" : tool.warning ? "warning" : tool.status;
+					const statusLabel = severity === "error" ? "Failed" : severity === "warning" ? "Warning" : severity === "running" ? "Running" : "Completed";
+					return <details key={tool.id} className={`tool-card is-${severity}`}><summary><span className="tool-card-icon">{severity === "running" ? <LoaderCircle size={14} className="animate-spin" /> : severity === "error" || severity === "warning" ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}</span><span className="min-w-0 flex-1"><strong>{tool.name}</strong>{tool.target && <span>{tool.target}</span>}</span><small className="tool-card-status">{statusLabel}{tool.durationMs !== undefined ? ` · ${formatDuration(tool.durationMs)}` : ""}</small><ChevronDown size={14} /></summary><div className="tool-card-details">{tool.output ? <pre>{tool.output}</pre> : <p>No output was captured for this tool call.</p>}</div></details>;
+				})}
 			</div>
 		</details>
 	);

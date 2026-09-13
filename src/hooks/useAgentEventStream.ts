@@ -8,6 +8,7 @@ import { isTurnActive } from "../utils/sessionRuntime";
 import { isRecord } from "../shared/value";
 import { getKnowbranchBridge } from "./useKnowbranchBridge";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
+import { extractToolOutput, toolResultHasWarning } from "../utils/toolExecution";
 
 /** Owns the bridge-to-turn projection so chat surfaces do not duplicate stream semantics. */
 export function useAgentEventStream() {
@@ -122,18 +123,22 @@ function applyAgentEvent(turnId: string, event: AgentBridgeEvent): void {
 	if (event.type === "tool_execution_end" && isRecord(event.payload)) {
 		const toolCallId = typeof event.payload.toolCallId === "string" ? event.payload.toolCallId : "";
 		const isError = event.payload.isError === true;
+		const output = extractToolOutput(event.payload.result);
+		const warning = !isError && toolResultHasWarning(event.payload.result, output);
 		const completedAt = new Date();
 		store.updateTurn(turnId, {
-			tools: (current.tools ?? []).map((tool) => tool.id === toolCallId ? completeTool(tool, completedAt, isError) : tool),
+			tools: (current.tools ?? []).map((tool) => tool.id === toolCallId ? completeTool(tool, completedAt, isError, output, warning) : tool),
 		});
 	}
 }
 
-function completeTool(tool: NonNullable<Turn["tools"]>[number], completedAt: Date, isError: boolean): NonNullable<Turn["tools"]>[number] {
+function completeTool(tool: NonNullable<Turn["tools"]>[number], completedAt: Date, isError: boolean, output: string | undefined, warning: boolean): NonNullable<Turn["tools"]>[number] {
 	return {
 		...tool,
 		status: isError ? "error" : "complete",
 		completedAt: completedAt.toISOString(),
 		durationMs: Math.max(0, completedAt.getTime() - new Date(tool.startedAt).getTime()),
+		output,
+		warning,
 	};
 }

@@ -99,31 +99,33 @@ export function ChatComposer({ input, images, entities, diagrams, contextRequest
 			<div className="composer-mention-heading"><AtSign size={13} /> Reference workspace knowledge</div>
 			{mentionItems.length > 0 ? mentionItems.map((item, index) => <button key={`${item.kind}-${item.id}`} type="button" role="option" aria-selected={index === mention.activeIndex} className={index === mention.activeIndex ? "is-active" : ""} onMouseDown={(event) => { event.preventDefault(); selectMention(item); }} onMouseEnter={() => setMention((current) => current ? { ...current, activeIndex: index } : current)}><span className="composer-mention-icon">{item.kind === "entity" ? <Database size={15} /> : <DiagramTypeIcon type={item.diagramType ?? "structure"} size={15} />}</span><span><strong>{item.name}</strong><small>{item.kind === "entity" ? "Entity" : "Diagram"} · {item.detail}</small></span></button>) : <div className="composer-mention-empty">No entities or diagrams match “{mention.query}”.</div>}
 		</div>}
-		{(references.length > 0 || images.length > 0) && <div className="composer-context-row">
-			{references.map((reference) => <span key={reference.raw} className="composer-reference-chip"><span className="composer-reference-icon">{reference.kind === "entity" ? <Database size={13} /> : <DiagramTypeIcon type={diagramTypes.get(reference.id) ?? "structure"} size={13} />}</span><span>@{reference.name}</span><small>{reference.kind === "entity" ? "Entity" : "Diagram"}</small><button type="button" title={`Remove ${reference.name}`} aria-label={`Remove ${reference.name}`} onClick={() => removeReference(reference.raw)}><X size={12} /></button></span>)}
-			{images.map((image) => <div key={image.id} className="composer-attachment"><img src={image.preview} alt="" /><button type="button" title="Remove image" aria-label="Remove image" onClick={() => onImagesChange(images.filter((item) => item.id !== image.id))}><X size={12} /></button></div>)}
-		</div>}
-		<div className={`chat-composer${multiline ? " is-multiline" : ""}`}>
-			<div className="composer-main">
-			<textarea ref={textareaRef} className="composer-input" placeholder={images.length ? "Add a question about the image" : "Message Rhyza — type @ to reference knowledge"} value={draft} onChange={(event) => { updateDraft(event.target.value); updateMention(event.target.value, event.target.selectionStart); }} onClick={(event) => updateMention(event.currentTarget.value, event.currentTarget.selectionStart)} onBlur={() => window.setTimeout(() => setMention(null), 120)} onPaste={(event) => {
-				const imageFiles = [...event.clipboardData.items].filter((item) => item.kind === "file" && item.type.startsWith("image/")).map((item) => item.getAsFile()).filter((file): file is File => file !== null);
-				if (imageFiles.length === 0) return;
-				event.preventDefault();
-				const files = new DataTransfer(); imageFiles.forEach((file) => files.items.add(file)); addFiles(files.files);
-			}} onKeyDown={(event) => {
-				if (event.nativeEvent.isComposing) return;
-				if (mention && mentionItems.length > 0) {
-					if (event.key === "Escape") { event.preventDefault(); setMention(null); return; }
-					if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const delta = event.key === "ArrowDown" ? 1 : -1; setMention((current) => current ? { ...current, activeIndex: (current.activeIndex + delta + mentionItems.length) % mentionItems.length } : current); return; }
-					if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); selectMention(mentionItems[mention.activeIndex]); return; }
-				}
-				if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSend(); }
-			}} rows={1} />
-			<ComposerRuntimeControls models={models} selectedModel={settings.defaultModel} thinking={settings.thinkingLevel} contextRequest={contextRequest} onModelChange={(defaultModel) => updateSettings({ defaultModel })} onThinkingChange={(thinkingLevel) => updateSettings({ thinkingLevel })} />
+		<div className={`chat-composer${multiline || references.length > 0 || images.length > 0 ? " is-multiline" : ""}`}>
+			{(references.length > 0 || images.length > 0) && <div className="composer-context-row">
+				{references.map((reference) => <span key={reference.raw} className="composer-reference-chip"><span className="composer-reference-icon">{reference.kind === "entity" ? <Database size={13} /> : <DiagramTypeIcon type={diagramTypes.get(reference.id) ?? "structure"} size={13} />}</span><span>@{reference.name}</span><small>{reference.kind === "entity" ? "Entity" : "Diagram"}</small><button type="button" title={`Remove ${reference.name}`} aria-label={`Remove ${reference.name}`} onClick={() => removeReference(reference.raw)}><X size={12} /></button></span>)}
+				{images.map((image) => <div key={image.id} className="composer-attachment"><img src={image.preview} alt="Attached preview" /><button type="button" title="Remove image" aria-label="Remove image" onClick={() => onImagesChange(images.filter((item) => item.id !== image.id))}><X size={12} /></button></div>)}
+			</div>}
+			<div className="composer-input-row">
+				<div className="composer-main">
+				<textarea ref={textareaRef} className="composer-input" placeholder={images.length ? "Add a question about the image" : "Message Rhyza — type @ to reference knowledge"} value={draft} onChange={(event) => { updateDraft(event.target.value); updateMention(event.target.value, event.target.selectionStart); }} onClick={(event) => updateMention(event.currentTarget.value, event.currentTarget.selectionStart)} onBlur={() => window.setTimeout(() => setMention(null), 120)} onPaste={(event) => {
+					const imageFiles = [...event.clipboardData.items].filter((item) => item.kind === "file" && item.type.startsWith("image/")).map((item) => item.getAsFile()).filter((file): file is File => file !== null);
+					if (imageFiles.length === 0) return;
+					event.preventDefault();
+					const files = new DataTransfer(); imageFiles.forEach((file) => files.items.add(file)); addFiles(files.files);
+				}} onKeyDown={(event) => {
+					if (event.nativeEvent.isComposing) return;
+					if (mention && mentionItems.length > 0) {
+						if (event.key === "Escape") { event.preventDefault(); setMention(null); return; }
+						if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const delta = event.key === "ArrowDown" ? 1 : -1; setMention((current) => current ? { ...current, activeIndex: (current.activeIndex + delta + mentionItems.length) % mentionItems.length } : current); return; }
+						if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); selectMention(mentionItems[mention.activeIndex]); return; }
+					}
+					if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSend(); }
+				}} rows={1} />
+				<ComposerRuntimeControls models={models} selectedModel={settings.defaultModel} thinking={settings.thinkingLevel} contextRequest={contextRequest} onModelChange={(defaultModel) => updateSettings({ defaultModel })} onThinkingChange={(thinkingLevel) => updateSettings({ thinkingLevel })} />
+				</div>
+				<button type="button" title="Attach image" aria-label="Attach image" onClick={() => imageInputRef.current?.click()} className="composer-attach"><ImagePlus size={17} /></button>
+				<input ref={imageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ""; }} />
+				<button type="button" title={isSending ? "Queue message" : "Send"} aria-label={isSending ? "Queue message" : "Send"} onClick={onSend} disabled={!draft.trim() && references.length === 0 && images.length === 0} className="composer-send"><Send size={18} /></button>
 			</div>
-			<button type="button" title="Attach image" aria-label="Attach image" onClick={() => imageInputRef.current?.click()} className="composer-attach"><ImagePlus size={17} /></button>
-			<input ref={imageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ""; }} />
-			<button type="button" title={isSending ? "Queue message" : "Send"} aria-label={isSending ? "Queue message" : "Send"} onClick={onSend} disabled={!draft.trim() && references.length === 0 && images.length === 0} className="composer-send"><Send size={18} /></button>
 		</div>
 	</div><div className="composer-caption">{runtimeCaption}</div>{error && <div className="text-center mt-1 text-xs text-red-600">{error}</div>}</div>;
 }
