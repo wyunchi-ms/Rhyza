@@ -61,7 +61,7 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 		}
 		if (!hasLocalRound) {
 			const id = `empty:${session.id}`;
-			rounds.set(id, { id, parentId: path[path.length - 1] ?? null, sessionId: session.id, answers: [], title: session.title });
+			rounds.set(id, { id, parentId: path[path.length - 1] ?? paths.get(session.parentId ?? "")?.slice(-1)[0] ?? null, sessionId: session.id, answers: [], title: session.title });
 			path.push(id);
 		}
 		paths.set(session.id, path);

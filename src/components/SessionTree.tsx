@@ -1,4 +1,4 @@
-import { SessionContextMenu, useSessionContextMenu } from "./SessionContextMenu";
+import { SessionNodeContextMenu, useSessionContextMenu } from "./SessionContextMenu";
 import { ProgressMarker } from "./ProgressMarker";
 import clsx from "clsx";
 import { AlertCircle, ChevronRight, LoaderCircle, LocateFixed, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
@@ -8,41 +8,55 @@ import { useNavigate } from "react-router-dom";
 import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
 import { useConversationFocus } from "../store/conversationFocus";
-import { buildTurnSessionMap } from "../utils/sessionVisibility";
-import type { SessionNode, SessionProgressStatus, TokenUsage } from "../types";
-import { allocateBranchUsage, formatTokens, usageTokens } from "../utils/branchUsage";
-import { runningSessionIds } from "../utils/sessionRuntime";
+import { allocateConversationTreeUsage, conversationTreeTarget, projectConversationTree, type ConversationTreeNode } from "../utils/conversationTree";
+import type { SessionNode, TokenUsage } from "../types";
+import { formatTokens, usageTokens } from "../utils/branchUsage";
+import { isTurnActive } from "../utils/sessionRuntime";
+import { roundMetrics } from "../utils/roundMetrics";
 import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.ReactNode }> = ({ embedded = false, viewControl }) => {
-	const { sessions, turns, activeSessionId, setActiveSession, createRootSession, renameSession, setSessionProgressStatus, deleteSession } =
+	const { sessions, turns, activeSessionId, setActiveSession, createRootSession, renameSession, updateTurn, deleteSession } =
 		useAppStore();
 	const focus = useConversationFocus();
-	const turnSessionMap = useMemo(() => buildTurnSessionMap(turns, sessions), [turns, sessions]);
-	const visibleSessionId = focus.sessionId === activeSessionId && focus.turnId ? turnSessionMap.get(focus.turnId) ?? activeSessionId : activeSessionId;
+	const tree = useMemo(() => projectConversationTree(sessions, turns), [turns, sessions]);
+	const activePath = tree.graph.paths.get(activeSessionId ?? "") ?? [];
+	const focusedRoundId = focus.sessionId === activeSessionId && focus.turnId ? tree.graph.roundByTurnId.get(focus.turnId) : undefined;
+	const visibleNodeId = tree.nodeByRoundId.get(focusedRoundId ?? activePath[activePath.length - 1]) ?? null;
 	const treeRef = useRef<HTMLDivElement>(null);
 	const branchSwitchFrameRef = useRef<number | null>(null);
-	const scrollTargetSessionId = visibleSessionId ?? activeSessionId;
-	const usage = allocateBranchUsage(sessions, turns);
-	const runningIds = runningSessionIds(turns);
+	const scrollTargetSessionId = visibleNodeId;
+	const usage = useMemo(() => allocateConversationTreeUsage(tree, sessions, turns), [tree, sessions, turns]);
 	const navigate = useNavigate();
 	const selectSession = (id: string) => {
-		if (id === activeSessionId) {
+		const target = conversationTreeTarget(tree, id, activeSessionId);
+		if (!target) return;
+		if (branchSwitchFrameRef.current !== null) window.cancelAnimationFrame(branchSwitchFrameRef.current);
+		const select = () => {
+			const { sessionId, turnId } = target;
+			if (turnId) window.sessionStorage.setItem("rhyza-focus-turn", turnId);
+			else window.sessionStorage.removeItem("rhyza-focus-turn");
+			useConversationFocus.getState().setFocus(sessionId, turnId ?? null);
+			setActiveSession(sessionId);
 			navigate("/");
+			if (turnId) window.dispatchEvent(new CustomEvent("rhyza:focus-turn", { detail: { turnId } }));
+		};
+		if (target.sessionId === activeSessionId) {
+			branchSwitchFrameRef.current = null;
+			announceBranchSwitchEnd();
+			select();
 			return;
 		}
-		if (branchSwitchFrameRef.current !== null) window.cancelAnimationFrame(branchSwitchFrameRef.current);
-		announceBranchSwitchStart(id);
+		announceBranchSwitchStart(target.sessionId);
 		// Yield one complete frame so the loading overlay is painted before the
 		// potentially expensive conversation tree is reconciled.
 		branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
 			branchSwitchFrameRef.current = window.requestAnimationFrame(() => {
 				branchSwitchFrameRef.current = null;
 				const updateStartedAt = performance.now();
-				setActiveSession(id);
+				select();
 				recordPerformanceTiming("branch-state-update", performance.now() - updateStartedAt);
-				navigate("/");
 			});
 		});
 	};
@@ -50,7 +64,6 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 		createRootSession();
 		navigate("/");
 	};
-	const rootSessions = sessions.filter((s) => s.isRoot);
 	useLayoutEffect(() => {
 		if (!scrollTargetSessionId) return;
 		const nodes = treeRef.current?.querySelectorAll<HTMLElement>("[data-session-tree-id]");
@@ -61,17 +74,22 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 		if (branchSwitchFrameRef.current !== null) window.cancelAnimationFrame(branchSwitchFrameRef.current);
 		announceBranchSwitchEnd();
 	}, []);
+	const renameNode = (id: string, title: string) => {
+		const node = tree.byId.get(id);
+		if (!node) return;
+		const last = node.rounds[node.rounds.length - 1];
+		if (last.user) updateTurn(last.user.id, { summary: title });
+		else renameSession(node.sessionId, title);
+	};
 	const regenerateBranchTitles = async (parentId: string) => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
 		const state = useAppStore.getState();
-		const children = state.sessions.filter((session) => session.parentId === parentId);
-		const nodes = [state.sessions.find((session) => session.id === parentId), ...children]
-			.filter((session): session is SessionNode => Boolean(session));
+		const nodes = [tree.byId.get(parentId), ...(tree.childrenById.get(parentId) ?? [])]
+			.filter((node): node is ConversationTreeNode => Boolean(node));
 		const model = state.settings.defaultModel ? { providerId: githubCopilotProviderId, modelId: state.settings.defaultModel } : undefined;
 		const summaries = await Promise.all(nodes.map((node) => {
-			const nodeTurns = state.turns.filter((turn) => turn.sessionId === node.id);
-			const localTurns = nodeTurns.filter((turn) => !turn.sourceTurnId);
+			const localTurns = node.rounds.flatMap((round) => round.user ? [round.user, ...round.answers] : round.answers);
 			const text = [...localTurns].reverse().find((turn) => turn.role === "user")?.content
 				?? localTurns.map((turn) => turn.content).join("\n")
 				?? node.title;
@@ -79,9 +97,9 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 		}));
 		const current = useAppStore.getState();
 		nodes.forEach((node, index) => {
-			current.addSessionTitleUsage(node.id, summaries[index]?.usage);
+			current.addSessionTitleUsage(node.sessionId, summaries[index]?.usage);
 			const title = summaries[index]?.summary;
-			if (title) current.renameSession(node.id, title);
+			if (title) renameNode(node.id, title);
 		});
 	};
 
@@ -106,20 +124,19 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 				</div>
 			</div>
 			<div className="flex-1 overflow-y-auto px-2 pb-2">
-				{rootSessions.map((root) => (
+				{tree.roots.map((root) => (
 					<SessionGroup
 						key={root.id}
 						root={root}
 						sessions={sessions}
-						currentId={visibleSessionId}
-						viewportId={visibleSessionId}
+						tree={tree}
+						currentId={visibleNodeId}
+						viewportId={visibleNodeId}
 						onSelect={selectSession}
-						onRename={renameSession}
-						onSetProgress={setSessionProgressStatus}
+						onRename={renameNode}
 						onRegenerate={(id) => void regenerateBranchTitles(id)}
 						onDelete={deleteSession}
 						usage={usage}
-						runningIds={runningIds}
 					/>
 				))}
 			</div>
@@ -130,30 +147,28 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 const SessionGroup = ({
 	root,
 	sessions,
+	tree,
 	currentId,
 	viewportId,
 	onSelect,
 	onRename,
-	onSetProgress,
 	onRegenerate,
 	onDelete,
 	usage,
-	runningIds,
 }: {
-	root: SessionNode;
+	root: ConversationTreeNode;
 	sessions: SessionNode[];
+	tree: ReturnType<typeof projectConversationTree>;
 	currentId: string | null;
 	viewportId: string | null;
 	onSelect: (id: string) => void;
-	onRename: (id: string, title: string, keepPending?: boolean) => void;
-	onSetProgress: (id: string, status?: SessionProgressStatus, continuation?: boolean) => void;
+	onRename: (id: string, title: string) => void;
 	onRegenerate: (id: string) => void;
 	onDelete: (id: string) => void;
-	usage: ReturnType<typeof allocateBranchUsage>;
-	runningIds: Set<string>;
+	usage: ReturnType<typeof allocateConversationTreeUsage>;
 }) => {
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
-	const { menu: contextMenu, openMenu: openStatusMenu, closeMenu } = useSessionContextMenu();
+	const { menu: contextMenu, openMenu, closeMenu } = useSessionContextMenu();
 	const [editingTitle, setEditingTitle] = useState<{
 		nodeId: string;
 		value: string;
@@ -170,16 +185,16 @@ const SessionGroup = ({
 	}, [editingTitle?.nodeId]);
 
 	const getChildren = (parentId: string) =>
-		sessions.filter((s) => s.parentId === parentId);
+		tree.childrenById.get(parentId) ?? [];
 
 	useEffect(() => {
 		if (!currentId) return;
 		const ancestors = new Set<string>();
-		let current = sessions.find((session) => session.id === currentId);
-		while (current?.parentId) {
+		let current = tree.byId.get(currentId);
+		while (current?.parentId && !ancestors.has(current.parentId)) {
 			const parentId = current.parentId;
 			ancestors.add(parentId);
-			current = sessions.find((session) => session.id === parentId);
+			current = tree.byId.get(parentId);
 		}
 		setCollapsedIds((collapsed) => {
 			if (![...ancestors].some((id) => collapsed.has(id))) return collapsed;
@@ -187,7 +202,7 @@ const SessionGroup = ({
 			for (const id of ancestors) expanded.delete(id);
 			return expanded;
 		});
-	}, [currentId, sessions]);
+	}, [currentId, tree]);
 
 	const toggleBranch = (id: string) => setCollapsedIds((current) => {
 		const next = new Set(current);
@@ -231,8 +246,12 @@ const SessionGroup = ({
 		/>
 	);
 
-	const renderNode = (node: SessionNode, nested = false) => {
+	const renderNode = (node: ConversationTreeNode, nested = false) => {
 		const children = getChildren(node.id);
+		const session = sessions.find((item) => item.id === node.sessionId);
+		const running = node.rounds.some((round) => round.answers.some(isTurnActive));
+		const last = node.rounds[node.rounds.length - 1];
+		const status = roundMetrics(last).status;
 		const isBranchPoint = children.length > 0;
 		const isCurrent = currentId === node.id;
 		const isInView = viewportId === node.id;
@@ -256,6 +275,7 @@ const SessionGroup = ({
 							className="session-tree-toggle"
 							onClick={() => toggleBranch(node.id)}
 							aria-label={expanded ? `Collapse ${node.title}` : `Expand ${node.title}`}
+							aria-expanded={expanded}
 							title={expanded ? "Collapse branch" : "Expand branch"}
 						>
 							<ChevronRight size={14} className={clsx("transition-transform", expanded && "rotate-90")} />
@@ -266,15 +286,15 @@ const SessionGroup = ({
 						className="session-tree-select"
 						aria-current={isCurrent ? "page" : undefined}
 						onClick={() => onSelect(node.id)}
-						onContextMenu={(event) => openStatusMenu(event, node.id)}
+						onContextMenu={(event) => openMenu(event, node.id)}
 					>
 						{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
-						<ProgressMarker status={node.progressStatus} active={isCurrent} />
+						<ProgressMarker status={session?.progressStatus} active={isCurrent} />
 						<SessionNodeTitle title={node.title} />
 						{isInView && <span className="session-viewport-indicator" title="Currently in view" aria-label="Currently in view"><LocateFixed size={12} /></span>}
-						{(node.titlePending || runningIds.has(node.id)) && <LoaderCircle size={12} className="animate-spin" aria-label={runningIds.has(node.id) ? "Running" : "Generating title"} />}
-						{!isBranchPoint && node.status === "interrupted" && <AlertCircle size={12} className="text-amber-600" aria-label="Interrupted; this session can be continued" />}
-						{!isBranchPoint && node.status === "error" && <AlertCircle size={12} className="text-red-500" aria-label="Error" />}
+						{(session?.titlePending || running) && <LoaderCircle size={12} className="animate-spin" aria-label={running ? "Running" : "Generating title"} />}
+						{!isBranchPoint && status === "interrupted" && <AlertCircle size={12} className="text-amber-600" aria-label="Interrupted; this session can be continued" />}
+						{!isBranchPoint && status === "error" && <AlertCircle size={12} className="text-red-500" aria-label="Error" />}
 					</button>
 				</div>
 				{isEditing && titleEditor(isBranchPoint ? "left-12" : "left-8")}
@@ -282,7 +302,7 @@ const SessionGroup = ({
 					<HoverUsage usage={usage.node.get(node.id)} />
 					{isBranchPoint && <button type="button" title="Regenerate branch titles" aria-label={`Regenerate titles under ${node.title}`} className="p-1 rounded hover:bg-black/10" onClick={(event) => { event.stopPropagation(); onRegenerate(node.id); }}><Sparkles size={12} /></button>}
 					<button type="button" title="Rename session" aria-label={`Rename ${node.title}`} className="p-1 rounded hover:bg-black/10" onClick={(event) => { event.stopPropagation(); startRename(node.id, node.title); }}><Pencil size={12} /></button>
-					<button type="button" title="Delete session" aria-label={`Delete ${node.title}`} className="p-1 rounded hover:bg-red-500/20 hover:text-red-600" onClick={() => { if (window.confirm(`Delete “${node.title}”${children.length ? " and all of its branches" : ""}?`)) onDelete(node.id); }}><Trash2 size={12} /></button>
+					<button type="button" title="Delete session" aria-label={`Delete session ${session?.title ?? node.title}`} className="p-1 rounded hover:bg-red-500/20 hover:text-red-600" onClick={() => { if (window.confirm(`Delete session “${session?.title ?? node.title}” and all its messages and branches?`)) onDelete(node.sessionId); }}><Trash2 size={12} /></button>
 				</div>
 				</div>
 				{expanded && children.length > 0 && (
@@ -294,9 +314,11 @@ const SessionGroup = ({
 		);
 	};
 
+	const menuNode = contextMenu ? tree.byId.get(contextMenu.nodeId) : undefined;
+	const menuRound = menuNode?.rounds[menuNode.rounds.length - 1];
 	return <>
 		<div className="mb-3">{renderNode(root)}</div>
-		{contextMenu && <SessionContextMenu anchor={contextMenu} status={sessions.find((session) => session.id === contextMenu.nodeId)?.progressStatus} onSelect={(status) => onSetProgress(contextMenu.nodeId, status)} onClose={closeMenu} />}
+		{contextMenu && menuNode && <SessionNodeContextMenu anchor={contextMenu} nodeId={menuNode.sessionId} turnId={menuRound?.answers[menuRound.answers.length - 1]?.id ?? menuRound?.user?.id} onClose={closeMenu} />}
 	</>;
 };
 

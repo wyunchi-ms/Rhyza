@@ -29,7 +29,7 @@ import { useAppStore } from "../store";
 import { useConversationFocus } from "../store/conversationFocus";
 import type { SessionNode, SessionProgressStatus } from "../types";
 import { NodeInformation } from "./NodeInformation";
-import { SessionContextMenu, useSessionContextMenu } from "./SessionContextMenu";
+import { SessionNodeContextMenu, useSessionContextMenu } from "./SessionContextMenu";
 import { executionAppearance, roundMetrics } from "../utils/roundMetrics";
 import { ProgressMarker } from "./ProgressMarker";
 import { layoutSessionGraph, type SessionGraphOrientation } from "../utils/sessionGraph";
@@ -178,7 +178,6 @@ export function SessionGraph({ viewControl, visible = true }: { viewControl?: Re
 function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 	const updateNodeInternals = useUpdateNodeInternals();
 	const { menu, openMenu, closeMenu } = useSessionContextMenu();
-	const setProgress = useAppStore((state) => state.setSessionProgressStatus);
 	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
 	const [informationCloseSignal, setInformationCloseSignal] = useState(0);
 	const [now, setNow] = useState(Date.now);
@@ -246,7 +245,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				<p>{data.preview || (data.round.user ? "Waiting for response" : "Start a new conversation")}</p>
 			</button>
 			<NodeInformation metrics={metrics} nodeId={data.round.id} closeSignal={informationCloseSignal} disabled={Boolean(menu)} onOpen={hidePreview} />
-			{menu && <SessionContextMenu anchor={menu} status={data.progressStatus} onSelect={(status) => setProgress(menu.nodeId, status)} onClose={closeMenu} />}
+			{menu && <SessionNodeContextMenu anchor={menu} nodeId={menu.nodeId} turnId={data.round.answers[data.round.answers.length - 1]?.id ?? data.round.user?.id} onClose={closeMenu} />}
 			<Handle type="source" position={sourcePosition} isConnectable={false} />
 			{previewRect && createPortal(<div ref={previewPanel} id={`round-preview-${data.round.id}`} role="tooltip" className="graph-content-preview"
 				style={graphPreviewPosition(previewRect.anchor, previewRect.graph, { width: window.innerWidth, height: window.innerHeight })}

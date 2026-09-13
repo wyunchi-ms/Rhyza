@@ -1,4 +1,5 @@
 import type { SessionNode, Turn } from "../types";
+import { isTurnActive } from "./sessionRuntime";
 
 export interface SessionForkState {
 	sessions: SessionNode[];
@@ -53,6 +54,61 @@ export function forkSessionAtTurn(
 		return splitLocalPath(state, sourceTurn, sourceTurns, sourceIndex, createId);
 	}
 	return splitLocalPath(state, selectedTurn, selectedTurns, forkIndex, createId);
+}
+
+/** Node actions stay on the selected session, even when its last turn is inherited. */
+export function forkSessionNode(
+	state: SessionForkState,
+	sessionId: string,
+	createId: (prefix: "session" | "turn") => string,
+	turnId?: string,
+): SessionForkResult | null {
+	const session = state.sessions.find((item) => item.id === sessionId);
+	const turns = state.turns.filter((turn) => turn.sessionId === sessionId);
+	if (!session || turns.some(isTurnActive)) return null;
+	const index = turnId ? turns.findIndex((turn) => turn.id === turnId) : turns.length - 1;
+	if (turnId && index < 0) return null;
+	if (index >= 0) return splitLocalPath(state, turns[index], turns, index, createId);
+	const forkSessionId = createId("session");
+	return {
+		forkSessionId, originalSessionId: sessionId, branchPointSessionId: sessionId,
+		sessions: [...state.sessions, createBranchSession(forkSessionId, sessionId)],
+		turns: state.turns,
+	};
+}
+
+/** An independent copy has new turn identities and no branch or runtime ownership. */
+export function cloneSessionNode(
+	state: SessionForkState,
+	sessionId: string,
+	createId: (prefix: "session" | "turn") => string,
+	turnId?: string,
+): (SessionForkState & { cloneSessionId: string }) | null {
+	const source = state.sessions.find((item) => item.id === sessionId);
+	const turns = state.turns.filter((turn) => turn.sessionId === sessionId);
+	if (!source || turns.some(isTurnActive)) return null;
+	const index = turnId ? turns.findIndex((turn) => turn.id === turnId) : turns.length - 1;
+	if (turnId && index < 0) return null;
+	const history = turns.slice(0, index + 1);
+	const cloneSessionId = createId("session");
+	const ids = new Map(history.map((turn) => [turn.id, createId("turn")]));
+	// Quotes can refer to canonical turns from inherited history.
+	for (const turn of history) if (turn.sourceTurnId) ids.set(turn.sourceTurnId, ids.get(turn.id)!);
+	const copies = history.map((turn): Turn => ({
+		...structuredClone(turn),
+		id: ids.get(turn.id)!, sessionId: cloneSessionId, sourceTurnId: undefined,
+		changeSetId: undefined, modelRequests: undefined,
+		usage: undefined, inheritedUsage: structuredClone(turn.usage ?? turn.inheritedUsage),
+		quote: turn.quote ? { ...turn.quote, turnId: ids.get(turn.quote.turnId) ?? turn.quote.turnId } : undefined,
+	}));
+	return {
+		cloneSessionId,
+		sessions: [...state.sessions, {
+			id: cloneSessionId, parentId: null, isRoot: true, status: "idle",
+			title: `${source.title} (copy)`, progressStatus: source.progressStatus,
+		}],
+		turns: [...state.turns, ...copies],
+	};
 }
 
 function splitLocalPath(
@@ -125,7 +181,7 @@ function splitLocalPath(
 	};
 }
 
-function createBranchSession(id: string, parentId: string, forkedFromTurnId: string): SessionNode {
+function createBranchSession(id: string, parentId: string, forkedFromTurnId?: string): SessionNode {
 	return {
 		id,
 		parentId,

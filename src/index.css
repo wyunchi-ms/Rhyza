@@ -797,6 +797,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .session-status-option { display: flex; width: 100%; align-items: center; gap: 0.55rem; border-radius: 4px; padding: 0.45rem 0.55rem; text-align: left; }
 .session-status-option:hover, .session-status-option:focus-visible { background: #f1f5f9; }
 .session-status-option-icon { flex: 0 0 auto; color: #94a3b8; }
+.session-menu-divider { height: 1px; margin: 0.3rem 0.25rem; background: var(--border-primary, #dbe2ea); }
+.session-status-option:disabled { opacity: 0.45; cursor: not-allowed; }
+.session-menu-delete, .session-menu-delete .session-status-option-icon { color: #dc2626; }
+.session-menu-delete:hover, .session-menu-delete:focus-visible { background: rgb(239 68 68 / 10%); }
 
 .reasoning-block > summary { list-style: none; }
 .reasoning-block > summary::-webkit-details-marker { display: none; }

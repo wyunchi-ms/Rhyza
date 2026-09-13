@@ -18,7 +18,7 @@ import type {
 } from "../types";
 import { createId } from "../utils/common";
 import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
-import { forkSessionAtTurn } from "../utils/sessionFork";
+import { cloneSessionNode, forkSessionAtTurn, forkSessionNode } from "../utils/sessionFork";
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
 import { archifyToMermaid, parseArchifySource } from "../shared/archify";
@@ -55,6 +55,8 @@ interface AppState {
 	closeRightPane: () => void;
 	createRootSession: () => string;
 	forkSession: (turnId: string) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
+	forkNode: (sessionId: string, turnId?: string) => string | null;
+	cloneNode: (sessionId: string, turnId?: string) => string | null;
 	renameSession: (id: string, title: string, keepPending?: boolean) => void;
 	setSessionProgressStatus: (id: string, status?: SessionProgressStatus) => void;
 	deleteSession: (id: string) => void;
@@ -240,6 +242,19 @@ export const useAppStore = create<AppState>()(
 					announceForkDebug({ ok: false, message: "Fork dump unavailable. Restart Electron to load the updated preload bridge." });
 				}
 				return { forkSessionId: result.forkSessionId, originalSessionId: result.originalSessionId, branchPointSessionId: result.branchPointSessionId };
+			},
+
+			forkNode: (sessionId, turnId) => {
+				const result = forkSessionNode(get(), sessionId, createId, turnId);
+				if (!result) return null;
+				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.forkSessionId, visibleSessionId: result.forkSessionId });
+				return result.forkSessionId;
+			},
+			cloneNode: (sessionId, turnId) => {
+				const result = cloneSessionNode(get(), sessionId, createId, turnId);
+				if (!result) return null;
+				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.cloneSessionId, visibleSessionId: result.cloneSessionId });
+				return result.cloneSessionId;
 			},
 
 			renameSession: (id, title, refreshOnNextPrompt = false) =>
