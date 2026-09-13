@@ -1,32 +1,26 @@
+import { SessionContextMenu, useSessionContextMenu } from "./SessionContextMenu";
+import { ProgressMarker } from "./ProgressMarker";
 import clsx from "clsx";
-import { AlertCircle, Check, CheckCircle2, ChevronRight, Circle, CircleDot, LoaderCircle, LocateFixed, PauseCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronRight, LoaderCircle, LocateFixed, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import type React from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
+import { useConversationFocus } from "../store/conversationFocus";
+import { buildTurnSessionMap } from "../utils/sessionVisibility";
 import type { SessionNode, SessionProgressStatus, TokenUsage } from "../types";
 import { allocateBranchUsage, formatTokens, usageTokens } from "../utils/branchUsage";
 import { runningSessionIds } from "../utils/sessionRuntime";
 import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 
-const progressOptions: Array<{
-	value?: SessionProgressStatus;
-	label: string;
-	description: string;
-	icon: typeof Circle;
-}> = [
-	{ label: "Unmarked", description: "Do not track this node", icon: Circle },
-	{ value: "todo", label: "To explore", description: "Questions still need investigation", icon: Circle },
-	{ value: "in_progress", label: "In progress", description: "Currently being worked through", icon: CircleDot },
-	{ value: "complete", label: "Completed", description: "This question has been answered", icon: CheckCircle2 },
-	{ value: "parked", label: "On hold", description: "Keep this node for later", icon: PauseCircle },
-];
-
 export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.ReactNode }> = ({ embedded = false, viewControl }) => {
-	const { sessions, turns, activeSessionId, visibleSessionId, setActiveSession, createRootSession, renameSession, setSessionProgressStatus, deleteSession } =
+	const { sessions, turns, activeSessionId, setActiveSession, createRootSession, renameSession, setSessionProgressStatus, deleteSession } =
 		useAppStore();
+	const focus = useConversationFocus();
+	const turnSessionMap = useMemo(() => buildTurnSessionMap(turns, sessions), [turns, sessions]);
+	const visibleSessionId = focus.sessionId === activeSessionId && focus.turnId ? turnSessionMap.get(focus.turnId) ?? activeSessionId : activeSessionId;
 	const treeRef = useRef<HTMLDivElement>(null);
 	const branchSwitchFrameRef = useRef<number | null>(null);
 	const scrollTargetSessionId = visibleSessionId ?? activeSessionId;
@@ -117,7 +111,7 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 						key={root.id}
 						root={root}
 						sessions={sessions}
-						currentId={activeSessionId}
+						currentId={visibleSessionId}
 						viewportId={visibleSessionId}
 						onSelect={selectSession}
 						onRename={renameSession}
@@ -159,12 +153,7 @@ const SessionGroup = ({
 	runningIds: Set<string>;
 }) => {
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
-	const [contextMenu, setContextMenu] = useState<{
-		x: number;
-		y: number;
-		nodeId: string;
-		status?: SessionProgressStatus;
-	} | null>(null);
+	const { menu: contextMenu, openMenu: openStatusMenu, closeMenu } = useSessionContextMenu();
 	const [editingTitle, setEditingTitle] = useState<{
 		nodeId: string;
 		value: string;
@@ -179,38 +168,6 @@ const SessionGroup = ({
 		});
 		return () => window.cancelAnimationFrame(frame);
 	}, [editingTitle?.nodeId]);
-
-	useEffect(() => {
-		if (!contextMenu) return;
-		const close = () => setContextMenu(null);
-		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") close();
-		};
-		window.addEventListener("pointerdown", close);
-		window.addEventListener("blur", close);
-		window.addEventListener("keydown", closeOnEscape);
-		return () => {
-			window.removeEventListener("pointerdown", close);
-			window.removeEventListener("blur", close);
-			window.removeEventListener("keydown", closeOnEscape);
-		};
-	}, [contextMenu]);
-
-	const openStatusMenu = (
-		event: React.MouseEvent,
-		nodeId: string,
-		status?: SessionProgressStatus,
-	) => {
-		event.preventDefault();
-		const menuWidth = 224;
-		const menuHeight = 252;
-		setContextMenu({
-			x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
-			y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
-			nodeId,
-			status,
-		});
-	};
 
 	const getChildren = (parentId: string) =>
 		sessions.filter((s) => s.parentId === parentId);
@@ -239,7 +196,7 @@ const SessionGroup = ({
 	});
 
 	const startRename = (nodeId: string, title: string) => {
-		setContextMenu(null);
+		closeMenu();
 		setEditingTitle({ nodeId, value: title });
 	};
 
@@ -309,7 +266,7 @@ const SessionGroup = ({
 						className="session-tree-select"
 						aria-current={isCurrent ? "page" : undefined}
 						onClick={() => onSelect(node.id)}
-						onContextMenu={(event) => openStatusMenu(event, node.id, node.progressStatus)}
+						onContextMenu={(event) => openStatusMenu(event, node.id)}
 					>
 						{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
 						<ProgressMarker status={node.progressStatus} active={isCurrent} />
@@ -339,52 +296,8 @@ const SessionGroup = ({
 
 	return <>
 		<div className="mb-3">{renderNode(root)}</div>
-		{contextMenu && (
-			<div
-				role="menu"
-				aria-label="Set node status"
-				className="session-status-menu"
-				style={{ left: contextMenu.x, top: contextMenu.y }}
-				onPointerDown={(event) => event.stopPropagation()}
-			>
-				<div className="session-status-menu-title">Node status</div>
-				{progressOptions.map((option) => {
-					const Icon = option.icon;
-					const selected = contextMenu.status === option.value;
-					return (
-						<button
-							key={option.value ?? "unmarked"}
-							type="button"
-							role="menuitemradio"
-							aria-checked={selected}
-							className={clsx("session-status-option", option.value && `status-${option.value}`)}
-							onClick={() => {
-								onSetProgress(contextMenu.nodeId, option.value);
-								setContextMenu(null);
-							}}
-						>
-							<Icon size={16} className="session-status-option-icon" />
-							<span className="min-w-0 flex-1">
-								<span className="block font-semibold text-primary">{option.label}</span>
-								<span className="block truncate text-[11px] text-secondary">{option.description}</span>
-							</span>
-							{selected && <Check size={14} className="text-accent" />}
-						</button>
-					);
-				})}
-			</div>
-		)}
+		{contextMenu && <SessionContextMenu anchor={contextMenu} status={sessions.find((session) => session.id === contextMenu.nodeId)?.progressStatus} onSelect={(status) => onSetProgress(contextMenu.nodeId, status)} onClose={closeMenu} />}
 	</>;
-};
-
-const ProgressMarker = ({ status, active }: { status?: SessionProgressStatus; active: boolean }) => {
-	const option = progressOptions.find((item) => item.value === status) ?? progressOptions[0];
-	const Icon = option.icon;
-	return (
-		<span title={option.label} aria-label={`Node status: ${option.label}`} className={clsx("session-progress-marker", status && `status-${status}`, active && "is-active")}>
-			<Icon size={status ? 12 : 7} strokeWidth={status ? 2.25 : 3} />
-		</span>
-	);
 };
 
 const SessionNodeTitle = ({ title }: { title: string }) => {

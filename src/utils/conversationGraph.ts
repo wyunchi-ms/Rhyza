@@ -26,6 +26,7 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 	const rounds = new Map<string, ConversationRound>();
 	const paths = new Map<string, string[]>();
 	const targets = new Map<string, Map<string, string>>();
+	const roundByTurnId = new Map<string, string>();
 	const grouped = new Map<string, Turn[]>();
 	for (const turn of turns) {
 		const group = grouped.get(turn.sessionId) ?? [];
@@ -56,6 +57,7 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 				hasLocalRound = true;
 				if (turn.role === "assistant" && current) current.answers.push(turn);
 			}
+			if (current) roundByTurnId.set(turn.id, current.id);
 		}
 		if (!hasLocalRound) {
 			const id = `empty:${session.id}`;
@@ -65,12 +67,12 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 		paths.set(session.id, path);
 		targets.set(session.id, target);
 	}
-	return { rounds: [...rounds.values()], paths, targets };
+	return { rounds: [...rounds.values()], paths, targets, roundByTurnId };
 }
 
 /** Older forks copied history without sourceTurnId. Match only the verified
  * parent prefix through its fork anchor, never equal text in unrelated chats. */
-function resolveGraphHistory(sessions: SessionNode[], turns: Turn[]): Turn[] {
+export function resolveGraphHistory(sessions: SessionNode[], turns: Turn[]): Turn[] {
 	const grouped = new Map<string, Turn[]>();
 	const bySession = new Map(sessions.map((session) => [session.id, session]));
 	const aliases = new Map<string, string>();

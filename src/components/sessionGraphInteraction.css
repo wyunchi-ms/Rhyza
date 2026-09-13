@@ -1,0 +1,21 @@
+/* Keep both hit areas within the fixed graph layout, including during hot updates. */
+.session-graph-node > .session-graph-node-main {
+	height: calc(100% - 40px);
+	padding-bottom: 0;
+}
+.session-graph-node > .session-graph-node-main > header { padding-right: 0; }
+.session-graph-node > .graph-runtime-compact {
+	display: flex;
+	width: 100%;
+	height: 40px;
+	margin: 0;
+	padding: 0 0.86rem;
+	text-align: left;
+	border-radius: 0 0 11px 11px;
+	cursor: help;
+}
+.session-graph-node > .graph-runtime-compact:hover,
+.session-graph-node > .graph-runtime-compact:focus-visible,
+.session-graph-node > .graph-runtime-compact[aria-expanded="true"] { background: rgb(139 92 246 / 8%); }
+.session-graph-node > .graph-runtime-compact:focus-visible { outline: 2px solid #a78bfa; outline-offset: -2px; }
+.session-graph-page .session-graph-node.is-active::after { content: none; display: none; }

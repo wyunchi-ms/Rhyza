@@ -48,7 +48,7 @@ export const ChatPane: React.FC = () => {
 	const isSending = pendingRequests > 0;
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
 	const { registerStreamingTurn, unregisterStreamingTurn } = useAgentEventStream();
-	const { scrollContainerRef, keyboardTurnId, setKeyboardTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn } = useConversationNavigation(store.turns, activeSessionId);
+	const { scrollContainerRef, focusedTurnId, setFocusedTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn } = useConversationNavigation(store.turns, activeSessionId, store.sessions);
 	const { openEntityById: openEntityPreview, openDiagramById: openDiagramPreview } = useKnowledgePreviewActions();
 	useLayoutEffect(() => {
 		recordPerformanceTiming("chat-render-commit", performance.now() - renderStartedAt);
@@ -355,11 +355,11 @@ export const ChatPane: React.FC = () => {
 				<button type="button" className={clsx("topbar-button", store.rightPaneOpen && store.rightPaneView === "todo" && "is-active")} onClick={store.toggleRightPane} title="Show workspace TODOs" aria-label="Show workspace TODOs"><ListChecks size={17} /></button>
 			</header>
 			{isSwitchingBranch && <div className="branch-switch-loading" role="status" aria-live="polite"><LoaderCircle size={22} aria-hidden="true" /><div><strong>Opening branch…</strong><span>Preparing the latest conversation</span></div></div>}
-			<div ref={scrollContainerRef} className="chat-scroll" tabIndex={0} role="region" aria-label="Conversation. Use up and down arrow keys to move between turns." onFocus={() => setKeyboardTurnId((current) => current ?? sessionTurns[sessionTurns.length - 1]?.id ?? null)} onPointerDown={(event) => {
+			<div ref={scrollContainerRef} className="chat-scroll" tabIndex={0} role="region" aria-label="Conversation. Use up and down arrow keys to move between turns." onPointerDown={(event) => {
 				const target = event.target as Element | null;
 				if (target?.closest("button, a, input, textarea, select, [contenteditable='true']")) return;
 				const turnId = target?.closest<HTMLElement>("[data-turn-id]")?.dataset.turnId;
-				setKeyboardTurnId(turnId ?? sessionTurns[sessionTurns.length - 1]?.id ?? null);
+				if (turnId) setFocusedTurnId(turnId);
 				event.currentTarget.focus({ preventScroll: true });
 			}} onKeyDown={(event) => {
 				if (event.target !== event.currentTarget || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
@@ -371,7 +371,7 @@ export const ChatPane: React.FC = () => {
 						key={turn.id}
 						turn={turn}
 						sessionNodeId={turnSessionMap.get(turn.id) ?? turn.sessionId}
-						isKeyboardActive={turn.id === keyboardTurnId}
+						isFocused={turn.id === focusedTurnId}
 						entities={store.entities}
 						relations={store.relations}
 						diagrams={store.diagrams}

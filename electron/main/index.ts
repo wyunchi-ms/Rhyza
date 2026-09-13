@@ -382,7 +382,7 @@ app.whenReady().then(async () => {
 		}, smokeTimeoutMs).unref();
 	}
 	settingsStore = new SettingsStore(dataRootPath, legacyUserDataPath);
-	appStateStore = new AppStateStore(dataRootPath);
+	appStateStore = new AppStateStore(dataRootPath, path.join(getAgentDir(), "knowbranch-sessions"));
 	await appStateStore.migrateLegacyState(
 		await settingsStore.getWorkspacePath(),
 		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),

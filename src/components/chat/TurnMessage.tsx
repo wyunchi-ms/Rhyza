@@ -1,5 +1,6 @@
+import { cacheHitDescription, formatCacheHitRate, resolveTurnUsage, usageMetrics } from "../../utils/usageMetrics";
 import clsx from "clsx";
-import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, Info, LoaderCircle, Sparkles, X } from "lucide-react";
+import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronUp, Copy, GitFork, Info, LoaderCircle, Quote, Sparkles, X } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { createPortal } from "react-dom";
@@ -14,7 +15,7 @@ import { ArchifyDiagram } from "../ArchifyDiagram";
 import { isArchifyCodeBlock } from "../../shared/archify";
 import { isTurnActive } from "../../utils/sessionRuntime";
 
-export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, onOpenContextMenu, isKeyboardActive }: {
+export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams, onFork, canFork, onEntityClick, onDiagramClick, onTextSelection, onOpenContextMenu, isFocused }: {
 	turn: Turn;
 	sessionNodeId: string;
 	entities: Entity[];
@@ -26,7 +27,7 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 	onDiagramClick: (id: string) => void;
 	onTextSelection: (text: string, rect: DOMRect) => void;
 	onOpenContextMenu: (position: { x: number; y: number }) => void;
-	isKeyboardActive: boolean;
+	isFocused: boolean;
 }) {
 	const isUser = turn.role === "user";
 	const [collapsed, setCollapsed] = useState(false);
@@ -38,18 +39,13 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 		return () => window.removeEventListener("keydown", close);
 	}, [detailsOpen]);
 	return (
-		<article id={`turn-${turn.id}`} data-turn-id={turn.id} data-session-node-id={sessionNodeId} className={clsx("chat-turn group", isUser && "is-user", isKeyboardActive && "is-keyboard-active")} onContextMenu={(event) => { event.preventDefault(); onOpenContextMenu({ x: event.clientX, y: event.clientY }); }}>
+		<article id={`turn-${turn.id}`} data-turn-id={turn.id} data-session-node-id={sessionNodeId} aria-current={isFocused ? "true" : undefined} className={clsx("chat-turn group", isUser && "is-user", isFocused && "is-focused")} onContextMenu={(event) => { event.preventDefault(); onOpenContextMenu({ x: event.clientX, y: event.clientY }); }}>
 			{!isUser && <div className="assistant-mark"><Sparkles size={14} /></div>}
 			<div className={clsx("turn-content", isUser ? "items-end" : "w-full")}>
 				<div className={clsx("turn-body", isUser ? "user-bubble" : "assistant-body")}>
-					{!isUser && <button type="button" title={collapsed ? "Expand response" : "Collapse response"} aria-label={collapsed ? "Expand response" : "Collapse response"} onClick={() => setCollapsed((value) => !value)} className="response-collapse"><ChevronUp size={15} className={clsx("transition-transform", collapsed && "rotate-180")} /></button>}
-					{collapsed && !isUser ? <p className="truncate text-sm font-medium text-secondary">{turn.summary || "Assistant response"}</p> : <>
-						<TurnStatus status={turn.status} />
-						{!isUser && <TurnWorkDetails turn={turn} />}
-						{isUser && turn.quote && <blockquote className="user-message-quote">{turn.quote.text}</blockquote>}
-						{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
-						{turn.content && <div data-turn-search-content><LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={isUser ? undefined : onTextSelection} /></div>}
-					</>}
+					{!isUser && <button type="button" title={collapsed ? "Expand response" : "Collapse response"} aria-label={collapsed ? "Expand response" : "Collapse response"} onClick={() => setCollapsed((value) => !value)} className="response-collapse" aria-expanded={!collapsed} style={{ opacity: 1 }}><ChevronUp size={15} className={clsx("transition-transform", collapsed && "rotate-180")} /></button>}
+					{collapsed && !isUser ? <p className="truncate text-sm font-medium text-secondary">{turn.summary || "Assistant response"}</p> :
+						<TurnBubbleContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />}
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
 					{!isUser && canFork && <button type="button" title="Continue from here" aria-label="Continue from here" onClick={onFork}><GitFork size={14} /></button>}
@@ -61,6 +57,26 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
 		</article>
 	);
+}
+
+/** Shared by the transcript and node hover previews; no transcript identity or actions. */
+export function TurnBubbleContent({ turn, entities, relations, diagrams, onEntityClick, onDiagramClick, onTextSelection }: {
+	turn: Turn;
+	entities: Entity[];
+	relations: Relation[];
+	diagrams: Diagram[];
+	onEntityClick: (id: string) => void;
+	onDiagramClick: (id: string) => void;
+	onTextSelection?: (text: string, rect: DOMRect) => void;
+}) {
+	const isUser = turn.role === "user";
+	return <>
+		<TurnStatus status={turn.status} />
+		{!isUser && <TurnWorkDetails turn={turn} />}
+		{isUser && turn.quote && <blockquote className="user-message-quote" aria-label="Quoted passage"><span className="user-message-quote-label"><Quote size={13} aria-hidden="true" />Quoted passage</span><span className="user-message-quote-text">{turn.quote.text}</span></blockquote>}
+		{isUser && turn.images?.length ? <UserImageAttachments images={turn.images} /> : null}
+		{turn.content && <div data-turn-search-content><LinkifiedContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={isUser ? undefined : onTextSelection} /></div>}
+	</>;
 }
 
 function TurnWorkDetails({ turn }: { turn: Turn }) {
@@ -99,10 +115,8 @@ function UserImageAttachments({ images }: { images: NonNullable<Turn["images"]> 
 }
 
 function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {
-	const inherited = !turn.usage && Boolean(turn.inheritedUsage);
-	const usage = turn.usage ?? turn.inheritedUsage;
-	const cacheableInput = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
-	const cacheHitRate = cacheableInput > 0 ? (usage!.cacheRead / cacheableInput) * 100 : undefined;
+	const { usage, inherited, partial } = resolveTurnUsage(turn);
+	const { cacheHitRate } = usageMetrics(usage);
 	const elapsedMs = Math.max(0, new Date(turn.completedAt ?? new Date().toISOString()).getTime() - new Date(turn.createdAt).getTime());
 	const tools = Object.values((turn.tools ?? []).reduce<Record<string, { name: string; count: number; errors: number; durationMs: number }>>((groups, tool) => {
 		const group = groups[tool.name] ?? { name: tool.name, count: 0, errors: 0, durationMs: 0 };
@@ -116,13 +130,13 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 	return (
 		<div className="turn-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
 			<section className="turn-detail-dialog" role="dialog" aria-modal="true" aria-labelledby={`turn-detail-title-${turn.id}`}>
-				<header><div><h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2><p>{inherited ? "Inherited shared history · excluded from this branch total" : usage ? "Usage for this assistant turn only" : "Usage was not recorded for this turn"}</p></div><button type="button" onClick={onClose} title="Close" aria-label="Close turn details"><X size={17} /></button></header>
+				<header><div><h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2><p>{inherited ? "Inherited shared history · excluded from this branch total" : partial && usage ? "Partial recorded usage for this assistant turn" : usage ? "Usage for this assistant turn only" : "Usage was not recorded for this turn"}</p></div><button type="button" onClick={onClose} title="Close" aria-label="Close turn details"><X size={17} /></button></header>
 				<div className="turn-detail-summary">
 					<DetailMetric label="Tokens" value={usage ? usageTokens(usage).toLocaleString() : "Not recorded"} />
 					<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
 					<DetailMetric label="Cost" value={usage ? (usage.cost < 0.0001 && usage.cost > 0 ? "<$0.0001" : `$${usage.cost.toFixed(4)}`) : "Not recorded"} />
 				</div>
-				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage?.input} /><DetailRow label="Output" value={usage?.output} /><DetailRow label="Cache read" value={usage?.cacheRead} /><DetailRow label="Cache write" value={usage?.cacheWrite} /><DetailRow label="Cache hit rate" value={cacheHitRate === undefined ? undefined : `${cacheHitRate.toFixed(1)}%`} title={cacheHitRate === undefined ? undefined : `Cache read ${usage!.cacheRead.toLocaleString()} ÷ cacheable input ${cacheableInput.toLocaleString()}`} /></dl></div>
+				<div className="turn-detail-section"><h3>Token breakdown</h3><dl className="turn-detail-grid"><DetailRow label="Input" value={usage?.input} /><DetailRow label="Output" value={usage?.output} /><DetailRow label="Cache read" value={usage?.cacheRead} /><DetailRow label="Cache write" value={usage?.cacheWrite} /><DetailRow label="Cache hit rate" value={cacheHitRate === undefined ? undefined : formatCacheHitRate(cacheHitRate)} title={cacheHitRate === undefined ? undefined : cacheHitDescription} /></dl></div>
 				<div className="turn-detail-section"><h3>Tool calls <span>{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}</span></h3>{tools.length ? <div className="turn-tool-list">{tools.map((tool) => <div key={tool.name}><strong>{tool.name}</strong><span>{tool.count} call{tool.count === 1 ? "" : "s"}{tool.errors ? ` · ${tool.errors} failed` : ""} · {formatDuration(tool.durationMs)}</span></div>)}</div> : <p className="turn-detail-empty">No tools were called.</p>}</div>
 			</section>
 		</div>

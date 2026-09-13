@@ -1,19 +1,27 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useAppStore } from "../store";
-import type { Turn } from "../types";
-import { buildTurnSessionMap, sessionAtViewportAnchor } from "../utils/sessionVisibility";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useConversationFocus } from "../store/conversationFocus";
+import type { SessionNode, Turn } from "../types";
+import { buildTurnSessionMap, turnAtViewportRegion } from "../utils/sessionVisibility";
 import { announceBranchSwitchEnd } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 /** Coordinates the conversation viewport, keyboard cursor, and tree viewport marker. */
-export function useConversationNavigation(turns: Turn[], activeSessionId: string | null) {
+export function useConversationNavigation(turns: Turn[], activeSessionId: string | null, sessions: SessionNode[]) {
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-	const [keyboardTurnId, setKeyboardTurnId] = useState<string | null>(null);
+	const focus = useConversationFocus();
+	const focusedTurnId = focus.sessionId === activeSessionId ? focus.turnId : null;
+	const setFocusedTurnId = useCallback((id: string | null) => {
+		useConversationFocus.getState().setFocus(activeSessionId, id);
+	}, [activeSessionId]);
+	const getFocusedTurnId = useCallback(() => {
+		const current = useConversationFocus.getState();
+		return current.sessionId === activeSessionId ? current.turnId : null;
+	}, [activeSessionId]);
 	const sessionTurns = useMemo(() => turns.filter((turn) => turn.sessionId === activeSessionId), [turns, activeSessionId]);
-	const turnSessionMap = useMemo(() => buildTurnSessionMap(turns), [turns]);
+	const turnSessionMap = useMemo(() => buildTurnSessionMap(turns, sessions), [turns, sessions]);
+	const turnIds = JSON.stringify(sessionTurns.map((turn) => turn.id));
 
-	useEffect(() => { useAppStore.getState().setVisibleSession(activeSessionId); }, [activeSessionId]);
-	useEffect(() => trackVisibleSession(scrollContainerRef.current), [activeSessionId, sessionTurns.length, turnSessionMap]);
+	useEffect(() => trackVisibleTurn(scrollContainerRef.current, setFocusedTurnId, getFocusedTurnId), [setFocusedTurnId, getFocusedTurnId, turnIds]);
 	// Position a newly selected branch before the browser paints it. Waiting for an
 	// effect/frame exposes the first turn and lets the container's smooth-scroll CSS
 	// animate through the entire transcript.
@@ -29,48 +37,59 @@ export function useConversationNavigation(turns: Turn[], activeSessionId: string
 			const turn = document.getElementById(`turn-${turnId}`);
 			if (!turn) return;
 			turn.scrollIntoView({ behavior: "smooth", block: "center" });
-			setKeyboardTurnId(turnId);
+			setFocusedTurnId(turnId);
 			window.sessionStorage.removeItem("rhyza-focus-turn");
 		};
 		window.addEventListener("rhyza:focus-turn", focusTurn);
 		return () => window.removeEventListener("rhyza:focus-turn", focusTurn);
-	}, []);
+	}, [setFocusedTurnId]);
 
 	const moveKeyboardTurn = useCallback((direction: -1 | 1) => {
 		if (sessionTurns.length === 0) return;
-		const currentIndex = keyboardTurnId
-			? sessionTurns.findIndex((turn) => turn.id === keyboardTurnId)
+		const currentIndex = focusedTurnId
+			? sessionTurns.findIndex((turn) => turn.id === focusedTurnId)
 			: direction < 0 ? sessionTurns.length : -1;
 		const nextTurn = sessionTurns[Math.max(0, Math.min(sessionTurns.length - 1, currentIndex + direction))];
 		if (!nextTurn) return;
-		setKeyboardTurnId(nextTurn.id);
+		setFocusedTurnId(nextTurn.id);
 		document.getElementById(`turn-${nextTurn.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-	}, [keyboardTurnId, sessionTurns]);
+	}, [focusedTurnId, sessionTurns, setFocusedTurnId]);
 
-	return { scrollContainerRef, keyboardTurnId, setKeyboardTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn };
+	return { scrollContainerRef, focusedTurnId, setFocusedTurnId, sessionTurns, turnSessionMap, moveKeyboardTurn };
 }
 
-function trackVisibleSession(container: HTMLDivElement | null): () => void {
+export function trackVisibleTurn(container: HTMLDivElement | null, onFocus: (id: string | null) => void, getFocusedTurnId: () => string | null): () => void {
 	if (!container) return () => undefined;
 	let frame = 0;
+	let lastScrollTop = container.scrollTop;
+	let direction: -1 | 0 | 1 = 0;
 	const update = () => {
 		frame = 0;
+		const delta = container.scrollTop - lastScrollTop;
+		if (Math.abs(delta) >= 1) {
+			direction = delta > 0 ? 1 : -1;
+			lastScrollTop = container.scrollTop;
+		}
 		const viewport = container.getBoundingClientRect();
-		const boxes = [...container.querySelectorAll<HTMLElement>("[data-session-node-id]")]
+		const boxes = [...container.querySelectorAll<HTMLElement>("[data-turn-id]")]
 			.map((element) => {
-				const bounds = element.getBoundingClientRect();
-				return { sessionId: element.dataset.sessionNodeId ?? "", top: bounds.top, bottom: bounds.bottom };
+				const bounds = (element.querySelector(".turn-body") ?? element).getBoundingClientRect();
+				return { turnId: element.dataset.turnId ?? "", role: element.classList.contains("is-user") ? "user" as const : "assistant" as const, top: bounds.top, bottom: bounds.bottom };
 			})
-			.filter((item) => item.sessionId);
-		const sessionId = sessionAtViewportAnchor(boxes, viewport.top, viewport.bottom);
-		if (sessionId && useAppStore.getState().visibleSessionId !== sessionId) useAppStore.getState().setVisibleSession(sessionId);
+			.filter((item) => item.turnId);
+		onFocus(turnAtViewportRegion(boxes, viewport.top, viewport.bottom, getFocusedTurnId(), direction)?.turnId ?? null);
 	};
 	const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
 	container.addEventListener("scroll", schedule, { passive: true });
-	const initialFrame = window.requestAnimationFrame(update);
+	window.addEventListener("resize", schedule);
+	const observer = new ResizeObserver(schedule);
+	observer.observe(container);
+	for (const element of container.querySelectorAll<HTMLElement>("[data-turn-id], .turn-body")) observer.observe(element);
+	schedule();
 	return () => {
 		container.removeEventListener("scroll", schedule);
-		window.cancelAnimationFrame(initialFrame);
+		window.removeEventListener("resize", schedule);
+		observer.disconnect();
 		if (frame) window.cancelAnimationFrame(frame);
 	};
 }

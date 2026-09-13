@@ -1,3 +1,4 @@
+import { inputTokens } from "./usageMetrics";
 import type { AgentModelRequestSnapshot, AgentUsage } from "../shared/ipc";
 
 export type ContextBlockKind = "conversation" | "tool_io";
@@ -105,7 +106,7 @@ export function analyzeContextComposition(request: AgentModelRequestSnapshot): C
 
 /** Input resident in the provider request. Output belongs to the response, not the context window. */
 export function residentInputTokens(usage: AgentUsage | undefined): number | undefined {
-	return usage ? usage.input + usage.cacheRead + usage.cacheWrite : undefined;
+	return usage ? inputTokens(usage) : undefined;
 }
 
 function normalizeMessage(value: unknown): { role: string; text: string; hasToolCall: boolean } {

@@ -3,7 +3,7 @@ import type { SessionNode } from "../types";
 
 export type SessionGraphOrientation = "horizontal" | "vertical";
 
-export const sessionGraphNodeSize = { width: 248, height: 126 } as const;
+export const sessionGraphNodeSize = { width: 280, height: 136 } as const;
 
 export interface PositionedSessionNode {
 	id: string;

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isRecord } from "../../src/shared/value.js";
+import { restoreLegacyTurnQuotes } from "./legacy-turn-quotes.js";
 
 const maxStateBytes = 50 * 1024 * 1024;
 
@@ -28,7 +29,7 @@ export class AppStateStore {
 	}>();
 	private draining = false;
 
-	constructor(private readonly dataRoot: string) {
+	constructor(private readonly dataRoot: string, private readonly legacySessionDirectory?: string) {
 		this.indexPath = path.join(dataRoot, "workspaces.json");
 		this.workspaceDirectory = path.join(dataRoot, "workspaces");
 	}
@@ -41,7 +42,8 @@ export class AppStateStore {
 		if (!entry) return null;
 		try {
 			const statePath = path.join(this.dataRoot, entry.stateFile);
-			const current = readFileSync(statePath, "utf8");
+			const raw = readFileSync(statePath, "utf8");
+			const current = this.legacySessionDirectory ? restoreLegacyTurnQuotes(raw, this.legacySessionDirectory) : raw;
 			try {
 				return restoreLegacySessionUsage(current, readFileSync(`${statePath}.backup`, "utf8"));
 			} catch (error) {

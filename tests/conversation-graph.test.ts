@@ -24,6 +24,9 @@ test("legacy copies and nested modern forks share one root regardless of session
 	assert.equal(graph.rounds.find((round) => round.id === "nu")?.parentId, "u1");
 	assert.equal(graph.rounds.find((round) => round.id === "u1")?.answers.length, 1);
 	assert.equal(graph.targets.get("nested")?.get("u1"), "nested-copy-u1");
+	assert.equal(graph.roundByTurnId.get("nested-copy-u1"), "u1");
+	assert.equal(graph.roundByTurnId.get("nested-copy-a1"), "u1");
+	assert.equal(graph.roundByTurnId.get("copy-a2"), "u2");
 	assert.equal(JSON.stringify(turns), original);
 });
 
@@ -42,6 +45,7 @@ test("four questions and four answers produce four connected rounds", () => {
 	assert.deepEqual(graph.paths.get("root"), ["u1", "u2", "u3", "u4"]);
 	assert.deepEqual(graph.rounds.map((round) => round.parentId), [null, "u1", "u2", "u3"]);
 	assert.deepEqual(graph.rounds.map((round) => round.answers.map((answer) => answer.id)), [["a1"], ["a2"], ["a3"], ["a4"]]);
+	assert.deepEqual(history().map((turn) => graph.roundByTurnId.get(turn.id)), ["u1", "u1", "u2", "u2", "u3", "u3", "u4", "u4"]);
 });
 
 test("a fork shares historical nodes and attaches the new question to the fork round", () => {

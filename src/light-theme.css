@@ -1,0 +1,67 @@
+/* Shared light-mode palette. Brand tokens fall back to legacy colors in dark mode. */
+html:not([data-theme="dark"]) {
+	--color-primary: #202540;
+	--color-secondary: #626b87;
+	--color-accent: #6366f1;
+	--color-bg: #f7f8ff;
+	--color-text: #202540;
+	--color-surface: #ffffff;
+	--ui-brand-accent: #6366f1;
+	--ui-brand-ink: #5145a6;
+	--ui-brand-border: #a5b4fc;
+	--ui-brand-soft-strong: #e0e7ff;
+	--ui-brand-soft: #eef2ff;
+	--ui-brand-wash: #f8f9ff;
+	--ui-brand-rgb: 99 102 241;
+	--ui-border: #dce1f3;
+	--ui-hover: #eef0ff;
+	--ui-selected: linear-gradient(110deg, #eaf2ff, #eee9ff);
+	--ui-action: linear-gradient(120deg, #4f63df, #7854d6);
+	color-scheme: light;
+}
+
+html:not([data-theme="dark"]) {
+	.app-shell, .page-shell, .page-scroll, .knowledge-page { background: var(--color-bg); color: var(--color-text); }
+	.app-sidebar { background: linear-gradient(175deg, #f0f4ff, #f6f2ff); border-color: var(--ui-border); }
+	.app-sidebar-footer, .knowledge-pane, .knowledge-browser { background: #f6f7ff; border-color: var(--ui-border); }
+	.chat-pane { background: linear-gradient(150deg, #fbfcff, #fff 55%, #faf8ff); }
+	.chat-topbar { border-bottom: 1px solid #edf0fb; background: rgb(255 255 255 / 86%); }
+	.composer-shell { background: transparent; }
+	.brand-mark, .command-button, .composer-send:not(:disabled) { background: var(--ui-action); color: #fff; box-shadow: 0 3px 10px rgb(99 102 241 / 18%); }
+	.command-button:hover, .composer-send:not(:disabled):hover { background: linear-gradient(120deg, #4052c9, #6842c5); }
+	.composer-send:disabled { background: #dbe0f1; color: #8991ae; }
+	.chat-composer { border-color: #cdd4ed; box-shadow: 0 4px 20px rgb(76 81 150 / 9%); }
+	.chat-composer:focus-within { border-color: #a5b4fc; box-shadow: 0 0 0 3px rgb(99 102 241 / 8%), 0 5px 20px rgb(76 81 150 / 9%); }
+	.user-bubble { background: var(--ui-selected); border-color: #bbc5f4; color: #303565; box-shadow: 0 3px 12px rgb(99 102 241 / 9%); }
+	.chat-turn.is-user:hover .user-bubble { border-color: #a5a5ec; box-shadow: 0 5px 16px rgb(99 102 241 / 14%); }
+	.chat-turn.is-focused .turn-body::after { background: linear-gradient(#60a5fa, #8b5cf6); box-shadow: 0 0 0 3px rgb(129 140 248 / 12%); }
+	.user-message-quote { border-left-color: #818cf8; color: #586080; background: rgb(255 255 255 / 72%); }
+	.assistant-mark { border-color: #d8ddf4; color: #7373bd; background: #f5f5ff; }
+	.session-node-button.is-current, .workspace-shortcut.is-active, .app-nav-item.is-active { background: var(--ui-selected); color: #433b89; box-shadow: inset 0 0 0 1px #d0d6f4; }
+	.workspace-shortcut { border-color: var(--ui-border); color: #626b87; }
+	.workspace-shortcut svg { color: #8788b1; }
+	.workspace-shortcut.is-active svg { color: #6366f1; }
+	.sidebar-icon-button:hover, .topbar-button:hover, .response-collapse:hover, .app-nav-item:hover,
+	.secondary-button:hover, .icon-button:hover, .session-node-button:hover { background: var(--ui-hover); color: #5145a6; }
+	.secondary-button, .icon-switch { border-color: var(--ui-border); color: #626b87; background: #fff; }
+	.session-viewport-rail { background: linear-gradient(#60a5fa, #8b5cf6); }
+	.session-node-button.is-current .session-progress-marker:not(.status-complete) { color: #6366f1; }
+	.graph-content-preview, .global-search-dialog, .knowledge-preview-dialog, .turn-detail-dialog,
+	.composer-runtime-menu, .composer-mention-menu, .composer-context-popover,
+	.selection-ask-popover, .turn-context-menu, .session-status-menu, .icon-switch-tooltip,
+	.diagram-export-menu { border-color: var(--ui-border); box-shadow: 0 12px 36px rgb(49 46 129 / 14%); }
+	.knowledge-preview-header, .turn-detail-dialog > header, .composer-runtime-menu > header { border-color: var(--ui-border); background: #f8f9ff; }
+	.settings-page section > div { border-color: var(--ui-border) !important; background: #fff; }
+	.settings-page select { background: #f3f4fc !important; }
+	.page-title, .chat-topbar h1, .settings-page section h3 { color: var(--color-primary); }
+	.page-subtitle, .settings-page section > h2 { color: var(--color-secondary); }
+	input:not([type="checkbox"]):not([type="radio"]):focus-visible, select:focus-visible, textarea:focus-visible {
+		outline-color: #818cf8;
+	}
+	input[type="checkbox"], input[type="radio"] { accent-color: #6366f1; }
+	.bg-gray-50, .bg-slate-50 { background-color: #f6f7ff; }
+	.bg-gray-100, .bg-slate-100 { background-color: #eef0fa; }
+	.border-gray-200, .border-slate-200 { border-color: var(--ui-border); }
+	.text-teal-700 { color: var(--ui-brand-ink); }
+	::selection { background: #dce2ff; color: #25254f; }
+}

@@ -1,18 +1,14 @@
+import { useHoverRetention } from "../hooks/useHoverRetention";
 import clsx from "clsx";
 import {
 	ArrowDown,
 	ArrowRight,
-	CheckCircle2,
-	Circle,
-	CircleDot,
-	ExternalLink,
 	LocateFixed,
 	GitBranch,
-	LoaderCircle,
-	PauseCircle,
 	Plus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import ReactFlow, {
 	Background,
@@ -28,32 +24,40 @@ import ReactFlow, {
 	type ReactFlowInstance,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import "./sessionGraphInteraction.css";
 import { useAppStore } from "../store";
-import type { SessionProgressStatus } from "../types";
-import { formatTokens, usageTokens } from "../utils/branchUsage";
-import { layoutSessionGraph, sessionGraphNodeSize, type SessionGraphOrientation } from "../utils/sessionGraph";
+import { useConversationFocus } from "../store/conversationFocus";
+import type { SessionNode, SessionProgressStatus } from "../types";
+import { NodeInformation } from "./NodeInformation";
+import { SessionContextMenu, useSessionContextMenu } from "./SessionContextMenu";
+import { executionAppearance, roundMetrics } from "../utils/roundMetrics";
+import { ProgressMarker } from "./ProgressMarker";
+import { layoutSessionGraph, type SessionGraphOrientation } from "../utils/sessionGraph";
 import { isTurnActive } from "../utils/sessionRuntime";
 import { projectConversationGraph, type ConversationRound } from "../utils/conversationGraph";
 import { IconSwitch } from "./IconSwitch";
+import { graphMaxZoom, useGraphFocus } from "../hooks/useGraphFocus";
+import { TurnBubbleContent } from "./chat/TurnMessage";
+import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
+import { graphPreviewPosition } from "../utils/graphPreviewPosition";
+import { ConversationPathEdge } from "./ConversationPathEdge";
 
 const orientationStorageKey = "rhyza-session-graph-orientation";
 
 interface SessionGraphNodeData {
 	round: ConversationRound;
 	preview: string;
-	toolCount: number;
-	childCount: number;
+	progressStatus?: SessionProgressStatus;
 	isActive: boolean;
 	isRunning: boolean;
 	orientation: SessionGraphOrientation;
-	usageTokens?: number;
 	onSelect: (id: string) => void;
-	onOpen: (id: string) => void;
 }
 
 const nodeTypes = { session: SessionGraphNode };
+const edgeTypes = { conversation: ConversationPathEdge };
 
-export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
+export function SessionGraph({ viewControl, visible = true }: { viewControl?: ReactNode; visible?: boolean }) {
 	const sessions = useAppStore((state) => state.sessions);
 	const turns = useAppStore((state) => state.turns);
 	const activeSessionId = useAppStore((state) => state.activeSessionId);
@@ -63,10 +67,12 @@ export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
 	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
 	const [orientation, setOrientation] = useState<SessionGraphOrientation>(() => readOrientation());
 	const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
-	const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
+	const canvasRef = useRef<HTMLDivElement>(null);
+	const focus = useConversationFocus();
 	const projection = useMemo(() => projectConversationGraph(sessions, turns), [sessions, turns]);
 	const activePath = projection.paths.get(activeSessionId ?? "") ?? [];
-	const activeRoundId = selectedRoundId && activePath.includes(selectedRoundId) ? selectedRoundId : activePath[activePath.length - 1];
+	const focusedRoundId = focus.sessionId === activeSessionId && focus.turnId ? projection.roundByTurnId.get(focus.turnId) : undefined;
+	const activeRoundId = focusedRoundId ?? activePath[activePath.length - 1];
 	const topology = JSON.stringify(projection.rounds.map(({ id, parentId }) => ({ id, parentId })));
 	const positions = useMemo(() => new Map(layoutSessionGraph(JSON.parse(topology), orientation).map((node) => [node.id, node])), [topology, orientation]);
 	const [displayPositions, setDisplayPositions] = useState(positions);
@@ -99,7 +105,7 @@ export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
 		const turnId = projection.targets.get(sessionId)?.get(id);
 		if (turnId) window.sessionStorage.setItem("rhyza-focus-turn", turnId);
 		else window.sessionStorage.removeItem("rhyza-focus-turn");
-		setSelectedRoundId(id);
+		useConversationFocus.getState().setFocus(sessionId, turnId ?? null);
 		setActiveSession(sessionId);
 		navigate("/");
 		if (turnId) window.dispatchEvent(new CustomEvent("rhyza:focus-turn", { detail: { turnId } }));
@@ -107,33 +113,18 @@ export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
 
 	const graph = useMemo(() => buildGraph({
 		rounds: projection.rounds,
-		activePath,
+		sessions,
 		activeRoundId,
 		orientation,
 		positions: displayPositions,
 		onSelect: selectRound,
-	}), [activePath, activeRoundId, orientation, displayPositions, selectRound, projection.rounds]);
+	}), [activeRoundId, orientation, displayPositions, selectRound, projection.rounds, sessions]);
 
 	useEffect(() => {
 		window.localStorage.setItem(orientationStorageKey, orientation);
 	}, [orientation]);
-	// Fit once after the sidebar's opening transition. Subsequent resizing must
-	// preserve the user's viewport, including zoom and pan.
-	useEffect(() => {
-		if (!flow) return;
-		const timer = window.setTimeout(() => void flow.fitView({ padding: 0.18, duration: 0 }), 360);
-		return () => window.clearTimeout(timer);
-	}, [flow]);
-
-	const focusActive = () => {
-		const node = graph.nodes.find((item) => item.id === activeRoundId);
-		if (!node || !flow) return;
-		void flow.setCenter(
-			node.position.x + sessionGraphNodeSize.width / 2,
-			node.position.y + sessionGraphNodeSize.height / 2,
-			{ zoom: flow.getZoom(), duration: reduceMotion ? 0 : 280 },
-		);
-	};
+	const { focusActive, interrupt } = useGraphFocus(flow, canvasRef, visible, activeRoundId,
+		positions.get(activeRoundId ?? ""), reduceMotion);
 
 	const createSession = () => {
 		createRootSession();
@@ -154,26 +145,26 @@ export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
 					<button type="button" className="secondary-button" onClick={createSession} title="New chat" aria-label="New chat"><Plus size={16} /></button>
 				</div>
 			</header>
-			<div className="session-graph-canvas">
+			<div ref={canvasRef} className="session-graph-canvas" onPointerDownCapture={interrupt} onWheelCapture={interrupt}>
 				{sessions.length ? (
 					<ReactFlow
 						nodes={graph.nodes}
 						edges={graph.edges}
 						nodeTypes={nodeTypes}
+						edgeTypes={edgeTypes}
 						onInit={setFlow}
-						fitView
-						fitViewOptions={{ padding: 0.18 }}
+						onMoveStart={(event) => { if (event) interrupt(); }}
 						minZoom={0.2}
-						maxZoom={1.65}
+						maxZoom={graphMaxZoom}
 						nodesDraggable={false}
 						nodesConnectable={false}
 						elementsSelectable
 						proOptions={{ hideAttribution: true }}
 					>
-						<Background color="#cbd5e1" gap={22} size={1} />
-						<Controls showInteractive={false} />
+						<Background color="#a5b4fc" gap={22} size={1} />
+						<Controls showInteractive={false} onZoomIn={interrupt} onZoomOut={interrupt} onFitView={interrupt} />
 						{/* MiniMap uses numeric style dimensions for its SVG and viewport math. */}
-						<MiniMap style={{ width: 100, height: 70 }} pannable zoomable nodeColor={(node) => node.id === activeRoundId ? "#10a37f" : "#a8b4c5"} maskColor="rgb(248 250 252 / 76%)" />
+						<MiniMap style={{ width: 100, height: 70 }} pannable zoomable nodeColor={(node) => node.id === activeRoundId ? "#8b5cf6" : "#a5b4fc"} maskColor="rgb(238 242 255 / 76%)" />
 					</ReactFlow>
 				) : (
 					<div className="session-graph-empty"><GitBranch size={38} /><strong>No conversations yet</strong><span>Create a chat to start growing your graph.</span><button type="button" className="command-button" onClick={createSession}><Plus size={15} /> New chat</button></div>
@@ -186,38 +177,114 @@ export function SessionGraph({ viewControl }: { viewControl?: ReactNode }) {
 
 function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 	const updateNodeInternals = useUpdateNodeInternals();
+	const { menu, openMenu, closeMenu } = useSessionContextMenu();
+	const setProgress = useAppStore((state) => state.setSessionProgressStatus);
+	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
+	const [informationCloseSignal, setInformationCloseSignal] = useState(0);
+	const [now, setNow] = useState(Date.now);
+	useEffect(() => {
+		if (!data.isRunning) return;
+		setNow(Date.now());
+		const timer = window.setInterval(() => setNow(Date.now()), 1000);
+		return () => window.clearInterval(timer);
+	}, [data.isRunning]);
+	const metrics = roundMetrics(data.round, now);
+	const execution = executionAppearance(metrics.status);
+	const [previewRect, setPreviewRect] = useState<{ anchor: DOMRect; graph: DOMRect } | null>(null);
+	const previewGraph = useRef<Element | null>(null);
+	const previewSource = useRef<HTMLButtonElement>(null);
+	const previewPanel = useRef<HTMLDivElement>(null);
+	const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const hidePreview = useCallback(() => { clearTimeout(previewTimer.current); setPreviewRect(null); }, []);
+	const previewHover = useHoverRetention(Boolean(previewRect), previewSource, previewPanel, hidePreview);
+	const showPreview = (element: HTMLElement) => {
+		previewHover.retain();
+		if (menu) return;
+		clearTimeout(previewTimer.current);
+		previewTimer.current = setTimeout(() => {
+			setInformationCloseSignal((value) => value + 1);
+			const graph = element.closest(".session-graph-canvas");
+			previewGraph.current = graph;
+			if (graph) setPreviewRect({ anchor: element.getBoundingClientRect(), graph: graph.getBoundingClientRect() });
+		}, 220);
+	};
+	const leavePreview = () => {
+		clearTimeout(previewTimer.current);
+		previewHover.leave();
+	};
+	useEffect(() => {
+		const unsubscribe = useConversationFocus.subscribe(hidePreview);
+		return () => { unsubscribe(); clearTimeout(previewTimer.current); };
+	}, [hidePreview]);
+	useEffect(() => {
+		if (!previewRect) return;
+		const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") hidePreview(); };
+		window.addEventListener("keydown", closeOnEscape);
+		window.addEventListener("resize", hidePreview);
+		return () => { window.removeEventListener("keydown", closeOnEscape); window.removeEventListener("resize", hidePreview); };
+	}, [previewRect, hidePreview]);
+	useEffect(() => {
+		if (!previewRect) return;
+		// Ignore the observer's initial measurement; dismiss if sidebar resizing
+		// makes the saved placement stale.
+		let initial = true;
+		const resizeObserver = new ResizeObserver(() => { if (initial) initial = false; else hidePreview(); });
+		if (previewGraph.current) resizeObserver.observe(previewGraph.current);
+		return () => resizeObserver.disconnect();
+	}, [previewRect, hidePreview]);
 	useEffect(() => { updateNodeInternals(data.round.id); }, [data.orientation, data.round.id, updateNodeInternals]);
 	const sourcePosition = data.orientation === "horizontal" ? Position.Right : Position.Bottom;
 	const targetPosition = data.orientation === "horizontal" ? Position.Left : Position.Top;
-	const ProgressIcon = progressIcon(data.isRunning ? "in_progress" : data.round.answers.length ? "complete" : undefined);
 	return (
-		<div className={clsx("session-graph-node", data.isActive && "is-active", data.isRunning && "is-running")}>
+		<div className={clsx("session-graph-node", data.isActive && "is-active", `execution-${execution}`, reduceMotion && "reduce-motion")}
+			data-execution-status={metrics.status} onContextMenu={(event) => { hidePreview(); openMenu(event, data.round.sessionId); }}>
+			{execution === "running" && <svg className="graph-execution-ring" aria-hidden="true"><rect x="1" y="1" width="278" height="134" rx="11" pathLength="100" /></svg>}
 			<Handle type="target" position={targetPosition} isConnectable={false} />
-			<button type="button" className="session-graph-node-main" onClick={() => data.onSelect(data.round.id)} aria-current={data.isActive ? "page" : undefined}>
-				<header><span className="session-graph-status"><ProgressIcon size={13} /></span><strong title={data.round.user?.content || data.round.title}>{data.round.title}</strong>{data.isRunning && <LoaderCircle size={13} className="animate-spin" />}</header>
+			<button ref={previewSource} type="button" className="session-graph-node-main" onClick={() => data.onSelect(data.round.id)} aria-label={`${data.round.title}. Execution: ${metrics.status.replace(/_/g, " ")}`} aria-current={data.isActive ? "page" : undefined} aria-describedby={previewRect ? `round-preview-${data.round.id}` : undefined}
+				onMouseEnter={(event) => showPreview(event.currentTarget)} onMouseLeave={leavePreview} onFocus={(event) => showPreview(event.currentTarget)} onBlur={leavePreview} onPointerDown={hidePreview}>
+				<header><ProgressMarker status={data.progressStatus} active={false} /><strong>{data.round.title}</strong>{data.isActive && <LocateFixed size={13} className="graph-focus-indicator" aria-label="Selected node" />}</header>
 				<p>{data.preview || (data.round.user ? "Waiting for response" : "Start a new conversation")}</p>
-				<footer><span>{data.round.user ? "1 round" : "New branch"}</span>{data.toolCount > 0 && <span>{data.toolCount} tools</span>}{data.childCount > 1 && <span><GitBranch size={11} /> {data.childCount}</span>}{data.usageTokens !== undefined && <span>{formatTokens(data.usageTokens)} tokens</span>}</footer>
 			</button>
-			<button type="button" className="session-graph-open nodrag" onClick={() => data.onOpen(data.round.id)} title="Go to this round" aria-label={`Go to ${data.round.title}`}><ExternalLink size={13} /></button>
+			<NodeInformation metrics={metrics} nodeId={data.round.id} closeSignal={informationCloseSignal} disabled={Boolean(menu)} onOpen={hidePreview} />
+			{menu && <SessionContextMenu anchor={menu} status={data.progressStatus} onSelect={(status) => setProgress(menu.nodeId, status)} onClose={closeMenu} />}
 			<Handle type="source" position={sourcePosition} isConnectable={false} />
+			{previewRect && createPortal(<div ref={previewPanel} id={`round-preview-${data.round.id}`} role="tooltip" className="graph-content-preview"
+				style={graphPreviewPosition(previewRect.anchor, previewRect.graph, { width: window.innerWidth, height: window.innerHeight })}
+				onMouseEnter={previewHover.retain} onMouseLeave={leavePreview} onFocus={previewHover.retain} onBlur={leavePreview} onPointerDown={(event) => event.stopPropagation()}>
+				<header>Conversation preview</header>
+				<RoundPreviewContent round={data.round} />
+			</div>, document.body)}
 		</div>
 	);
 }
 
-function buildGraph({ rounds, activePath, activeRoundId, orientation, positions, onSelect }: {
+function RoundPreviewContent({ round }: { round: ConversationRound }) {
+	const entities = useAppStore((state) => state.entities);
+	const relations = useAppStore((state) => state.relations);
+	const diagrams = useAppStore((state) => state.diagrams);
+	const { openEntityById, openDiagramById } = useKnowledgePreviewActions();
+	const turns = round.user ? [round.user, ...round.answers] : round.answers;
+	return <>
+		{turns.map((turn) => <section key={turn.id}><strong>{turn.role === "user" ? "You" : "Agent"}</strong>
+			<div className={clsx("turn-body", turn.role === "user" ? "user-bubble" : "assistant-body")}>
+				<TurnBubbleContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={openEntityById} onDiagramClick={openDiagramById} />
+			</div>
+		</section>)}
+		{!round.answers.length && <section><p>{round.user ? "Waiting for response" : round.title}</p></section>}
+	</>;
+}
+
+function buildGraph({ rounds, sessions, activeRoundId, orientation, positions, onSelect }: {
 	rounds: ConversationRound[];
-	activePath: string[];
+	sessions: SessionNode[];
 	activeRoundId?: string;
 	orientation: SessionGraphOrientation;
 	positions: Map<string, { x: number; y: number }>;
 	onSelect: (id: string) => void;
 }): { nodes: Array<Node<SessionGraphNodeData>>; edges: Edge[] } {
-	const children = new Map<string, number>();
-	for (const round of rounds) if (round.parentId) children.set(round.parentId, (children.get(round.parentId) ?? 0) + 1);
-	const activeIds = new Set(activePath);
+	const bySession = new Map(sessions.map((session) => [session.id, session]));
 	const byId = new Map(rounds.map((round) => [round.id, round]));
 	const nodes = rounds.map((round): Node<SessionGraphNodeData> => {
-		const usage = round.answers.reduce((total, turn) => total + (turn.usage ? usageTokens(turn.usage) : 0), 0);
 		return {
 			id: round.id,
 			type: "session",
@@ -225,14 +292,11 @@ function buildGraph({ rounds, activePath, activeRoundId, orientation, positions,
 			data: {
 				round,
 				preview: clipPreview(round.answers.map((turn) => turn.content || turn.summary || "").join(" ")),
-				toolCount: round.answers.reduce((total, turn) => total + (turn.tools?.length ?? 0), 0),
-				childCount: children.get(round.id) ?? 0,
+				progressStatus: bySession.get(round.sessionId)?.progressStatus,
 				isActive: round.id === activeRoundId,
 				isRunning: round.answers.some(isTurnActive),
 				orientation,
-				usageTokens: usage || undefined,
 				onSelect,
-				onOpen: onSelect,
 			},
 		};
 	});
@@ -240,19 +304,11 @@ function buildGraph({ rounds, activePath, activeRoundId, orientation, positions,
 		id: `${round.parentId}:${round.id}`,
 		source: round.parentId,
 		target: round.id,
-		type: "smoothstep",
-		animated: round.answers.some(isTurnActive),
-		className: clsx(activeIds.has(round.parentId) && activeIds.has(round.id) && "is-active", round.answers.some(isTurnActive) && "is-running"),
-		markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+		type: "conversation",
+		className: clsx(round.answers.some(isTurnActive) && "is-running"),
+		markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#a5b4fc" },
 	}] : []);
 	return { nodes, edges };
-}
-
-function progressIcon(status?: SessionProgressStatus) {
-	if (status === "in_progress") return CircleDot;
-	if (status === "complete") return CheckCircle2;
-	if (status === "parked") return PauseCircle;
-	return Circle;
 }
 
 function clipPreview(value: string): string {

@@ -18,7 +18,12 @@ const Layout: React.FC = () => {
 	const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
 	const sidebarSize = usePanelSize("knowbranch-layout-sidebar-width", 260, 200, sidebarMax);
-	const [graphMode, setGraphMode] = useState(false);
+	const [graphMode, setGraphModeState] = useState(false);
+	const [graphVisited, setGraphVisited] = useState(false);
+	const setGraphMode = (enabled: boolean) => {
+		if (enabled) setGraphVisited(true);
+		setGraphModeState(enabled);
+	};
 	const graphMax = isCompactViewport ? Math.max(200, viewportWidth - 32) : Math.max(360, viewportWidth - 480);
 	const graphSize = usePanelSize("rhyza-layout-graph-width", Math.min(640, viewportWidth * 0.48), 360, graphMax);
 	const currentSize = graphMode ? graphSize : sidebarSize;
@@ -72,9 +77,13 @@ const Layout: React.FC = () => {
 					<NavLink to="/knowledge" className={({ isActive }) => clsx("workspace-shortcut", isActive && "is-active")} title="Browse workspace knowledge"><Library size={17} /><span>Knowledge</span></NavLink>
 					<NavLink to="/sources" className={({ isActive }) => clsx("workspace-shortcut", isActive && "is-active")} title="Manage workspace sources"><FolderOpen size={17} /><span>Sources</span></NavLink>
 				</nav>
-				<div className="sidebar-view-content" key={graphMode ? "graph" : "list"}>
-					{graphMode ? <SessionGraph viewControl={<IconSwitch checked onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} /> : <SessionTree embedded viewControl={<IconSwitch checked={false} onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} />}
+				{/* Retain each view's local state and DOM scroll position across switches. */}
+				<div className="sidebar-view-content" hidden={graphMode}>
+					<SessionTree embedded viewControl={<IconSwitch checked={false} onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} />
 				</div>
+				{graphVisited && <div className="sidebar-view-content" hidden={!graphMode}>
+					<SessionGraph visible={graphMode && sidebarVisible} viewControl={<IconSwitch checked onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} />
+				</div>}
 				<div className="app-sidebar-footer">
 					<NavItem to="/settings" icon={<Settings size={17} />} label="Settings" />
 					<NavLink to="/changes" className={({ isActive }) => clsx("sidebar-history-link", isActive && "is-active")} title="Changes · change history" aria-label="Changes"><History size={16} /></NavLink>

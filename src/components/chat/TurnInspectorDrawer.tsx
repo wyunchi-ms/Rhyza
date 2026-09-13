@@ -1,6 +1,7 @@
+import { formatCacheHitRate, usageMetrics, resolveTurnUsage } from "../../utils/usageMetrics";
 import { Activity, BarChart3, Braces, Check, ChevronDown, Copy, Layers3, RadioTower, TrendingUp, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AgentModelRequestSnapshot, AgentUsage } from "../../shared/ipc";
+import type { AgentModelRequestSnapshot } from "../../shared/ipc";
 import type { RightPaneView, Turn } from "../../types";
 import { usageTokens } from "../../utils/branchUsage";
 import { analyzeContextComposition, analyzeContextRot, residentInputTokens, type ContextRotAnalysis } from "../../utils/contextRot";
@@ -91,8 +92,8 @@ function ContextGrowthChart({ turns, selectedId, metric }: { turns: Turn[]; sele
 	const latest = points[points.length - 1];
 	const latestTurnRequests = turns[turns.length - 1]?.modelRequests;
 	const latestUsage = latestTurnRequests?.[latestTurnRequests.length - 1]?.usage;
-	const cacheHit = latestUsage && residentInputTokens(latestUsage) ? latestUsage.cacheRead / residentInputTokens(latestUsage)! * 100 : undefined;
-	return <><LineChart points={points.map((point) => ({ ...point, label: `Round ${point.round}, call ${point.call}: ${formatTokens(point.value)}${point.estimated ? " estimated" : ""}` }))} selectedId={selectedId} /><div className="growth-summary"><span><small>Latest</small><strong>{formatTokens(latest.value)}</strong></span><span><small>Peak</small><strong>{formatTokens(peak)}</strong></span><span><small>Latest cache hit</small><strong>{cacheHit === undefined ? "—" : `${cacheHit.toFixed(1)}%`}</strong></span></div><p className="metric-note">{metric === "context" ? "Context is resident provider input: input + cache read + cache write. Dashed line marks 50% of the model window." : "Cache churn is uncached input plus newly written cache tokens."}</p></>;
+	const cacheHit = usageMetrics(latestUsage).cacheHitRate;
+	return <><LineChart points={points.map((point) => ({ ...point, label: `Round ${point.round}, call ${point.call}: ${formatTokens(point.value)}${point.estimated ? " estimated" : ""}` }))} selectedId={selectedId} /><div className="growth-summary"><span><small>Latest</small><strong>{formatTokens(latest.value)}</strong></span><span><small>Peak</small><strong>{formatTokens(peak)}</strong></span><span><small>Latest cache hit</small><strong>{formatCacheHitRate(cacheHit)}</strong></span></div><p className="metric-note">{metric === "context" ? "Context is resident provider input: input + cache read + cache write. Dashed line marks 50% of the model window." : "Cache churn is uncached input plus newly written cache tokens."}</p></>;
 }
 
 function CompositionPanel({ request }: { request: AgentModelRequestSnapshot }) {
@@ -103,7 +104,7 @@ function CompositionPanel({ request }: { request: AgentModelRequestSnapshot }) {
 
 function UsageChart({ turns, selectedId, metric }: { turns: Turn[]; selectedId: string; metric: UsageMetric }) {
 	const points = useMemo(() => turns.map((turn, index) => {
-		const usage = requestUsage(turn) ?? turn.usage ?? turn.inheritedUsage;
+		const usage = resolveTurnUsage(turn).usage;
 		return { id: turn.id, turnId: turn.id, round: index + 1, value: usage ? metric === "tokens" ? usageTokens(usage) : usage.cost : 0, label: `Round ${index + 1}: ${formatMetric(usage ? metric === "tokens" ? usageTokens(usage) : usage.cost : 0, metric)}` };
 	}), [turns, metric]);
 	return <>{points.length ? <LineChart points={points} selectedId={selectedId} /> : <p className="inspector-empty">No assistant usage recorded.</p>}<div className="usage-turn-list">{points.map((point) => { const sourceTurn = turns[point.round - 1]; return <div key={point.id} className={point.turnId === selectedId ? "is-selected" : ""}><span>Round {point.round}</span><strong>{formatMetric(point.value, metric)}</strong><small>{requestLabel(sourceTurn)}</small></div>; })}</div></>;
@@ -120,12 +121,6 @@ function LineChart({ points, selectedId }: { points: Array<{ id: string; turnId:
 	const path = points.map((point, index) => `${index ? "L" : "M"}${x(index)},${y(point.value)}`).join(" ");
 	const threshold = maxWindow ? y(maxWindow * 0.5) : undefined;
 	return <div className="usage-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img"><line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} />{threshold !== undefined && <line className="context-threshold" x1={pad} y1={threshold} x2={width - pad} y2={threshold}><title>50% context window</title></line>}<path d={path} />{points.map((point, index) => <g key={point.id}><circle className={point.turnId === selectedId ? "is-selected" : ""} cx={x(index)} cy={y(point.value)} r={point.turnId === selectedId ? 5 : 3.5}><title>{point.label}</title></circle><text x={x(index)} y={height - 3} textAnchor="middle">{index + 1}</text></g>)}</svg></div>;
-}
-
-function requestUsage(turn: Turn): AgentUsage | undefined {
-	const recorded = turn.modelRequests?.flatMap((request) => request.usage ? [request.usage] : []) ?? [];
-	if (!recorded.length) return undefined;
-	return recorded.reduce((sum, usage) => ({ input: sum.input + usage.input, output: sum.output + usage.output, cacheRead: sum.cacheRead + usage.cacheRead, cacheWrite: sum.cacheWrite + usage.cacheWrite, cost: sum.cost + usage.cost }), { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
 }
 
 function requestLabel(turn: Turn): string {
