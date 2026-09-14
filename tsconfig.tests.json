@@ -12,6 +12,7 @@
     "src/types/**/*.ts",
     "src/shared/**/*.ts",
     "src/utils/agentTranscript.ts",
+		"src/utils/chatTimestamp.ts",
 		"src/utils/markdown.ts",
 		"src/utils/sessionFork.ts",
 		"src/utils/forkDebug.ts",

@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { getKnowbranchBridge } from "../../hooks/useKnowbranchBridge";
 import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types";
 import { usageTokens } from "../../utils/branchUsage";
+import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTimestamp";
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { normalizeMarkdownEmphasis } from "../../utils/markdown";
@@ -31,6 +32,8 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 	isFocused: boolean;
 }) {
 	const isUser = turn.role === "user";
+	const timestamp = formatChatTimestamp(turn.createdAt);
+	const fullTimestamp = formatFullChatTimestamp(turn.createdAt);
 	const [collapsed, setCollapsed] = useState(false);
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	useEffect(() => {
@@ -49,6 +52,7 @@ export function TurnMessage({ turn, sessionNodeId, entities, relations, diagrams
 						<TurnBubbleContent turn={turn} entities={entities} relations={relations} diagrams={diagrams} onEntityClick={onEntityClick} onDiagramClick={onDiagramClick} onTextSelection={onTextSelection} />}
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
+					{timestamp && <time className="turn-timestamp" dateTime={turn.createdAt} title={fullTimestamp}>{timestamp}</time>}
 					{!isUser && canFork && <button type="button" title="Continue from here" aria-label="Continue from here" onClick={onFork}><GitFork size={14} /></button>}
 					<button type="button" title="Copy" aria-label="Copy" onClick={() => void navigator.clipboard.writeText(turn.content)}><Copy size={14} /></button>
 					{turn.changeSetId && <span className="knowledge-updated">Knowledge updated</span>}

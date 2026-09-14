@@ -29,6 +29,7 @@ import { useAppStore } from "../store";
 import { useConversationFocus } from "../store/conversationFocus";
 import type { SessionNode, SessionProgressStatus } from "../types";
 import { NodeInformation } from "./NodeInformation";
+import { formatChatTimestamp, formatFullChatTimestamp } from "../utils/chatTimestamp";
 import { SessionNodeContextMenu, useSessionContextMenu } from "./SessionContextMenu";
 import { executionAppearance, roundMetrics } from "../utils/roundMetrics";
 import { ProgressMarker } from "./ProgressMarker";
@@ -189,6 +190,8 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 	}, [data.isRunning]);
 	const metrics = roundMetrics(data.round, now);
 	const execution = executionAppearance(metrics.status);
+	const roundCreatedAt = data.round.user?.createdAt ?? data.round.answers[0]?.createdAt;
+	const timestamp = roundCreatedAt ? formatChatTimestamp(roundCreatedAt) : "";
 	const [previewRect, setPreviewRect] = useState<{ anchor: DOMRect; graph: DOMRect } | null>(null);
 	const previewGraph = useRef<Element | null>(null);
 	const previewSource = useRef<HTMLButtonElement>(null);
@@ -241,7 +244,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 			<Handle type="target" position={targetPosition} isConnectable={false} />
 			<button ref={previewSource} type="button" className="session-graph-node-main" onClick={() => data.onSelect(data.round.id)} aria-label={`${data.round.title}. Execution: ${metrics.status.replace(/_/g, " ")}`} aria-current={data.isActive ? "page" : undefined} aria-describedby={previewRect ? `round-preview-${data.round.id}` : undefined}
 				onMouseEnter={(event) => showPreview(event.currentTarget)} onMouseLeave={leavePreview} onFocus={(event) => showPreview(event.currentTarget)} onBlur={leavePreview} onPointerDown={hidePreview}>
-				<header><ProgressMarker status={data.progressStatus} active={false} /><strong>{data.round.title}</strong>{data.isActive && <LocateFixed size={13} className="graph-focus-indicator" aria-label="Selected node" />}</header>
+				<header><ProgressMarker status={data.progressStatus} active={false} /><strong>{data.round.title}</strong>{roundCreatedAt && timestamp && <time className="session-graph-node-time" dateTime={roundCreatedAt} title={formatFullChatTimestamp(roundCreatedAt)}>{timestamp}</time>}{data.isActive && <LocateFixed size={13} className="graph-focus-indicator" aria-label="Selected node" />}</header>
 				<p>{data.preview || (data.round.user ? "Waiting for response" : "Start a new conversation")}</p>
 			</button>
 			<NodeInformation metrics={metrics} nodeId={data.round.id} closeSignal={informationCloseSignal} disabled={Boolean(menu)} onOpen={hidePreview} />
