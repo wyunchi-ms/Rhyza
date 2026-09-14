@@ -70,13 +70,15 @@ const Layout: React.FC = () => {
 				<div className="app-sidebar-brand">
 					<div className="brand-mark"><Sparkles size={15} /></div>
 					<span>Rhyza</span>
-					<button type="button" className="sidebar-icon-button ml-auto" onClick={() => setGlobalSearchOpen(true)} title="Search chats (Ctrl+Shift+F)" aria-label="Search all chats"><Search size={16} /></button>
+					<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
+						<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
+						<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />
+						<SidebarNavIcon to="/changes" icon={<History size={16} />} label="Changes" />
+						<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label="Settings" />
+					</nav>
+					<button type="button" className="sidebar-icon-button" onClick={() => setGlobalSearchOpen(true)} title="Search chats (Ctrl+Shift+F)" aria-label="Search all chats"><Search size={16} /></button>
 					<button type="button" className="sidebar-icon-button" onClick={closeSidebar} title="Close sidebar" aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
 				</div>
-				<nav className="workspace-shortcuts" aria-label="Workspace navigation">
-					<NavLink to="/knowledge" className={({ isActive }) => clsx("workspace-shortcut", isActive && "is-active")} title="Browse workspace knowledge"><Library size={17} /><span>Knowledge</span></NavLink>
-					<NavLink to="/sources" className={({ isActive }) => clsx("workspace-shortcut", isActive && "is-active")} title="Manage workspace sources"><FolderOpen size={17} /><span>Sources</span></NavLink>
-				</nav>
 				{/* Retain each view's local state and DOM scroll position across switches. */}
 				<div className="sidebar-view-content" hidden={graphMode}>
 					<SessionTree embedded viewControl={<IconSwitch checked={false} onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} />
@@ -84,10 +86,6 @@ const Layout: React.FC = () => {
 				{graphVisited && <div className="sidebar-view-content" hidden={!graphMode}>
 					<SessionGraph visible={graphMode && sidebarVisible} viewControl={<IconSwitch checked onChange={setGraphMode} icon={GitBranch} label="Node view" description="On: preview each conversation round as a node. Off: return to the chat list." />} />
 				</div>}
-				<div className="app-sidebar-footer">
-					<NavItem to="/settings" icon={<Settings size={17} />} label="Settings" />
-					<NavLink to="/changes" className={({ isActive }) => clsx("sidebar-history-link", isActive && "is-active")} title="Changes · change history" aria-label="Changes"><History size={16} /></NavLink>
-				</div>
 			</aside>
 			{isCompactViewport && sidebarVisible && <button type="button" className="sidebar-scrim" onClick={closeSidebar} aria-label="Close navigation sidebar" />}
 			{sidebarVisible && !isCompactViewport && <PanelResizeHandle side="left" label="Resize navigation sidebar" value={sidebarWidth} min={graphMode ? 360 : 200} max={currentMax} defaultValue={graphMode ? Math.min(640, currentMax) : 260} onChange={currentSize.setValue} onCommit={currentSize.commit} />}
@@ -98,8 +96,8 @@ const Layout: React.FC = () => {
 	);
 };
 
-function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
-	return <NavLink to={to} className={({ isActive }) => clsx("app-nav-item", isActive && "is-active")}><span>{icon}</span><span className="truncate">{label}</span></NavLink>;
+function SidebarNavIcon({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+	return <NavLink to={to} className={({ isActive }) => clsx("sidebar-nav-icon", isActive && "is-active")} title={label} aria-label={label}>{icon}</NavLink>;
 }
 
 export default Layout;

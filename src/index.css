@@ -101,15 +101,11 @@ body {
 .global-search-dialog > footer span { display: inline-flex; align-items: center; gap: 0.2rem; }
 .global-search-dialog > footer kbd { min-width: 1.15rem; border: 1px solid #dbe1e9; border-radius: 4px; background: #f8fafc; padding: 0.08rem 0.25rem; color: #64748b; text-align: center; }
 @keyframes global-search-in { from { opacity: 0; transform: translateY(-8px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.workspace-shortcuts { display: flex; flex-wrap: wrap; flex: 0 0 auto; gap: 6px; padding: 0.15rem 0.75rem 0.8rem; }
-.workspace-shortcut { display: inline-flex; min-width: 0; height: 36px; align-items: center; gap: 7px; border: 1px solid #e5e7eb; border-radius: 9px; padding: 0 10px; background: #fff; color: #64748b; font-size: 12px; font-weight: 550; transition: background 150ms, border-color 150ms, color 150ms; }
-.workspace-shortcut svg { flex: 0 0 auto; color: var(--ui-brand-accent, #85938e); }
-.workspace-shortcut:hover { border-color: var(--ui-brand-soft-strong, #b8d6cc); background: #f3f9f6; color: var(--ui-brand-ink, #286557); }
-.workspace-shortcut.is-active { border-color: var(--ui-brand-soft-strong, #b8dace); background: var(--ui-brand-soft, #eaf5ef); color: var(--ui-brand-ink, #16755d); }
-.workspace-shortcut.is-active svg { color: var(--ui-brand-ink, #16755d); }
-.workspace-shortcut:focus-visible, .sidebar-history-link:focus-visible { outline: 2px solid var(--ui-brand-ink, #10a37f); outline-offset: 2px; }
-.sidebar-history-link { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 7px; color: #8a919c; }
-.sidebar-history-link:hover, .sidebar-history-link.is-active { background: #ececec; color: #475569; }
+.sidebar-header-navigation { display: flex; min-width: 0; align-items: center; gap: 2px; margin-left: auto; }
+.sidebar-nav-icon { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 6px; color: #8a919c; transition: background-color 150ms, color 150ms; }
+.sidebar-nav-icon:hover { background: #ececec; color: #475569; }
+.sidebar-nav-icon.is-active { background: var(--ui-brand-soft, #eaf5ef); color: var(--ui-brand-ink, #16755d); }
+.sidebar-nav-icon:focus-visible { outline: 2px solid var(--ui-brand-ink, #10a37f); outline-offset: 2px; }
 .app-nav-item { display: flex; height: 2.25rem; align-items: center; gap: 0.65rem; border-radius: 6px; padding: 0 0.65rem; color: #303030; font-size: 0.875rem; }
 .app-nav-item:hover, .app-nav-item.is-active { background: #ececec; }
 .session-graph-page { display: flex; min-width: 0; min-height: 0; width: 100%; height: 100%; flex-direction: column; background: #f3f4ff; }
@@ -166,7 +162,6 @@ html[data-theme="dark"] .graph-content-preview > section > strong { color: #5eea
 .session-graph-footer { display: flex; min-height: 2rem; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid #e2e8f0; background: #fff; padding: 0 0.75rem; color: #94a3b8; font-size: 0.62rem; }
 @media (max-width: 1050px) { .session-graph-toolbar { align-items: flex-start; flex-direction: column; } .session-graph-actions { width: 100%; flex-wrap: wrap; } .session-graph-actions .command-button { margin-left: auto; } }
 @media (max-width: 700px) { .session-graph-heading span, .session-graph-footer span:last-child { display: none; } .session-graph-direction button { font-size: 0; } .session-graph-direction button svg { margin: 0; } .session-graph-actions .secondary-button { font-size: 0; } }
-.app-sidebar-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; border-top: 1px solid #e8e8e8; padding: 0.45rem 0.5rem; }
 .session-tree-header { display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0.75rem 0.35rem 1rem; }
 .session-tree-header h2 { color: #8a8a8a; font-size: 0.72rem; font-weight: 600; }
 .session-tree-header .session-usage { margin-top: 0.1rem; }
@@ -941,10 +936,8 @@ html[data-theme="dark"] .knowledge-browser,
 html[data-theme="dark"] .entity-center-editor,
 html[data-theme="dark"] .entity-markdown-preview { background: #101112; color: #e7e7e9; }
 html[data-theme="dark"] .app-sidebar { border-color: #2b2d30; background: #17181a; }
-html[data-theme="dark"] .workspace-shortcut { border-color: #34383a; background: #202324; color: #b6c2be; }
-html[data-theme="dark"] .workspace-shortcut:hover, html[data-theme="dark"] .workspace-shortcut.is-active { border-color: #376354; background: #20382e; color: #8dd8b9; }
-html[data-theme="dark"] .workspace-shortcut.is-active svg { color: #8dd8b9; }
-html[data-theme="dark"] .sidebar-history-link:hover, html[data-theme="dark"] .sidebar-history-link.is-active { background: #27292c; color: #cbd5e1; }
+html[data-theme="dark"] .sidebar-nav-icon:hover { background: #27292c; color: #cbd5e1; }
+html[data-theme="dark"] .sidebar-nav-icon.is-active { background: #20382e; color: #8dd8b9; }
 html[data-theme="dark"] .session-graph-page { background: #101025; }
 html[data-theme="dark"] .session-graph-toolbar,
 html[data-theme="dark"] .session-graph-footer,
