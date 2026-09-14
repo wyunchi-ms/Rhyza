@@ -1,7 +1,8 @@
-import { ArrowRight, ChevronDown, Database, Network, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Database, History, Network, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHistory";
 import { DiagramViewer } from "../components/DiagramViewer";
 import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
 import { MermaidDiagram } from "../components/MermaidDiagram";
@@ -18,6 +19,7 @@ import { errorToMessage } from "../shared/value";
 const Knowledge = () => {
 	const store = useAppStore();
 	const [mode, setMode] = useState<"entities" | "diagrams">("entities");
+	const [historyTarget, setHistoryTarget] = useState<{ kind: "entity" | "diagram"; id: string; name: string } | null>(null);
 	const [search, setSearch] = useState("");
 	const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
 	const [entityDraft, setEntityDraft] = useState<Entity | null>(null);
@@ -97,9 +99,10 @@ const Knowledge = () => {
 					</div>
 				</aside>
 				<main className="knowledge-detail-area">
-					{mode === "entities" && selected && entityDraft ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail">{isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />}</section><aside className="knowledge-inspector"><EntityMetaPanel entity={selected} onOpenDiagram={(diagramId) => { store.setSelectedDiagram(diagramId); setSelectedDiagramId(diagramId); setSearch(""); setMode("diagrams"); }} /></aside></div> : mode === "diagrams" && diagram ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail"><DiagramViewer diagram={diagram} /></section><aside className="knowledge-inspector"><DiagramEditor diagram={diagram} entities={activeEntities} onOpenEntity={(entityId) => { store.setSelectedEntity(entityId); setSearch(""); setMode("entities"); }} onDeleted={() => setSelectedDiagramId(null)} /></aside></div> : <div className="empty-state h-full">{resourceCount === 0 ? mode === "entities" ? "No entities yet. Complete a chat turn to build your knowledge base." : "No diagrams yet. Mermaid diagrams from agent responses will appear here." : `No ${mode} match “${searchTerm}”.`}</div>}
+					{mode === "entities" && selected && entityDraft ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail">{isEditingEntity ? <EntityCenterEditor draft={entityDraft} onDraftChange={setEntityDraft} onSave={() => { store.saveEntity(entityDraft); setIsEditingEntity(false); }} onCancel={() => { setEntityDraft(selected); setIsEditingEntity(false); }} /> : <EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />}</section><aside className="knowledge-inspector"><EntityMetaPanel entity={selected} onOpenHistory={() => setHistoryTarget({ kind: "entity", id: selected.id, name: selected.name })} onOpenDiagram={(diagramId) => { store.setSelectedDiagram(diagramId); setSelectedDiagramId(diagramId); setSearch(""); setMode("diagrams"); }} /></aside></div> : mode === "diagrams" && diagram ? <div className="knowledge-detail-grid"><section className="knowledge-primary-detail"><DiagramViewer diagram={diagram} /></section><aside className="knowledge-inspector"><DiagramEditor diagram={diagram} entities={activeEntities} onOpenHistory={() => setHistoryTarget({ kind: "diagram", id: diagram.id, name: diagram.name })} onOpenEntity={(entityId) => { store.setSelectedEntity(entityId); setSearch(""); setMode("entities"); }} onDeleted={() => setSelectedDiagramId(null)} /></aside></div> : <div className="empty-state h-full">{resourceCount === 0 ? mode === "entities" ? "No entities yet. Complete a chat turn to build your knowledge base." : "No diagrams yet. Mermaid diagrams from agent responses will appear here." : `No ${mode} match “${searchTerm}”.`}</div>}
 				</main>
 			</div>
+			{historyTarget && <KnowledgeChangeHistoryDialog kind={historyTarget.kind} objectId={historyTarget.id} name={historyTarget.name} onClose={() => setHistoryTarget(null)} />}
 		</div>
 	);
 };
@@ -131,7 +134,7 @@ function EntityCenterEditor({ draft, onDraftChange, onSave, onCancel }: { draft:
 	</div></form>;
 }
 
-function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiagram: (diagramId: string) => void }) {
+function EntityMetaPanel({ entity, onOpenHistory, onOpenDiagram }: { entity: Entity; onOpenHistory: () => void; onOpenDiagram: (diagramId: string) => void }) {
 	const { softDeleteEntity, saveEntity, saveRelation, softDeleteRelation, setSelectedEntity, relations, entities, diagrams, sources: sourceCatalog } = useAppStore();
 	const [relationForm, setRelationForm] = useState<{ relation?: Relation; relatedEntityId: string; type: string; description: string } | null>(null);
 	const [sourceReindexState, setSourceReindexState] = useState<{ status: "idle" | "running" | "success" | "error"; message?: string }>({ status: "idle" });
@@ -202,7 +205,7 @@ function EntityMetaPanel({ entity, onOpenDiagram }: { entity: Entity; onOpenDiag
 	return <div className="p-5 space-y-5">
 		<div className="flex items-start justify-between gap-3">
 			<div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">{entity.type}</span><h2 className="text-xl font-black text-primary truncate">{entity.name}</h2></div>
-			<button type="button" title="Archive entity" onClick={() => { if (window.confirm(`Archive “${entity.name}” and its relations?`)) softDeleteEntity(entity.id); }} className="secondary-button shrink-0 text-red-600"><Trash2 size={14} /> Archive</button>
+			<div className="flex shrink-0 items-center gap-1"><button type="button" title="View entity change history" aria-label="View entity change history" onClick={onOpenHistory} className="icon-button"><History size={15} /></button><button type="button" title="Archive entity" onClick={() => { if (window.confirm(`Archive “${entity.name}” and its relations?`)) softDeleteEntity(entity.id); }} className="secondary-button shrink-0 text-red-600"><Trash2 size={14} /> Archive</button></div>
 		</div>
 		<section>
 			<div className="entity-section-heading">
@@ -296,7 +299,7 @@ function resizeTextArea(textarea: HTMLTextAreaElement | null, minimumHeight = 48
 	textarea.style.height = `${Math.max(minimumHeight, textarea.scrollHeight)}px`;
 }
 
-function DiagramEditor({ diagram, entities, onOpenEntity, onDeleted }: { diagram: Diagram; entities: Entity[]; onOpenEntity: (entityId: string) => void; onDeleted: () => void }) {
+function DiagramEditor({ diagram, entities, onOpenHistory, onOpenEntity, onDeleted }: { diagram: Diagram; entities: Entity[]; onOpenHistory: () => void; onOpenEntity: (entityId: string) => void; onDeleted: () => void }) {
 	const { saveDiagram, softDeleteDiagram } = useAppStore();
 	const [draft, setDraft] = useState(diagram);
 	const [entityLinkForm, setEntityLinkForm] = useState<{ nodeId: string; entityId: string; editing: boolean } | null>(null);
@@ -328,7 +331,7 @@ function DiagramEditor({ diagram, entities, onOpenEntity, onDeleted }: { diagram
 		});
 	};
 	return <form className="p-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.mermaidSource.trim()) saveDiagram(draft); }}>
-		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">Diagram</span><h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2></div><button type="button" title="Archive diagram" className="secondary-button shrink-0 text-red-600" onClick={() => { if (window.confirm(`Archive diagram “${diagram.name}”?`)) { softDeleteDiagram(diagram.id); onDeleted(); } }}><Trash2 size={14} /> Archive</button></div>
+		<div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="text-xs uppercase font-bold text-accent">Diagram</span><h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2></div><div className="flex shrink-0 items-center gap-1"><button type="button" title="View diagram change history" aria-label="View diagram change history" onClick={onOpenHistory} className="icon-button"><History size={15} /></button><button type="button" title="Archive diagram" className="secondary-button shrink-0 text-red-600" onClick={() => { if (window.confirm(`Archive diagram “${diagram.name}”?`)) { softDeleteDiagram(diagram.id); onDeleted(); } }}><Trash2 size={14} /> Archive</button></div></div>
 		<label className="form-label">Name<input className="field mt-1" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
 		<label className="form-label">Type<select className="field mt-1" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}><option value="architecture">Architecture</option><option value="workflow">Workflow</option><option value="dataflow">Data flow</option><option value="lifecycle">Lifecycle</option><option value="structure">Structure</option><option value="flowchart">Flowchart</option><option value="sequence">Sequence</option><option value="swimlane">Swimlane</option><option value="dependency">Dependency</option></select></label>
 		<section aria-labelledby="diagram-linked-heading">

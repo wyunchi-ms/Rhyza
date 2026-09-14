@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { History, Library, FolderOpen, GitBranch, PanelLeftClose, PanelLeftOpen, Search, Settings, Sparkles } from "lucide-react";
+import { Library, FolderOpen, GitBranch, PanelLeftClose, PanelLeftOpen, Search, Settings, Sparkles } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -73,7 +73,6 @@ const Layout: React.FC = () => {
 					<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
 						<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
 						<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />
-						<SidebarNavIcon to="/changes" icon={<History size={16} />} label="Changes" />
 						<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label="Settings" />
 					</nav>
 					<button type="button" className="sidebar-icon-button" onClick={() => setGlobalSearchOpen(true)} title="Search chats (Ctrl+Shift+F)" aria-label="Search all chats"><Search size={16} /></button>
