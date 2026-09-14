@@ -64,17 +64,29 @@ test("frontend nodes map one-to-one to persistent Pi sessions with real parent p
 	}
 });
 
-test("a branch fails closed when its Pi parent is missing", async () => {
+test("a branch recovers when its Pi parent is missing", async () => {
 	const dataRoot = await mkdtemp(path.join(os.tmpdir(), "rhyza-pi-missing-parent-"));
 	try {
-		await assert.rejects(() => openOrCreatePiSession({
+		const child = await openOrCreatePiSession({
 			workspacePath: path.join(dataRoot, "child-worktree"),
 			sessionDir: path.join(dataRoot, "sessions"),
 			frontendSessionId: "child",
 			parentFrontendSessionId: "missing",
 			forkedFromTurnId: "missing-turn",
-			transcript: [],
-		}), /parent session missing is missing/);
+			transcript: [{ id: "copied-user", role: "user", content: "recovered context" }],
+		});
+		assert.equal(child.created, true);
+		assert.equal(child.sessionManager.getHeader()?.parentSession, undefined);
+		assert.equal(child.sessionManager.getEntries().filter((entry) => entry.type === "message").length, 1);
+		const branchEntry = child.sessionManager.getEntries().find((entry) =>
+			entry.type === "custom" && entry.customType === "knowbranch.branch");
+		assert.equal(branchEntry?.type, "custom");
+		if (branchEntry?.type === "custom") {
+			assert.equal(
+				(branchEntry.data as { parentResolution?: string }).parentResolution,
+				"missing-parent-recovered",
+			);
+		}
 	} finally {
 		await rm(dataRoot, { recursive: true, force: true });
 	}

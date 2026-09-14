@@ -46,7 +46,7 @@ async function openOrCreatePiSessionUnlocked(
 	const sessions = await SessionManager.listAll(options.sessionDir);
 	const sessionId = piSessionIdForFrontend(options.frontendSessionId);
 	const existing = sessions.find((session) => session.id === sessionId);
-	const parentSessionFile = resolveParentSessionFile(
+	const parentResolution = resolveParentSession(
 		sessions,
 		options.frontendSessionId,
 		options.parentFrontendSessionId,
@@ -62,14 +62,15 @@ async function openOrCreatePiSessionUnlocked(
 
 	const sessionManager = SessionManager.create(options.workspacePath, options.sessionDir, {
 		id: sessionId,
-		parentSession: parentSessionFile,
+		parentSession: parentResolution.file,
 	});
 	for (const turn of options.transcript) appendTranscriptTurn(sessionManager, turn);
 	if (options.parentFrontendSessionId || options.forkedFromTurnId) {
 		sessionManager.appendCustomEntry("knowbranch.branch", {
 			frontendSessionId: options.frontendSessionId,
 			parentFrontendSessionId: options.parentFrontendSessionId,
-			parentSessionFile,
+			parentSessionFile: parentResolution.file,
+			parentResolution: parentResolution.missing ? "missing-parent-recovered" : "linked",
 			forkedFromTurnId: options.forkedFromTurnId,
 			replayStrategy: "distinct persisted Pi session seeded once from the frontend branch transcript",
 		});
@@ -83,21 +84,18 @@ export function piSessionIdForFrontend(frontendSessionId: string): string {
 	return `kb-${frontendSessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
-function resolveParentSessionFile(
+function resolveParentSession(
 	sessions: Awaited<ReturnType<typeof SessionManager.listAll>>,
 	frontendSessionId: string,
 	parentFrontendSessionId?: string,
-): string | undefined {
-	if (!parentFrontendSessionId) return undefined;
+): { file?: string; missing: boolean } {
+	if (!parentFrontendSessionId) return { missing: false };
 	if (parentFrontendSessionId === frontendSessionId) {
 		throw new Error(`Pi session ${frontendSessionId} cannot be its own parent.`);
 	}
 	const parentId = piSessionIdForFrontend(parentFrontendSessionId);
 	const parent = sessions.find((session) => session.id === parentId);
-	if (!parent) {
-		throw new Error(`Cannot create Pi branch ${frontendSessionId}: parent session ${parentFrontendSessionId} is missing.`);
-	}
-	return parent.path;
+	return parent ? { file: parent.path, missing: false } : { missing: true };
 }
 
 function appendTranscriptTurn(sessionManager: SessionManager, turn: AgentTranscriptTurn): void {
