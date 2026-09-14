@@ -1,4 +1,4 @@
-import type { AgentModelRequestSnapshot } from "../shared/ipc";
+import type { AgentCacheRequest, AgentModelRequestSnapshot } from "../shared/ipc";
 
 export type Confidence = "confirmed" | "inferred" | "disputed";
 
@@ -50,6 +50,8 @@ export interface Turn {
 	usage?: TokenUsage;
 	/** Every provider request made while producing this assistant turn (including tool loops). */
 	modelRequests?: AgentModelRequestSnapshot[];
+	/** Last request cache metadata, retained across app restarts without the full payload. */
+	cacheRequest?: AgentCacheRequest;
 	/** Display-only usage copied with shared fork history; excluded from branch totals. */
 	inheritedUsage?: TokenUsage;
 	createdAt: string;
@@ -163,7 +165,16 @@ export interface DiagramVersion {
 export interface Diagram {
 	id: string;
 	name: string;
-	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency" | "workflow" | "dataflow" | "lifecycle";
+	type:
+		| "architecture"
+		| "structure"
+		| "flowchart"
+		| "sequence"
+		| "swimlane"
+		| "dependency"
+		| "workflow"
+		| "dataflow"
+		| "lifecycle";
 	nodes: DiagramNode[];
 	edges: DiagramEdge[];
 	mermaidSource: string;

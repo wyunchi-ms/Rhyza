@@ -71,7 +71,9 @@ export function forkSessionNode(
 	if (index >= 0) return splitLocalPath(state, turns[index], turns, index, createId);
 	const forkSessionId = createId("session");
 	return {
-		forkSessionId, originalSessionId: sessionId, branchPointSessionId: sessionId,
+		forkSessionId,
+		originalSessionId: sessionId,
+		branchPointSessionId: sessionId,
 		sessions: [...state.sessions, createBranchSession(forkSessionId, sessionId)],
 		turns: state.turns,
 	};
@@ -96,17 +98,31 @@ export function cloneSessionNode(
 	for (const turn of history) if (turn.sourceTurnId) ids.set(turn.sourceTurnId, ids.get(turn.id)!);
 	const copies = history.map((turn): Turn => ({
 		...structuredClone(turn),
-		id: ids.get(turn.id)!, sessionId: cloneSessionId, sourceTurnId: undefined,
-		changeSetId: undefined, modelRequests: undefined,
-		usage: undefined, inheritedUsage: structuredClone(turn.usage ?? turn.inheritedUsage),
-		quote: turn.quote ? { ...turn.quote, turnId: ids.get(turn.quote.turnId) ?? turn.quote.turnId } : undefined,
+		id: ids.get(turn.id)!,
+		sessionId: cloneSessionId,
+		sourceTurnId: undefined,
+		changeSetId: undefined,
+		modelRequests: undefined,
+		cacheRequest: undefined,
+		usage: undefined,
+		inheritedUsage: structuredClone(turn.usage ?? turn.inheritedUsage),
+		quote: turn.quote
+			? { ...turn.quote, turnId: ids.get(turn.quote.turnId) ?? turn.quote.turnId }
+			: undefined,
 	}));
 	return {
 		cloneSessionId,
-		sessions: [...state.sessions, {
-			id: cloneSessionId, parentId: null, isRoot: true, status: "idle",
-			title: `${source.title} (copy)`, progressStatus: source.progressStatus,
-		}],
+		sessions: [
+			...state.sessions,
+			{
+				id: cloneSessionId,
+				parentId: null,
+				isRoot: true,
+				status: "idle",
+				title: `${source.title} (copy)`,
+				progressStatus: source.progressStatus,
+			},
+		],
 		turns: [...state.turns, ...copies],
 	};
 }

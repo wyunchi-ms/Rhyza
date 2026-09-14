@@ -43,6 +43,7 @@ import type { GptArchifyHarness } from "./archify-harness.js";
 import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
+import { responseCacheEvidence } from "../../src/shared/cacheEvidence.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -90,11 +91,14 @@ export class PiService {
 				if (!turnDirectory.isDirectory()) continue;
 				const turnId = turnDirectory.name;
 				const directoryPath = path.join(sessionDirectory, turnId);
-				const filenames = (await readdir(directoryPath)).filter((filename) => filename.endsWith(".json"));
+				const filenames = (await readdir(directoryPath)).filter((filename) =>
+					filename.endsWith(".json"),
+				);
 				for (const filename of filenames) {
 					try {
 						const parsed = JSON.parse(await readFile(path.join(directoryPath, filename), "utf8"));
-						if (!isModelRequestSnapshot(parsed) || safeDumpPart(parsed.frontendTurnId) !== turnId) continue;
+						if (!isModelRequestSnapshot(parsed) || safeDumpPart(parsed.frontendTurnId) !== turnId)
+							continue;
 						(turns[parsed.frontendTurnId] ??= []).push(parsed);
 					} catch (error) {
 						console.warn(`Could not read model request dump ${filename}: ${errorToMessage(error)}`);
@@ -107,14 +111,20 @@ export class PiService {
 			}
 		}
 		for (const snapshots of Object.values(turns)) {
-			snapshots.sort((left, right) => left.sequence - right.sequence || left.timestamp.localeCompare(right.timestamp));
+			snapshots.sort(
+				(left, right) =>
+					left.sequence - right.sequence || left.timestamp.localeCompare(right.timestamp),
+			);
 		}
 		return { turns };
 	}
 
-	async getWorkspaceTodos(frontendSessionId: string | undefined, workspacePath: string): Promise<WorkspaceTodosResponse> {
+	async getWorkspaceTodos(
+		frontendSessionId: string | undefined,
+		workspacePath: string,
+	): Promise<WorkspaceTodosResponse> {
 		const effectiveWorkspacePath = frontendSessionId
-			? this.activeSessions.get(frontendSessionId)?.workspacePath ?? workspacePath
+			? (this.activeSessions.get(frontendSessionId)?.workspacePath ?? workspacePath)
 			: workspacePath;
 		return readWorkspaceTodos(effectiveWorkspacePath);
 	}
@@ -156,9 +166,7 @@ export class PiService {
 						type: "progress",
 						message: `Authentication prompt required: ${prompt.message}`,
 					});
-					throw new Error(
-						"Authentication requires an unsupported secret text prompt.",
-					);
+					throw new Error("Authentication requires an unsupported secret text prompt.");
 				},
 				notify: (event) => this.emitAuthEvent(toAuthBridgeEvent(event)),
 			});
@@ -193,9 +201,7 @@ export class PiService {
 		}
 	}
 
-	async getModelCatalog(
-		request: ModelCatalogRequest = {},
-	): Promise<ModelCatalogResponse> {
+	async getModelCatalog(request: ModelCatalogRequest = {}): Promise<ModelCatalogResponse> {
 		const providerId = request.providerId ?? defaultProviderId;
 		try {
 			const runtime = await this.getModelRuntime();
@@ -230,9 +236,7 @@ export class PiService {
 			if (request.model) {
 				model = runtime.getModel(request.model.providerId, request.model.modelId);
 				if (!model) {
-					throw new Error(
-						`Unknown model: ${request.model.providerId}/${request.model.modelId}`,
-					);
+					throw new Error(`Unknown model: ${request.model.providerId}/${request.model.modelId}`);
 				}
 			}
 			const active = await this.getSession(workspacePath, request, model);
@@ -254,8 +258,16 @@ export class PiService {
 				const promptText = request.knowledgeContext
 					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${promptWithDiagramMode}\n</user_question>`
 					: promptWithDiagramMode;
-				const promptContent: string | Array<{ type: "text"; text: string } | ImageContent> = request.images?.length
-					? [{ type: "text", text: promptText }, ...request.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
+				const promptContent: string | Array<{ type: "text"; text: string } | ImageContent> = request
+					.images?.length
+					? [
+							{ type: "text", text: promptText },
+							...request.images.map((image): ImageContent => ({
+								type: "image",
+								data: image.data,
+								mimeType: image.mimeType,
+							})),
+						]
 					: promptText;
 				await session.sendUserMessage(promptContent);
 			} finally {
@@ -284,10 +296,7 @@ export class PiService {
 		return this.worktreeService.diff(frontendSessionId);
 	}
 
-	async generateSummary(
-		request: SummaryRequest,
-		workspacePath: string,
-	): Promise<SummaryResponse> {
+	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
 			const model = request.model
@@ -308,9 +317,13 @@ export class PiService {
 				await session.sendUserMessage(
 					`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
 				);
-				const summary = getLastAssistantText(session)?.replace(/^["'“”]+|["'“”]+$/g, "").trim();
+				const summary = getLastAssistantText(session)
+					?.replace(/^["'“”]+|["'“”]+$/g, "")
+					.trim();
 				const usage = getSessionUsage(session);
-				return summary ? { summary: summary.slice(0, 80), usage } : { error: "The model returned an empty title.", usage };
+				return summary
+					? { summary: summary.slice(0, 80), usage }
+					: { error: "The model returned an empty title.", usage };
 			} finally {
 				session.dispose();
 			}
@@ -418,9 +431,10 @@ export class PiService {
 		});
 		const sourceRefs = new Map<string, SourceReference>();
 		const customTools = this.createSourceTools(sourceRefs, workspacePath);
-		const builtInTools = request.writable && sessionWorkspace.isolated
-			? ["read", "grep", "find", "ls", "edit", "write", "bash"]
-			: ["read", "grep", "find", "ls"];
+		const builtInTools =
+			request.writable && sessionWorkspace.isolated
+				? ["read", "grep", "find", "ls", "edit", "write", "bash"]
+				: ["read", "grep", "find", "ls"];
 		const { session } = await createAgentSession({
 			cwd: sessionWorkspace.path,
 			agentDir: this.agentDir,
@@ -439,7 +453,12 @@ export class PiService {
 		session.agent.streamFunction = async (requestModel, context, options) => {
 			activeRequestId = crypto.randomUUID();
 			const frontendTurnId = created.frontendTurnId ?? "unmapped";
-			const dumpPath = path.join(this.requestDumpDir, safeDumpPart(request.frontendSessionId), safeDumpPart(frontendTurnId), `${String(requestSequence + 1).padStart(3, "0")}-${activeRequestId}.json`);
+			const dumpPath = path.join(
+				this.requestDumpDir,
+				safeDumpPart(request.frontendSessionId),
+				safeDumpPart(frontendTurnId),
+				`${String(requestSequence + 1).padStart(3, "0")}-${activeRequestId}.json`,
+			);
 			const snapshot: AgentModelRequestSnapshot = {
 				id: activeRequestId,
 				sequence: ++requestSequence,
@@ -466,12 +485,15 @@ export class PiService {
 		};
 		const originalOnPayload = session.agent.onPayload;
 		session.agent.onPayload = async (payload, payloadModel) => {
-			const transformed = originalOnPayload ? await originalOnPayload(payload, payloadModel) : payload;
+			const transformed = originalOnPayload
+				? await originalOnPayload(payload, payloadModel)
+				: payload;
 			const finalPayload = transformed === undefined ? payload : transformed;
 			const sanitizedPayload = sanitizeForRenderer(finalPayload);
 			if (activeSnapshot) {
 				activeSnapshot = { ...activeSnapshot, wirePayload: sanitizedPayload };
-				if (activeSnapshot.dumpPath) await writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+				if (activeSnapshot.dumpPath)
+					await writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
 			}
 			this.emitAgentEvent({
 				type: "wire_request",
@@ -483,12 +505,26 @@ export class PiService {
 			return transformed;
 		};
 		const unsubscribe = session.subscribe((event) => {
-			this.emitAgentEvent(toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event, activeRequestId));
-			if (event.type === "message_end" && "message" in event && typeof event.message === "object" && event.message !== null && "role" in event.message && event.message.role === "assistant") {
+			this.emitAgentEvent(
+				toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event, activeRequestId),
+			);
+			if (
+				event.type === "message_end" &&
+				"message" in event &&
+				typeof event.message === "object" &&
+				event.message !== null &&
+				"role" in event.message &&
+				event.message.role === "assistant"
+			) {
 				const usage = getEventUsage(event);
 				if (activeSnapshot && usage) {
-					activeSnapshot = { ...activeSnapshot, usage };
-					if (activeSnapshot.dumpPath) void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+					activeSnapshot = {
+						...activeSnapshot,
+						usage,
+						cache: responseCacheEvidence(event.message),
+					};
+					if (activeSnapshot.dumpPath)
+						void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
 				}
 				activeRequestId = undefined;
 				activeSnapshot = undefined;
@@ -514,19 +550,29 @@ export class PiService {
 		const searchSources = defineTool({
 			name: "search_sources",
 			label: "Search sources",
-			description: "Search repositories and documentation attached to this workspace, including material outside the current working directory.",
+			description:
+				"Search repositories and documentation attached to this workspace, including material outside the current working directory.",
 			parameters: Type.Object({
 				query: Type.String({ description: "Terms, symbol names, or concepts to search for" }),
-				sourceId: Type.Optional(Type.String({ description: "Optional source id to restrict the search" })),
-				limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30, description: "Maximum number of matches" })),
+				sourceId: Type.Optional(
+					Type.String({ description: "Optional source id to restrict the search" }),
+				),
+				limit: Type.Optional(
+					Type.Integer({ minimum: 1, maximum: 30, description: "Maximum number of matches" }),
+				),
 			}),
 			execute: async (_toolCallId, params) => {
-				const hits = await this.sourceService!.search({
-					query: params.query,
-					sourceId: params.sourceId,
-					limit: params.limit ?? 12,
-				}, workspacePath);
-				const sources = new Map((await this.sourceService!.list(workspacePath)).map((source) => [source.id, source]));
+				const hits = await this.sourceService!.search(
+					{
+						query: params.query,
+						sourceId: params.sourceId,
+						limit: params.limit ?? 12,
+					},
+					workspacePath,
+				);
+				const sources = new Map(
+					(await this.sourceService!.list(workspacePath)).map((source) => [source.id, source]),
+				);
 				const references: SourceReference[] = hits.map((hit) => ({
 					sourceId: hit.sourceId,
 					path: hit.path,
@@ -536,7 +582,12 @@ export class PiService {
 				}));
 				for (const reference of references) recordSourceReference(sourceRefs, reference);
 				const text = hits.length
-					? hits.map((hit, index) => `${index + 1}. [${hit.sourceId}] ${hit.path}:${hit.line}\n${hit.preview}`).join("\n\n")
+					? hits
+							.map(
+								(hit, index) =>
+									`${index + 1}. [${hit.sourceId}] ${hit.path}:${hit.line}\n${hit.preview}`,
+							)
+							.join("\n\n")
 					: "No source matches found.";
 				return { content: [{ type: "text" as const, text }], details: { references } };
 			},
@@ -544,15 +595,24 @@ export class PiService {
 		const readSource = defineTool({
 			name: "read_source",
 			label: "Read source",
-			description: "Read a line range from a file returned by search_sources. Paths are relative to the selected source.",
+			description:
+				"Read a line range from a file returned by search_sources. Paths are relative to the selected source.",
 			parameters: Type.Object({
 				sourceId: Type.String({ description: "Source id returned by search_sources" }),
 				path: Type.String({ description: "Relative file path returned by search_sources" }),
 				lineStart: Type.Optional(Type.Integer({ minimum: 1, description: "First line to read" })),
-				lineEnd: Type.Optional(Type.Integer({ minimum: 1, description: "Last line to read, capped to 200 lines" })),
+				lineEnd: Type.Optional(
+					Type.Integer({ minimum: 1, description: "Last line to read, capped to 200 lines" }),
+				),
 			}),
 			execute: async (_toolCallId, params) => {
-				const result = await this.sourceService!.read(params.sourceId, params.path, params.lineStart, params.lineEnd, workspacePath);
+				const result = await this.sourceService!.read(
+					params.sourceId,
+					params.path,
+					params.lineStart,
+					params.lineEnd,
+					workspacePath,
+				);
 				const reference: SourceReference = {
 					sourceId: result.sourceId,
 					path: result.path,
@@ -562,7 +622,12 @@ export class PiService {
 				};
 				recordSourceReference(sourceRefs, reference);
 				return {
-					content: [{ type: "text" as const, text: `[${result.sourceId}] ${result.path}:${result.lineStart}-${result.lineEnd}\n${result.content}` }],
+					content: [
+						{
+							type: "text" as const,
+							text: `[${result.sourceId}] ${result.path}:${result.lineStart}-${result.lineEnd}\n${result.content}`,
+						},
+					],
 					details: { references: [reference] },
 				};
 			},
@@ -623,37 +688,47 @@ function toAgentBridgeEvent(
 	const usage = getEventUsage(event);
 	return {
 		type: event.type,
+		cache:
+			event.type === "message_end" && "message" in event
+				? responseCacheEvidence(event.message)
+				: undefined,
 		sessionId,
 		frontendSessionId,
 		message: stream?.message ?? extractEventMessage(event),
 		streamKind: stream?.kind,
 		payload: sanitizeForRenderer(event),
-		usage: usage && hasUsage(usage) ? {
-			input: usage.input,
-			output: usage.output,
-			cacheRead: usage.cacheRead,
-			cacheWrite: usage.cacheWrite,
-			cost: usage.cost,
-		} : undefined,
+		usage:
+			usage && hasUsage(usage)
+				? {
+						input: usage.input,
+						output: usage.output,
+						cacheRead: usage.cacheRead,
+						cacheWrite: usage.cacheWrite,
+						cacheWrite1h: usage.cacheWrite1h,
+						cost: usage.cost,
+					}
+				: undefined,
 		requestId,
 	};
 }
 
 function getEventUsage(event: AgentSessionEvent): AgentUsage | undefined {
 	if (
-		event.type !== "message_end"
-		|| !("message" in event)
-		|| typeof event.message !== "object"
-		|| event.message === null
-		|| !("role" in event.message)
-		|| event.message.role !== "assistant"
-		|| !("usage" in event.message)
-	) return undefined;
+		event.type !== "message_end" ||
+		!("message" in event) ||
+		typeof event.message !== "object" ||
+		event.message === null ||
+		!("role" in event.message) ||
+		event.message.role !== "assistant" ||
+		!("usage" in event.message)
+	)
+		return undefined;
 	return {
 		input: event.message.usage.input,
 		output: event.message.usage.output,
 		cacheRead: event.message.usage.cacheRead,
 		cacheWrite: event.message.usage.cacheWrite,
+		cacheWrite1h: event.message.usage.cacheWrite1h,
 		cost: event.message.usage.cost.total,
 	};
 }
@@ -705,8 +780,17 @@ const responsePresentationGuidance = `## Response presentation
 - Add only the prose needed to explain the diagram. Do not add a diagram when plain text or executable source code is clearer.
 - Keep node labels short. Quote labels that contain punctuation, parentheses, or other syntax-sensitive characters.`;
 
-function recordSourceReference(sourceRefs: Map<string, SourceReference>, reference: SourceReference): void {
-	const key = [reference.sourceId, reference.revision, reference.path, reference.lineStart, reference.lineEnd].join(":");
+function recordSourceReference(
+	sourceRefs: Map<string, SourceReference>,
+	reference: SourceReference,
+): void {
+	const key = [
+		reference.sourceId,
+		reference.revision,
+		reference.path,
+		reference.lineStart,
+		reference.lineEnd,
+	].join(":");
 	sourceRefs.set(key, reference);
 }
 
@@ -737,7 +821,14 @@ function getLastAssistantText(session: AgentSession): string | undefined {
 function getSessionUsage(session: AgentSession) {
 	const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 	for (const message of session.messages) {
-		if (typeof message !== "object" || message === null || !("role" in message) || message.role !== "assistant" || !("usage" in message)) continue;
+		if (
+			typeof message !== "object" ||
+			message === null ||
+			!("role" in message) ||
+			message.role !== "assistant" ||
+			!("usage" in message)
+		)
+			continue;
 		total.input += message.usage.input;
 		total.output += message.usage.output;
 		total.cacheRead += message.usage.cacheRead;
@@ -789,11 +880,14 @@ function getLastAssistantContent(
 }
 
 function buildKnowledgeExtractionPrompt(request: KnowledgeExtractionRequest): string {
-	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map((match, sourceIndex) => ({
-		sourceIndex,
-		source: match[1].trim(),
-	}));
-	const archifyBlockCount = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)].length;
+	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map(
+		(match, sourceIndex) => ({
+			sourceIndex,
+			source: match[1].trim(),
+		}),
+	);
+	const archifyBlockCount = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)]
+		.length;
 	return `You are a conservative learning-gap detector for a personal knowledge workspace.
 
 Decide whether the USER'S QUESTION demonstrates that the user does not understand a concept. Create knowledge entities only for those learning gaps.
@@ -855,7 +949,10 @@ function parseKnowledgeExtraction(
 	return {
 		entities: parseKnowledgeCandidates(parsed.entities, request),
 		relations: parseRelationCandidates(parsed.relations, request),
-		diagrams: [...parseDiagramCandidates(parsed.diagrams, request), ...extractArchifyDiagramCandidates(request)],
+		diagrams: [
+			...parseDiagramCandidates(parsed.diagrams, request),
+			...extractArchifyDiagramCandidates(request),
+		],
 	};
 }
 
@@ -864,7 +961,11 @@ function parseKnowledgeCandidates(
 	request: KnowledgeExtractionRequest,
 ): KnowledgeCandidate[] {
 	const existingIds = new Set(request.existingEntities.map((entity) => entity.id));
-	const existingNames = new Set(request.existingEntities.flatMap((entity) => [entity.name, ...entity.aliases]).map((name) => name.trim().toLocaleLowerCase()));
+	const existingNames = new Set(
+		request.existingEntities
+			.flatMap((entity) => [entity.name, ...entity.aliases])
+			.map((name) => name.trim().toLocaleLowerCase()),
+	);
 	const selected = new Set<string>();
 	return items.slice(0, 3).flatMap((candidate): KnowledgeCandidate[] => {
 		if (!isRecord(candidate)) return [];
@@ -875,28 +976,34 @@ function parseKnowledgeCandidates(
 		if (!name || !type || !summary || !content) return [];
 		const key = name.toLocaleLowerCase();
 		if (!isDurableKnowledgeEntityCandidate(name, type)) return [];
-		const existingEntityId = typeof candidate.existingEntityId === "string" && existingIds.has(candidate.existingEntityId)
-			? candidate.existingEntityId
-			: undefined;
+		const existingEntityId =
+			typeof candidate.existingEntityId === "string" && existingIds.has(candidate.existingEntityId)
+				? candidate.existingEntityId
+				: undefined;
 		if ((!existingEntityId && existingNames.has(key)) || selected.has(key)) return [];
 		if (isCopiedPassage(content, request.answer)) {
 			if (isCopiedPassage(summary, request.answer)) return [];
 			content = summary;
 		}
 		selected.add(key);
-		return [{
-			existingEntityId,
-			name,
-			type,
-			summary,
-			content,
-			confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
-			sourceScope: parseKnowledgeSourceScope(candidate.sourceScope, type),
-		}];
+		return [
+			{
+				existingEntityId,
+				name,
+				type,
+				summary,
+				content,
+				confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
+				sourceScope: parseKnowledgeSourceScope(candidate.sourceScope, type),
+			},
+		];
 	});
 }
 
-function parseKnowledgeSourceScope(value: unknown, type: string): KnowledgeCandidate["sourceScope"] {
+function parseKnowledgeSourceScope(
+	value: unknown,
+	type: string,
+): KnowledgeCandidate["sourceScope"] {
 	if (value === "workspace" || value === "general" || value === "mixed") return value;
 	return /^(?:component|file)$/i.test(type) ? "workspace" : "general";
 }
@@ -906,70 +1013,126 @@ export function isDurableKnowledgeEntityCandidate(name: string, type: string): b
 	const normalizedType = type.trim().toLocaleLowerCase();
 	if (!normalizedName || normalizedName.length > 80) return false;
 	if (!/^(?:concept|component|pattern|technology|file)$/i.test(normalizedType)) return false;
-	if (/[?？。!！:]$/.test(normalizedName) || /(?:是什么|怎么工作|如何工作|how\s+.+\s+works?)$/i.test(normalizedName)) return false;
+	if (
+		/[?？。!！:]$/.test(normalizedName) ||
+		/(?:是什么|怎么工作|如何工作|how\s+.+\s+works?)$/i.test(normalizedName)
+	)
+		return false;
 	if (/(?:\s|^)(?:vs\.?|versus)(?:\s|$)|(?:与|和|到|至|→|->)/i.test(normalizedName)) return false;
-	const establishedArchitecture = /^(?:hexagonal architecture|clean architecture|onion architecture|event-driven architecture|microservices?|六边形架构|整洁架构|洋葱架构|事件驱动架构|微服务架构)$/i.test(normalizedName);
-	const viewOrTopicSuffix = /(?:架构|结构|流程|调用链|执行链|服务边界|边界|适配层|分层|布局|路径|概述|总览|说明|机制|生命周期|architecture|structure|flow|call chain|execution chain|boundary|layering|layout|path|overview|mechanism|lifecycle)$/i;
+	const establishedArchitecture =
+		/^(?:hexagonal architecture|clean architecture|onion architecture|event-driven architecture|microservices?|六边形架构|整洁架构|洋葱架构|事件驱动架构|微服务架构)$/i.test(
+			normalizedName,
+		);
+	const viewOrTopicSuffix =
+		/(?:架构|结构|流程|调用链|执行链|服务边界|边界|适配层|分层|布局|路径|概述|总览|说明|机制|生命周期|architecture|structure|flow|call chain|execution chain|boundary|layering|layout|path|overview|mechanism|lifecycle)$/i;
 	if (!establishedArchitecture && viewOrTopicSuffix.test(normalizedName)) return false;
-	const genericViewNames = /^(?:架构|系统架构|整体架构|顶层结构|总体流程|执行流程|调用流程|实现方式|工作原理|architecture|system architecture|request flow|execution flow|implementation|overview)$/i;
+	const genericViewNames =
+		/^(?:架构|系统架构|整体架构|顶层结构|总体流程|执行流程|调用流程|实现方式|工作原理|architecture|system architecture|request flow|execution flow|implementation|overview)$/i;
 	return !genericViewNames.test(normalizedName);
 }
 
-function parseRelationCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeRelationCandidate[] {
+function parseRelationCandidates(
+	value: unknown,
+	request: KnowledgeExtractionRequest,
+): KnowledgeRelationCandidate[] {
 	if (!Array.isArray(value)) return [];
 	const existingIds = new Set(request.existingEntities.map((entity) => entity.id));
 	return value.slice(0, 100).flatMap((candidate): KnowledgeRelationCandidate[] => {
 		if (!isRecord(candidate)) return [];
 		const sourceName = cleanCandidateText(candidate.sourceName, 120);
 		const targetName = cleanCandidateText(candidate.targetName, 120);
-		const type = cleanCandidateText(candidate.type, 80).toLocaleLowerCase().replace(/[^a-z0-9_]+/g, "_");
+		const type = cleanCandidateText(candidate.type, 80)
+			.toLocaleLowerCase()
+			.replace(/[^a-z0-9_]+/g, "_");
 		const description = cleanCandidateText(candidate.description, 500);
-		if (!sourceName || !targetName || !type || sourceName.toLocaleLowerCase() === targetName.toLocaleLowerCase()) return [];
-		return [{
-			sourceEntityId: typeof candidate.sourceEntityId === "string" && existingIds.has(candidate.sourceEntityId) ? candidate.sourceEntityId : undefined,
-			targetEntityId: typeof candidate.targetEntityId === "string" && existingIds.has(candidate.targetEntityId) ? candidate.targetEntityId : undefined,
-			sourceName,
-			targetName,
-			type,
-			description,
-			confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
-		}];
+		if (
+			!sourceName ||
+			!targetName ||
+			!type ||
+			sourceName.toLocaleLowerCase() === targetName.toLocaleLowerCase()
+		)
+			return [];
+		return [
+			{
+				sourceEntityId:
+					typeof candidate.sourceEntityId === "string" && existingIds.has(candidate.sourceEntityId)
+						? candidate.sourceEntityId
+						: undefined,
+				targetEntityId:
+					typeof candidate.targetEntityId === "string" && existingIds.has(candidate.targetEntityId)
+						? candidate.targetEntityId
+						: undefined,
+				sourceName,
+				targetName,
+				type,
+				description,
+				confidence: candidate.confidence === "explicit" ? "explicit" : "inferred",
+			},
+		];
 	});
 }
 
-function parseDiagramCandidates(value: unknown, request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
-	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map((match) => match[1].trim());
+function parseDiagramCandidates(
+	value: unknown,
+	request: KnowledgeExtractionRequest,
+): KnowledgeDiagramCandidate[] {
+	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map(
+		(match) => match[1].trim(),
+	);
 	const existingIds = new Set(request.existingDiagrams.map((diagram) => diagram.id));
-	const diagramTypes = new Set<KnowledgeDiagramCandidate["type"]>(["architecture", "structure", "flowchart", "sequence", "swimlane", "dependency", "workflow", "dataflow", "lifecycle"]);
-	const parsed = (Array.isArray(value) ? value : []).slice(0, mermaidBlocks.length).flatMap((candidate): KnowledgeDiagramCandidate[] => {
-		if (!isRecord(candidate) || !Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) return [];
-		const sourceIndex = typeof candidate.sourceIndex === "number" ? Math.trunc(candidate.sourceIndex) : -1;
-		const mermaidSource = mermaidBlocks[sourceIndex];
-		const name = cleanCandidateText(candidate.name, 160);
-		const type = diagramTypes.has(candidate.type as KnowledgeDiagramCandidate["type"])
-			? candidate.type as KnowledgeDiagramCandidate["type"]
-			: "flowchart";
-		if (!mermaidSource || !name) return [];
-		const nodes = candidate.nodes.slice(0, 100).flatMap((node) => {
-			if (!isRecord(node)) return [];
-			const key = cleanCandidateText(node.key, 100);
-			const label = cleanCandidateText(node.label, 160);
-			return key && label ? [{ key, label, type: cleanCandidateText(node.type, 60) || undefined }] : [];
+	const diagramTypes = new Set<KnowledgeDiagramCandidate["type"]>([
+		"architecture",
+		"structure",
+		"flowchart",
+		"sequence",
+		"swimlane",
+		"dependency",
+		"workflow",
+		"dataflow",
+		"lifecycle",
+	]);
+	const parsed = (Array.isArray(value) ? value : [])
+		.slice(0, mermaidBlocks.length)
+		.flatMap((candidate): KnowledgeDiagramCandidate[] => {
+			if (
+				!isRecord(candidate) ||
+				!Array.isArray(candidate.nodes) ||
+				!Array.isArray(candidate.edges)
+			)
+				return [];
+			const sourceIndex =
+				typeof candidate.sourceIndex === "number" ? Math.trunc(candidate.sourceIndex) : -1;
+			const mermaidSource = mermaidBlocks[sourceIndex];
+			const name = cleanCandidateText(candidate.name, 160);
+			const type = diagramTypes.has(candidate.type as KnowledgeDiagramCandidate["type"])
+				? (candidate.type as KnowledgeDiagramCandidate["type"])
+				: "flowchart";
+			if (!mermaidSource || !name) return [];
+			const nodes = candidate.nodes.slice(0, 100).flatMap((node) => {
+				if (!isRecord(node)) return [];
+				const key = cleanCandidateText(node.key, 100);
+				const label = cleanCandidateText(node.label, 160);
+				return key && label
+					? [{ key, label, type: cleanCandidateText(node.type, 60) || undefined }]
+					: [];
+			});
+			const keys = new Set(nodes.map((node) => node.key));
+			const edges = candidate.edges.slice(0, 200).flatMap((edge) => {
+				if (!isRecord(edge)) return [];
+				const sourceKey = cleanCandidateText(edge.sourceKey, 100);
+				const targetKey = cleanCandidateText(edge.targetKey, 100);
+				if (!keys.has(sourceKey) || !keys.has(targetKey)) return [];
+				return [{ sourceKey, targetKey, label: cleanCandidateText(edge.label, 200) || undefined }];
+			});
+			if (nodes.length === 0) return [];
+			const existingDiagramId =
+				typeof candidate.existingDiagramId === "string" &&
+				existingIds.has(candidate.existingDiagramId) &&
+				candidate.existingDiagramId !== "workspace-knowledge-map"
+					? candidate.existingDiagramId
+					: undefined;
+			return [{ name, type, existingDiagramId, mermaidSource, nodes, edges }];
 		});
-		const keys = new Set(nodes.map((node) => node.key));
-		const edges = candidate.edges.slice(0, 200).flatMap((edge) => {
-			if (!isRecord(edge)) return [];
-			const sourceKey = cleanCandidateText(edge.sourceKey, 100);
-			const targetKey = cleanCandidateText(edge.targetKey, 100);
-			if (!keys.has(sourceKey) || !keys.has(targetKey)) return [];
-			return [{ sourceKey, targetKey, label: cleanCandidateText(edge.label, 200) || undefined }];
-		});
-		if (nodes.length === 0) return [];
-		const existingDiagramId = typeof candidate.existingDiagramId === "string" && existingIds.has(candidate.existingDiagramId) && candidate.existingDiagramId !== "workspace-knowledge-map"
-			? candidate.existingDiagramId
-			: undefined;
-		return [{ name, type, existingDiagramId, mermaidSource, nodes, edges }];
-	});
 	const parsedSources = new Set(parsed.map((candidate) => candidate.mermaidSource.trim()));
 	return [
 		...parsed,
@@ -979,7 +1142,9 @@ function parseDiagramCandidates(value: unknown, request: KnowledgeExtractionRequ
 	];
 }
 
-export function extractMermaidDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+export function extractMermaidDiagramCandidates(
+	request: KnowledgeExtractionRequest,
+): KnowledgeDiagramCandidate[] {
 	const matches = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)];
 	return matches.flatMap((match, index) => {
 		const mermaidSource = match[1].trim();
@@ -987,38 +1152,49 @@ export function extractMermaidDiagramCandidates(request: KnowledgeExtractionRequ
 		const parsed = parseMermaidStructure(mermaidSource);
 		if (parsed.nodes.length === 0) return [];
 		const heading = nearestMarkdownHeading(request.answer, match.index ?? 0);
-		return [{
-			name: heading || `Diagram ${index + 1}`,
-			type: parsed.type,
-			mermaidSource,
-			nodes: parsed.nodes,
-			edges: parsed.edges,
-		}];
+		return [
+			{
+				name: heading || `Diagram ${index + 1}`,
+				type: parsed.type,
+				mermaidSource,
+				nodes: parsed.nodes,
+				edges: parsed.edges,
+			},
+		];
 	});
 }
 
-export function extractArchifyDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+export function extractArchifyDiagramCandidates(
+	request: KnowledgeExtractionRequest,
+): KnowledgeDiagramCandidate[] {
 	const matches = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)];
 	return matches.flatMap((match, index): KnowledgeDiagramCandidate[] => {
 		const archifySource = match[1].trim();
 		try {
 			const parsed = parseArchifySource(archifySource);
-			return [{
-				name: nearestMarkdownHeading(request.answer, match.index ?? 0) || parsed.title || `Interactive diagram ${index + 1}`,
-				type: parsed.type,
-				mermaidSource: archifyToMermaid(archifySource),
-				archifySource,
-				archifyType: parsed.type,
-				nodes: parsed.nodes,
-				edges: parsed.edges,
-			}];
+			return [
+				{
+					name:
+						nearestMarkdownHeading(request.answer, match.index ?? 0) ||
+						parsed.title ||
+						`Interactive diagram ${index + 1}`,
+					type: parsed.type,
+					mermaidSource: archifyToMermaid(archifySource),
+					archifySource,
+					archifyType: parsed.type,
+					nodes: parsed.nodes,
+					edges: parsed.edges,
+				},
+			];
 		} catch {
 			return [];
 		}
 	});
 }
 
-function extractDiagramCandidates(request: KnowledgeExtractionRequest): KnowledgeDiagramCandidate[] {
+function extractDiagramCandidates(
+	request: KnowledgeExtractionRequest,
+): KnowledgeDiagramCandidate[] {
 	return [...extractMermaidDiagramCandidates(request), ...extractArchifyDiagramCandidates(request)];
 }
 
@@ -1026,8 +1202,14 @@ function stripDiagramCode(answer: string): string {
 	return answer.replace(/```(?:mermaid|archify)\s*\r?\n[\s\S]*?```/gi, "[diagram omitted]");
 }
 
-function parseMermaidStructure(source: string): Pick<KnowledgeDiagramCandidate, "type" | "nodes" | "edges"> {
-	const firstLine = source.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !line.startsWith("%%")) ?? "";
+function parseMermaidStructure(
+	source: string,
+): Pick<KnowledgeDiagramCandidate, "type" | "nodes" | "edges"> {
+	const firstLine =
+		source
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.find((line) => line && !line.startsWith("%%")) ?? "";
 	const type: KnowledgeDiagramCandidate["type"] = /^sequenceDiagram\b/i.test(firstLine)
 		? "sequence"
 		: /^(?:classDiagram|erDiagram)\b/i.test(firstLine)
@@ -1045,11 +1227,17 @@ function parseMermaidStructure(source: string): Pick<KnowledgeDiagramCandidate, 
 			labels.set(participant[1], cleanMermaidLabel(participant[2] ?? participant[1]));
 			continue;
 		}
-		const sequenceEdge = line.match(/^([\w.-]+)\s*(?:--?>>?|--?x|--?\)|-\)|x--?>|\)--)\s*([\w.-]+)\s*:\s*(.+)$/);
+		const sequenceEdge = line.match(
+			/^([\w.-]+)\s*(?:--?>>?|--?x|--?\)|-\)|x--?>|\)--)\s*([\w.-]+)\s*:\s*(.+)$/,
+		);
 		if (sequenceEdge) {
 			labels.set(sequenceEdge[1], labels.get(sequenceEdge[1]) ?? sequenceEdge[1]);
 			labels.set(sequenceEdge[2], labels.get(sequenceEdge[2]) ?? sequenceEdge[2]);
-			edgeCandidates.push({ sourceKey: sequenceEdge[1], targetKey: sequenceEdge[2], label: cleanMermaidLabel(sequenceEdge[3]) });
+			edgeCandidates.push({
+				sourceKey: sequenceEdge[1],
+				targetKey: sequenceEdge[2],
+				label: cleanMermaidLabel(sequenceEdge[3]),
+			});
 			continue;
 		}
 		let normalized = line.replace(
@@ -1060,18 +1248,27 @@ function parseMermaidStructure(source: string): Pick<KnowledgeDiagramCandidate, 
 			},
 		);
 		normalized = normalized.replace(/\|([^|]+)\|/g, "|$1|");
-		const graphEdge = normalized.match(/([A-Za-z_][\w.-]*)\s*(?:-->|---|-.->|==>|--x|--o|o--|x--)\s*(?:\|([^|]+)\|\s*)?([A-Za-z_][\w.-]*)/);
+		const graphEdge = normalized.match(
+			/([A-Za-z_][\w.-]*)\s*(?:-->|---|-.->|==>|--x|--o|o--|x--)\s*(?:\|([^|]+)\|\s*)?([A-Za-z_][\w.-]*)/,
+		);
 		if (graphEdge) {
 			labels.set(graphEdge[1], labels.get(graphEdge[1]) ?? graphEdge[1]);
 			labels.set(graphEdge[3], labels.get(graphEdge[3]) ?? graphEdge[3]);
-			edgeCandidates.push({ sourceKey: graphEdge[1], targetKey: graphEdge[3], label: cleanMermaidLabel(graphEdge[2] ?? "") || undefined });
+			edgeCandidates.push({
+				sourceKey: graphEdge[1],
+				targetKey: graphEdge[3],
+				label: cleanMermaidLabel(graphEdge[2] ?? "") || undefined,
+			});
 		}
 		const classDeclaration = line.match(/^class\s+([A-Za-z_][\w.-]*)/i);
-		if (classDeclaration) labels.set(classDeclaration[1], labels.get(classDeclaration[1]) ?? classDeclaration[1]);
+		if (classDeclaration)
+			labels.set(classDeclaration[1], labels.get(classDeclaration[1]) ?? classDeclaration[1]);
 	}
 	const nodes = [...labels].slice(0, 100).map(([key, label]) => ({ key, label }));
 	const keys = new Set(nodes.map((node) => node.key));
-	const edges = edgeCandidates.filter((edge) => keys.has(edge.sourceKey) && keys.has(edge.targetKey)).slice(0, 200);
+	const edges = edgeCandidates
+		.filter((edge) => keys.has(edge.sourceKey) && keys.has(edge.targetKey))
+		.slice(0, 200);
 	return { type, nodes, edges };
 }
 
@@ -1095,7 +1292,9 @@ function cleanCandidateText(value: unknown, limit: number): string {
 
 function isCopiedPassage(value: string, answer: string): boolean {
 	const normalized = value.toLocaleLowerCase().replace(/\s+/g, " ").trim();
-	return normalized.length >= 30 && answer.toLocaleLowerCase().replace(/\s+/g, " ").includes(normalized);
+	return (
+		normalized.length >= 30 && answer.toLocaleLowerCase().replace(/\s+/g, " ").includes(normalized)
+	);
 }
 
 function sanitizeForRenderer(value: unknown): unknown {
@@ -1103,7 +1302,9 @@ function sanitizeForRenderer(value: unknown): unknown {
 		JSON.stringify(value, (key, nestedValue: unknown) => {
 			const lowerKey = key.toLowerCase();
 			if (
-				/^(?:token|access_token|refresh_token|id_token|apikey|api_key|authorization|password|secret|credential)$/.test(lowerKey)
+				/^(?:token|access_token|refresh_token|id_token|apikey|api_key|authorization|password|secret|credential)$/.test(
+					lowerKey,
+				)
 			) {
 				return "[redacted]";
 			}
@@ -1115,20 +1316,28 @@ function sanitizeForRenderer(value: unknown): unknown {
 	);
 }
 
-function isModelRequestSnapshot(value: unknown): value is AgentModelRequestSnapshot & { frontendTurnId: string } {
-	if (!isRecord(value) || !isRecord(value.context) || !Array.isArray(value.context.messages)) return false;
-	return typeof value.id === "string"
-		&& typeof value.sequence === "number"
-		&& Number.isFinite(value.sequence)
-		&& typeof value.timestamp === "string"
-		&& typeof value.model === "string"
-		&& typeof value.provider === "string"
-		&& typeof value.api === "string"
-		&& typeof value.thinking === "string"
-		&& typeof value.frontendTurnId === "string";
+function isModelRequestSnapshot(
+	value: unknown,
+): value is AgentModelRequestSnapshot & { frontendTurnId: string } {
+	if (!isRecord(value) || !isRecord(value.context) || !Array.isArray(value.context.messages))
+		return false;
+	return (
+		typeof value.id === "string" &&
+		typeof value.sequence === "number" &&
+		Number.isFinite(value.sequence) &&
+		typeof value.timestamp === "string" &&
+		typeof value.model === "string" &&
+		typeof value.provider === "string" &&
+		typeof value.api === "string" &&
+		typeof value.thinking === "string" &&
+		typeof value.frontendTurnId === "string"
+	);
 }
 
-async function writeRequestDump(dumpPath: string, snapshot: AgentModelRequestSnapshot): Promise<void> {
+async function writeRequestDump(
+	dumpPath: string,
+	snapshot: AgentModelRequestSnapshot,
+): Promise<void> {
 	try {
 		await mkdir(path.dirname(dumpPath), { recursive: true });
 		await writeFile(dumpPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");

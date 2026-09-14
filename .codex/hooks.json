@@ -1,0 +1,30 @@
+{
+  "description": "Format changed Rhyza source files with the project's pinned Prettier.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/format-code.mjs --hook",
+            "timeout": 60,
+            "statusMessage": "Formatting changed Rhyza source files"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/format-code.mjs --hook",
+            "timeout": 60,
+            "statusMessage": "Checking Rhyza source formatting before finishing"
+          }
+        ]
+      }
+    ]
+  }
+}

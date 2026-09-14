@@ -13,7 +13,9 @@ import { extractToolOutput, toolResultHasWarning } from "../utils/toolExecution"
 /** Owns the bridge-to-turn projection so chat surfaces do not duplicate stream semantics. */
 export function useAgentEventStream() {
 	const streamingTurns = useRef(new Map<string, string>());
-	const pendingText = useRef(new Map<string, { content: string; reasoning: string; eventCount: number }>());
+	const pendingText = useRef(
+		new Map<string, { content: string; reasoning: string; eventCount: number }>(),
+	);
 	const flushTimer = useRef<number | null>(null);
 	const flushPendingText = useCallback(() => {
 		if (flushTimer.current !== null) window.clearTimeout(flushTimer.current);
@@ -26,20 +28,29 @@ export function useAgentEventStream() {
 			if (!current) continue;
 			store.updateTurn(turnId, {
 				...(pending.content ? { content: `${current.content}${pending.content}` } : {}),
-				...(pending.reasoning ? { reasoning: `${current.reasoning ?? ""}${pending.reasoning}` } : {}),
+				...(pending.reasoning
+					? { reasoning: `${current.reasoning ?? ""}${pending.reasoning}` }
+					: {}),
 			});
 			eventCount += pending.eventCount;
 		}
 		pendingText.current.clear();
 		if (eventCount) recordPerformanceTiming("stream-batch-commit", performance.now() - startedAt);
 	}, []);
-	const queueText = useCallback((turnId: string, field: "content" | "reasoning", text: string) => {
-		const pending = pendingText.current.get(turnId) ?? { content: "", reasoning: "", eventCount: 0 };
-		pending[field] += text;
-		pending.eventCount += 1;
-		pendingText.current.set(turnId, pending);
-		if (flushTimer.current === null) flushTimer.current = window.setTimeout(flushPendingText, 75);
-	}, [flushPendingText]);
+	const queueText = useCallback(
+		(turnId: string, field: "content" | "reasoning", text: string) => {
+			const pending = pendingText.current.get(turnId) ?? {
+				content: "",
+				reasoning: "",
+				eventCount: 0,
+			};
+			pending[field] += text;
+			pending.eventCount += 1;
+			pendingText.current.set(turnId, pending);
+			if (flushTimer.current === null) flushTimer.current = window.setTimeout(flushPendingText, 75);
+		},
+		[flushPendingText],
+	);
 
 	useEffect(() => {
 		const bridge = getKnowbranchBridge();
@@ -47,15 +58,23 @@ export function useAgentEventStream() {
 		return bridge.onAgentEvent((event) => {
 			if (!event.frontendSessionId) return;
 			const state = useAppStore.getState();
-			const turnId = streamingTurns.current.get(event.frontendSessionId)
-				?? [...state.turns].reverse().find((turn) =>
-					turn.sessionId === event.frontendSessionId
-					&& turn.role === "assistant"
-					&& isTurnActive(turn),
-				)?.id;
+			const turnId =
+				streamingTurns.current.get(event.frontendSessionId) ??
+				[...state.turns]
+					.reverse()
+					.find(
+						(turn) =>
+							turn.sessionId === event.frontendSessionId &&
+							turn.role === "assistant" &&
+							isTurnActive(turn),
+					)?.id;
 			if (!turnId) return;
 			if (event.message && event.type === "message_update") {
-				queueText(turnId, event.streamKind === "reasoning" ? "reasoning" : "content", event.message);
+				queueText(
+					turnId,
+					event.streamKind === "reasoning" ? "reasoning" : "content",
+					event.message,
+				);
 				return;
 			}
 			flushPendingText();
@@ -81,34 +100,52 @@ function applyAgentEvent(turnId: string, event: AgentBridgeEvent): void {
 	if (!current) return;
 	if (event.type === "model_request" && event.modelRequest) {
 		store.updateTurn(turnId, {
-			modelRequests: [...(current.modelRequests ?? []).filter((request) => request.id !== event.modelRequest!.id), event.modelRequest],
+			cacheRequest: undefined,
+			modelRequests: [
+				...(current.modelRequests ?? []).filter((request) => request.id !== event.modelRequest!.id),
+				event.modelRequest,
+			],
 		});
 		return;
 	}
 	if (event.type === "wire_request" && event.requestId) {
 		store.updateTurn(turnId, {
-			modelRequests: (current.modelRequests ?? []).map((request) => request.id === event.requestId
-				? { ...request, wirePayload: event.wirePayload }
-				: request),
+			modelRequests: (current.modelRequests ?? []).map((request) =>
+				request.id === event.requestId ? { ...request, wirePayload: event.wirePayload } : request,
+			),
 		});
 		return;
 	}
 	if (event.type === "message_end" && event.usage) {
+		const request = current.modelRequests?.find((item) => item.id === event.requestId);
 		store.updateTurn(turnId, {
+			cacheRequest:
+				request && event.cache
+					? {
+							model: request.model,
+							timestamp: request.timestamp,
+							usage: event.usage,
+							cache: event.cache,
+						}
+					: undefined,
 			usage: addUsage(current.usage ?? emptyUsage(), event.usage),
-			modelRequests: (current.modelRequests ?? []).map((request) => request.id === event.requestId
-				? { ...request, usage: event.usage }
-				: request),
+			modelRequests: (current.modelRequests ?? []).map((request) =>
+				request.id === event.requestId
+					? { ...request, usage: event.usage, cache: event.cache }
+					: request,
+			),
 		});
 		return;
 	}
 	if (event.message && event.type === "message_update") {
-		const field: "reasoning" | "content" = event.streamKind === "reasoning" ? "reasoning" : "content";
+		const field: "reasoning" | "content" =
+			event.streamKind === "reasoning" ? "reasoning" : "content";
 		store.updateTurn(turnId, { [field]: `${current[field] ?? ""}${event.message}` });
 		return;
 	}
 	if (event.type === "tool_execution_start" && isRecord(event.payload)) {
-		const toolCallId = typeof event.payload.toolCallId === "string" ? event.payload.toolCallId : crypto.randomUUID();
+		const toolCallId =
+			typeof event.payload.toolCallId === "string" ? event.payload.toolCallId : crypto.randomUUID();
 		const toolName = typeof event.payload.toolName === "string" ? event.payload.toolName : "tool";
 		const tool = {
 			id: toolCallId,
@@ -117,7 +154,9 @@ function applyAgentEvent(turnId: string, event: AgentBridgeEvent): void {
 			status: "running" as const,
 			startedAt: new Date().toISOString(),
 		};
-		store.updateTurn(turnId, { tools: [...(current.tools ?? []).filter((item) => item.id !== toolCallId), tool] });
+		store.updateTurn(turnId, {
+			tools: [...(current.tools ?? []).filter((item) => item.id !== toolCallId), tool],
+		});
 		return;
 	}
 	if (event.type === "tool_execution_end" && isRecord(event.payload)) {
@@ -127,12 +166,20 @@ function applyAgentEvent(turnId: string, event: AgentBridgeEvent): void {
 		const warning = !isError && toolResultHasWarning(event.payload.result, output);
 		const completedAt = new Date();
 		store.updateTurn(turnId, {
-			tools: (current.tools ?? []).map((tool) => tool.id === toolCallId ? completeTool(tool, completedAt, isError, output, warning) : tool),
+			tools: (current.tools ?? []).map((tool) =>
+				tool.id === toolCallId ? completeTool(tool, completedAt, isError, output, warning) : tool,
+			),
 		});
 	}
 }
 
-function completeTool(tool: NonNullable<Turn["tools"]>[number], completedAt: Date, isError: boolean, output: string | undefined, warning: boolean): NonNullable<Turn["tools"]>[number] {
+function completeTool(
+	tool: NonNullable<Turn["tools"]>[number],
+	completedAt: Date,
+	isError: boolean,
+	output: string | undefined,
+	warning: boolean,
+): NonNullable<Turn["tools"]>[number] {
 	return {
 		...tool,
 		status: isError ? "error" : "complete",

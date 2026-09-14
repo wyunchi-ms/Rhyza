@@ -1,0 +1,16 @@
+.git/
+.codex/
+.agents/
+.sisyphus/
+.sisphus/
+.opencode/
+node_modules/
+dist/
+dist-electron/
+build/
+coverage/
+resources/skills/
+**/package-lock.json
+**/*sample.json
+**/*.min.js
+**/*.min.css

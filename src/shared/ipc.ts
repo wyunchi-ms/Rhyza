@@ -35,8 +35,7 @@ export const ipcChannels = {
 	authEvent: "knowbranch:auth-event",
 } as const;
 
-export type KnowbranchIpcChannel =
-	(typeof ipcChannels)[keyof typeof ipcChannels];
+export type KnowbranchIpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
 
 export type ProviderId = "github-copilot";
 
@@ -95,8 +94,12 @@ export interface PiPluginInfo {
 	installedPath?: string;
 }
 
-export interface PiPluginInstallRequest { source: string }
-export interface PiPluginRemoveRequest { source: string }
+export interface PiPluginInstallRequest {
+	source: string;
+}
+export interface PiPluginRemoveRequest {
+	source: string;
+}
 export interface PiPluginMutationResponse {
 	ok: true;
 	plugins: PiPluginInfo[];
@@ -118,13 +121,36 @@ export interface SourceInfo {
 	error?: string;
 }
 
-export interface SourceRefreshRequest { id: string }
-export interface SourceArchiveRequest { id: string }
-export interface SourceSearchRequest { query: string; sourceId?: string; limit?: number }
-export interface SourceSearchHit { sourceId: string; path: string; line: number; preview: string }
-export interface WorkspaceDiffRequest { frontendSessionId: string }
-export interface WorkspaceDiffResponse { path: string; diff: string; status: string; isolated: boolean }
-export interface WorkspaceExportPatchResponse { canceled: boolean; path?: string }
+export interface SourceRefreshRequest {
+	id: string;
+}
+export interface SourceArchiveRequest {
+	id: string;
+}
+export interface SourceSearchRequest {
+	query: string;
+	sourceId?: string;
+	limit?: number;
+}
+export interface SourceSearchHit {
+	sourceId: string;
+	path: string;
+	line: number;
+	preview: string;
+}
+export interface WorkspaceDiffRequest {
+	frontendSessionId: string;
+}
+export interface WorkspaceDiffResponse {
+	path: string;
+	diff: string;
+	status: string;
+	isolated: boolean;
+}
+export interface WorkspaceExportPatchResponse {
+	canceled: boolean;
+	path?: string;
+}
 
 export interface AgentPromptRequest {
 	frontendSessionId: string;
@@ -190,6 +216,8 @@ export interface AgentUsage {
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
+	/** Per-request subset of cacheWrite written with one-hour retention, when reported. */
+	cacheWrite1h?: number;
 	cost: number;
 }
 
@@ -215,7 +243,16 @@ export interface KnowledgeRelationCandidate {
 
 export interface KnowledgeDiagramCandidate {
 	name: string;
-	type: "architecture" | "structure" | "flowchart" | "sequence" | "swimlane" | "dependency" | "workflow" | "dataflow" | "lifecycle";
+	type:
+		| "architecture"
+		| "structure"
+		| "flowchart"
+		| "sequence"
+		| "swimlane"
+		| "dependency"
+		| "workflow"
+		| "dataflow"
+		| "lifecycle";
 	existingDiagramId?: string;
 	mermaidSource: string;
 	archifySource?: string;
@@ -227,7 +264,16 @@ export interface KnowledgeDiagramCandidate {
 export interface KnowledgeExtractionRequest {
 	question: string;
 	answer: string;
-	existingEntities: Array<{ id: string; name: string; aliases: string[]; type: string; summary: string; content: string; sourceScope?: "workspace" | "general" | "mixed"; version: number }>;
+	existingEntities: Array<{
+		id: string;
+		name: string;
+		aliases: string[];
+		type: string;
+		summary: string;
+		content: string;
+		sourceScope?: "workspace" | "general" | "mixed";
+		version: number;
+	}>;
 	existingDiagrams: Array<{ id: string; name: string; type: string; nodeLabels: string[] }>;
 	model?: { providerId: ProviderId; modelId: string };
 }
@@ -240,7 +286,9 @@ export interface KnowledgeExtractionResponse {
 	usage?: AgentUsage;
 }
 
-export interface ArchifyRenderRequest { source: string }
+export interface ArchifyRenderRequest {
+	source: string;
+}
 export interface ArchifyRenderResponse {
 	ok: boolean;
 	html?: string;
@@ -249,8 +297,13 @@ export interface ArchifyRenderResponse {
 	fallbackMermaid?: string;
 }
 
-export interface OpenExternalRequest { url: string }
-export interface AppStateSaveRequest { value: string; workspacePath: string }
+export interface OpenExternalRequest {
+	url: string;
+}
+export interface AppStateSaveRequest {
+	value: string;
+	workspacePath: string;
+}
 export interface DiagnosticReport {
 	timestamp: string;
 	route: string;
@@ -265,8 +318,28 @@ export interface DiagnosticReport {
 	longTasks: { count: number; totalMs: number; maxMs: number };
 	heartbeat: { delayedCount: number; totalDelayMs: number; maxDelayMs: number };
 	regionStalls: Record<string, number>;
-	timings?: Record<string, { count: number; totalMs: number; maxMs: number; totalBytes?: number; maxBytes?: number }>;
+	timings?: Record<
+		string,
+		{ count: number; totalMs: number; maxMs: number; totalBytes?: number; maxBytes?: number }
+	>;
 }
+
+/** Actual cache configuration reported by a provider, not a model-based default. */
+export interface AgentCacheEvidence {
+	ttl: string;
+	ttlMs: number;
+	mode?: "implicit" | "explicit";
+	semantics: "minimum";
+	source: "response";
+	/** Provider creation time; fall back to the recorded request start if absent. */
+	startedAt?: string;
+}
+
+/** Small per-turn record retained when full request telemetry is evicted from app state. */
+export type AgentCacheRequest = Pick<
+	AgentModelRequestSnapshot,
+	"model" | "timestamp" | "usage" | "cache"
+>;
 
 /** A provider-neutral context snapshot plus the final provider payload for one LLM call. */
 export interface AgentModelRequestSnapshot {
@@ -287,10 +360,15 @@ export interface AgentModelRequestSnapshot {
 	};
 	wirePayload?: unknown;
 	usage?: AgentUsage;
+	cache?: AgentCacheEvidence;
 }
 
-export interface ModelRequestHistoryRequest { frontendSessionId: string }
-export interface ModelRequestHistoryResponse { turns: Record<string, AgentModelRequestSnapshot[]> }
+export interface ModelRequestHistoryRequest {
+	frontendSessionId: string;
+}
+export interface ModelRequestHistoryResponse {
+	turns: Record<string, AgentModelRequestSnapshot[]>;
+}
 
 export interface WorkspaceTodoNode {
 	id: string;
@@ -305,7 +383,9 @@ export interface WorkspaceTodoFile {
 	total: number;
 	nodes: WorkspaceTodoNode[];
 }
-export interface WorkspaceTodosRequest { frontendSessionId?: string }
+export interface WorkspaceTodosRequest {
+	frontendSessionId?: string;
+}
 export interface WorkspaceTodosResponse {
 	workspacePath: string;
 	completed: number;
@@ -342,7 +422,7 @@ export type AuthBridgeEvent =
 			verificationUri: string;
 			intervalSeconds?: number;
 			expiresInSeconds?: number;
-		}
+	  }
 	| { type: "progress"; message: string };
 
 export interface AgentBridgeEvent {
@@ -353,6 +433,7 @@ export interface AgentBridgeEvent {
 	streamKind?: "text" | "reasoning";
 	payload?: unknown;
 	usage?: AgentUsage;
+	cache?: AgentCacheEvidence;
 	requestId?: string;
 	modelRequest?: AgentModelRequestSnapshot;
 	wirePayload?: unknown;
@@ -394,9 +475,7 @@ export interface KnowbranchBridge {
 
 const providerIds = new Set<ProviderId>(["github-copilot"]);
 
-export function validateProviderStatusRequest(
-	value: unknown,
-): ProviderStatusRequest {
+export function validateProviderStatusRequest(value: unknown): ProviderStatusRequest {
 	if (!isRecord(value) || !providerIds.has(value.providerId as ProviderId)) {
 		throw new Error("Invalid provider status request.");
 	}
@@ -414,9 +493,10 @@ export function validatePiPluginSource(value: unknown): { source: string } {
 	if (!source || source.length > 2_048 || /[\u0000-\u001f\u007f]/.test(source)) {
 		throw new Error("Invalid Pi package source.");
 	}
-	const supported = /^(npm:|git:|https?:\/\/|ssh:\/\/|git:\/\/)/i.test(source)
-		|| /^[a-zA-Z]:[\\/]/.test(source)
-		|| source.startsWith("/");
+	const supported =
+		/^(npm:|git:|https?:\/\/|ssh:\/\/|git:\/\/)/i.test(source) ||
+		/^[a-zA-Z]:[\\/]/.test(source) ||
+		source.startsWith("/");
 	if (!supported) {
 		throw new Error("Use an npm:, git:, HTTPS, SSH, or absolute local path source.");
 	}
@@ -448,10 +528,7 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 	if (typeof value.prompt !== "string" || (value.prompt.trim() === "" && images.length === 0)) {
 		throw new Error("A prompt is required.");
 	}
-	if (
-		typeof value.frontendSessionId !== "string" ||
-		value.frontendSessionId.trim() === ""
-	) {
+	if (typeof value.frontendSessionId !== "string" || value.frontendSessionId.trim() === "") {
 		throw new Error("A frontend session id is required.");
 	}
 	if (!Array.isArray(value.transcript)) {
@@ -501,7 +578,11 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 }
 
 export function validateModelRequestHistoryRequest(value: unknown): ModelRequestHistoryRequest {
-	if (!isRecord(value) || typeof value.frontendSessionId !== "string" || !value.frontendSessionId.trim()) {
+	if (
+		!isRecord(value) ||
+		typeof value.frontendSessionId !== "string" ||
+		!value.frontendSessionId.trim()
+	) {
 		throw new Error("A frontend session id is required for model request history.");
 	}
 	return { frontendSessionId: value.frontendSessionId.slice(0, 180) };
@@ -524,7 +605,12 @@ export function validateArchifyRenderRequest(value: unknown): ArchifyRenderReque
 }
 
 export function validateAppStateSaveRequest(value: unknown): AppStateSaveRequest {
-	if (!isRecord(value) || typeof value.value !== "string" || typeof value.workspacePath !== "string" || !value.workspacePath.trim()) {
+	if (
+		!isRecord(value) ||
+		typeof value.value !== "string" ||
+		typeof value.workspacePath !== "string" ||
+		!value.workspacePath.trim()
+	) {
 		throw new Error("Invalid app state payload.");
 	}
 	return { value: value.value, workspacePath: value.workspacePath };
@@ -547,35 +633,65 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 		question: value.question.slice(0, 8_000),
 		answer: value.answer.slice(0, 100_000),
 		existingEntities: value.existingEntities.slice(0, 200).flatMap((entity) =>
-			isRecord(entity) && typeof entity.id === "string" && typeof entity.name === "string" && typeof entity.summary === "string"
-				? [{
-					id: entity.id.slice(0, 160),
-					name: entity.name.slice(0, 120),
-					aliases: Array.isArray(entity.aliases) ? entity.aliases.filter((alias): alias is string => typeof alias === "string").slice(0, 20) : [],
-					type: typeof entity.type === "string" ? entity.type.slice(0, 60) : "Concept",
-					summary: entity.summary.slice(0, 500),
-					content: typeof entity.content === "string" ? entity.content.slice(0, 2_000) : "",
-					sourceScope: entity.sourceScope === "workspace" || entity.sourceScope === "general" || entity.sourceScope === "mixed" ? entity.sourceScope : undefined,
-					version: typeof entity.version === "number" ? entity.version : 1,
-				}]
+			isRecord(entity) &&
+			typeof entity.id === "string" &&
+			typeof entity.name === "string" &&
+			typeof entity.summary === "string"
+				? [
+						{
+							id: entity.id.slice(0, 160),
+							name: entity.name.slice(0, 120),
+							aliases: Array.isArray(entity.aliases)
+								? entity.aliases
+										.filter((alias): alias is string => typeof alias === "string")
+										.slice(0, 20)
+								: [],
+							type: typeof entity.type === "string" ? entity.type.slice(0, 60) : "Concept",
+							summary: entity.summary.slice(0, 500),
+							content: typeof entity.content === "string" ? entity.content.slice(0, 2_000) : "",
+							sourceScope:
+								entity.sourceScope === "workspace" ||
+								entity.sourceScope === "general" ||
+								entity.sourceScope === "mixed"
+									? entity.sourceScope
+									: undefined,
+							version: typeof entity.version === "number" ? entity.version : 1,
+						},
+					]
 				: [],
 		),
 		existingDiagrams: value.existingDiagrams.slice(0, 100).flatMap((diagram) =>
-			isRecord(diagram) && typeof diagram.id === "string" && typeof diagram.name === "string" && typeof diagram.type === "string" && Array.isArray(diagram.nodeLabels)
-				? [{
-					id: diagram.id.slice(0, 160),
-					name: diagram.name.slice(0, 160),
-					type: diagram.type.slice(0, 60),
-					nodeLabels: diagram.nodeLabels.slice(0, 100).filter((label): label is string => typeof label === "string").map((label) => label.slice(0, 160)),
-				}]
+			isRecord(diagram) &&
+			typeof diagram.id === "string" &&
+			typeof diagram.name === "string" &&
+			typeof diagram.type === "string" &&
+			Array.isArray(diagram.nodeLabels)
+				? [
+						{
+							id: diagram.id.slice(0, 160),
+							name: diagram.name.slice(0, 160),
+							type: diagram.type.slice(0, 60),
+							nodeLabels: diagram.nodeLabels
+								.slice(0, 100)
+								.filter((label): label is string => typeof label === "string")
+								.map((label) => label.slice(0, 160)),
+						},
+					]
 				: [],
 		),
 	};
 	if (value.model !== undefined) {
-		if (!isRecord(value.model) || !providerIds.has(value.model.providerId as ProviderId) || typeof value.model.modelId !== "string") {
+		if (
+			!isRecord(value.model) ||
+			!providerIds.has(value.model.providerId as ProviderId) ||
+			typeof value.model.modelId !== "string"
+		) {
 			throw new Error("Invalid model selection.");
 		}
-		request.model = { providerId: value.model.providerId as ProviderId, modelId: value.model.modelId };
+		request.model = {
+			providerId: value.model.providerId as ProviderId,
+			modelId: value.model.modelId,
+		};
 	}
 	return request;
 }
@@ -588,7 +704,8 @@ export function validateIdRequest(value: unknown): { id: string } {
 }
 
 export function validateSourceSearchRequest(value: unknown): SourceSearchRequest {
-	if (!isRecord(value) || typeof value.query !== "string") throw new Error("A search query is required.");
+	if (!isRecord(value) || typeof value.query !== "string")
+		throw new Error("A search query is required.");
 	return {
 		query: value.query.trim(),
 		sourceId: typeof value.sourceId === "string" ? value.sourceId : undefined,
@@ -598,19 +715,28 @@ export function validateSourceSearchRequest(value: unknown): SourceSearchRequest
 
 export function validateForkDebugDumpRequest(value: unknown): ForkDebugDumpRequest {
 	if (
-		!isRecord(value)
-		|| (value.kind !== "fork" && value.kind !== "selection-append")
-		|| typeof value.timestamp !== "string"
-		|| typeof value.selectedTurnId !== "string"
-		|| !isRecord(value.snapshot)
+		!isRecord(value) ||
+		(value.kind !== "fork" && value.kind !== "selection-append") ||
+		typeof value.timestamp !== "string" ||
+		typeof value.selectedTurnId !== "string" ||
+		!isRecord(value.snapshot)
 	) {
 		throw new Error("Invalid fork debug dump.");
 	}
-	return { kind: value.kind, timestamp: value.timestamp, selectedTurnId: value.selectedTurnId, snapshot: value.snapshot };
+	return {
+		kind: value.kind,
+		timestamp: value.timestamp,
+		selectedTurnId: value.selectedTurnId,
+		snapshot: value.snapshot,
+	};
 }
 
 export function validateWorkspaceDiffRequest(value: unknown): WorkspaceDiffRequest {
-	if (!isRecord(value) || typeof value.frontendSessionId !== "string" || value.frontendSessionId.trim() === "") {
+	if (
+		!isRecord(value) ||
+		typeof value.frontendSessionId !== "string" ||
+		value.frontendSessionId.trim() === ""
+	) {
 		throw new Error("A frontend session id is required.");
 	}
 	return { frontendSessionId: value.frontendSessionId };
@@ -658,14 +784,26 @@ function validateTranscriptTurn(value: unknown): AgentTranscriptTurn {
 		throw new Error("Invalid transcript turn content.");
 	}
 	const images = validatePromptImages(value.images);
-	return { id: value.id, role: value.role, content: value.content, ...(images.length ? { images } : {}) };
+	return {
+		id: value.id,
+		role: value.role,
+		content: value.content,
+		...(images.length ? { images } : {}),
+	};
 }
 
 function validatePromptImages(value: unknown): AgentPromptImage[] {
 	if (!Array.isArray(value)) return [];
-	const allowedMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+	const allowedMimeTypes = new Set([
+		"image/png",
+		"image/jpeg",
+		"image/gif",
+		"image/webp",
+		"image/bmp",
+	]);
 	return value.slice(0, 4).flatMap((image) => {
-		if (!isRecord(image) || typeof image.data !== "string" || image.data.length > 6_000_000) return [];
+		if (!isRecord(image) || typeof image.data !== "string" || image.data.length > 6_000_000)
+			return [];
 		return typeof image.mimeType === "string" && allowedMimeTypes.has(image.mimeType)
 			? [{ mimeType: image.mimeType as AgentPromptImage["mimeType"], data: image.data }]
 			: [];

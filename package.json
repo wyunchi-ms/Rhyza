@@ -1,92 +1,97 @@
 {
-  "name": "rhyza",
-  "productName": "Rhyza",
-  "version": "1.0.0",
-  "description": "",
-  "main": "dist-electron/electron/main/index.js",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
-    "test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",
-    "electron:compile": "tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",
-    "electron:dev": "npm run electron:compile && run-p dev electron:dev:main",
-    "electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5174 electron dist-electron/electron/main/index.js",
-    "electron:start": "npm run electron:compile && electron dist-electron/electron/main/index.js",
-    "build": "tsc && vite build && npm run electron:compile",
-    "typecheck": "tsc --noEmit",
-    "preview": "vite preview",
-    "smoke:ipc": "tsx scripts/ipc-smoke.ts",
-    "smoke:branch-usage": "tsx scripts/branch-usage-smoke.ts",
-    "smoke:knowledge-reconciliation": "tsx scripts/knowledge-reconciliation-smoke.ts",
-    "smoke:mvp": "tsx scripts/mvp-smoke.ts",
-    "smoke:state-store": "tsx scripts/app-state-store-smoke.ts",
-    "smoke:archify": "tsx scripts/archify-smoke.ts",
-    "diagnostics:analyze": "node scripts/analyze-performance.mjs",
-    "electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
-  },
-  "build": {
-    "files": [
-      "!resources/skills/archify/**"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/skills/archify",
-        "to": "skills/archify"
-      }
-    ]
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/wyunchi-ms/Rhyza.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/wyunchi-ms/Rhyza/issues"
-  },
-  "homepage": "https://github.com/wyunchi-ms/Rhyza#readme",
-  "dependencies": {
-    "@earendil-works/pi-ai": "0.82.1",
-    "@earendil-works/pi-coding-agent": "0.82.1",
-    "@tanstack/react-query": "^5.101.4",
-    "clsx": "^2.1.1",
-    "cross-env": "7.0.3",
-    "dagre": "^0.8.5",
-    "framer-motion": "^13.0.0-alpha.0",
-    "lucide-react": "^1.28.0",
-    "mermaid": "11.16.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-icons": "^5.7.0",
-    "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.18.2",
-    "react18-json-view": "^0.2.10",
-    "reactflow": "^11.11.4",
-    "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.6.0",
-    "typebox": "1.3.7",
-    "zustand": "^5.0.14"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^24.9.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "autoprefixer": "^10.5.4",
-    "electron": "44.0.0-alpha.7",
-    "npm-run-all": "4.1.5",
-    "postcss": "^8.5.25",
-    "tailwindcss": "^4.3.3",
-    "tsx": "4.23.1",
-    "typescript": "^7.0.2",
-    "vite": "^8.2.0-beta.0"
-  },
-  "overrides": {
-    "@earendil-works/pi-agent-core": "0.82.1",
-    "@earendil-works/pi-ai": "0.82.1",
-    "@earendil-works/pi-coding-agent": "0.82.1",
-    "@earendil-works/pi-tui": "0.82.1"
-  }
+	"name": "rhyza",
+	"productName": "Rhyza",
+	"version": "1.0.0",
+	"description": "",
+	"main": "dist-electron/electron/main/index.js",
+	"type": "module",
+	"scripts": {
+		"postinstall": "node scripts/patch-pi-cache-metadata.mjs",
+		"format": "node scripts/format-code.mjs",
+		"format:check": "node scripts/format-code.mjs --check",
+		"test:formatter": "node --test tests/format-code.test.mjs",
+		"dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
+		"test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",
+		"electron:compile": "node scripts/patch-pi-cache-metadata.mjs && tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",
+		"electron:dev": "npm run electron:compile && run-p dev electron:dev:main",
+		"electron:dev:main": "cross-env VITE_DEV_SERVER_URL=http://localhost:5174 electron dist-electron/electron/main/index.js",
+		"electron:start": "npm run electron:compile && electron dist-electron/electron/main/index.js",
+		"build": "tsc && vite build && npm run electron:compile",
+		"typecheck": "tsc --noEmit",
+		"preview": "vite preview",
+		"smoke:ipc": "tsx scripts/ipc-smoke.ts",
+		"smoke:branch-usage": "tsx scripts/branch-usage-smoke.ts",
+		"smoke:knowledge-reconciliation": "tsx scripts/knowledge-reconciliation-smoke.ts",
+		"smoke:mvp": "tsx scripts/mvp-smoke.ts",
+		"smoke:state-store": "tsx scripts/app-state-store-smoke.ts",
+		"smoke:archify": "tsx scripts/archify-smoke.ts",
+		"diagnostics:analyze": "node scripts/analyze-performance.mjs",
+		"electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
+	},
+	"build": {
+		"files": [
+			"!resources/skills/archify/**"
+		],
+		"extraResources": [
+			{
+				"from": "resources/skills/archify",
+				"to": "skills/archify"
+			}
+		]
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/wyunchi-ms/Rhyza.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/wyunchi-ms/Rhyza/issues"
+	},
+	"homepage": "https://github.com/wyunchi-ms/Rhyza#readme",
+	"dependencies": {
+		"@earendil-works/pi-ai": "0.82.1",
+		"@earendil-works/pi-coding-agent": "0.82.1",
+		"@tanstack/react-query": "^5.101.4",
+		"clsx": "^2.1.1",
+		"cross-env": "7.0.3",
+		"dagre": "^0.8.5",
+		"framer-motion": "^13.0.0-alpha.0",
+		"lucide-react": "^1.28.0",
+		"mermaid": "11.16.0",
+		"react": "^19.2.8",
+		"react-dom": "^19.2.8",
+		"react-icons": "^5.7.0",
+		"react-markdown": "^10.1.0",
+		"react-router-dom": "^7.18.2",
+		"react18-json-view": "^0.2.10",
+		"reactflow": "^11.11.4",
+		"remark-gfm": "^4.0.1",
+		"tailwind-merge": "^3.6.0",
+		"typebox": "1.3.7",
+		"zustand": "^5.0.14"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/node": "^24.9.0",
+		"@types/react": "^19.2.17",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.4",
+		"autoprefixer": "^10.5.4",
+		"electron": "44.0.0-alpha.7",
+		"npm-run-all": "4.1.5",
+		"postcss": "^8.5.25",
+		"prettier": "3.9.6",
+		"tailwindcss": "^4.3.3",
+		"tsx": "4.23.1",
+		"typescript": "^7.0.2",
+		"vite": "^8.2.0-beta.0"
+	},
+	"overrides": {
+		"@earendil-works/pi-agent-core": "0.82.1",
+		"@earendil-works/pi-ai": "0.82.1",
+		"@earendil-works/pi-coding-agent": "0.82.1",
+		"@earendil-works/pi-tui": "0.82.1"
+	}
 }

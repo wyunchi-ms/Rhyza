@@ -1,0 +1,76 @@
+.composer-cache-status {
+	margin: 6px auto 0;
+	max-width: 100%;
+	font-size: 11px;
+	color: var(--text-secondary, #64748b);
+}
+
+.composer-cache-status summary {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 5px;
+	cursor: pointer;
+	list-style: none;
+	width: fit-content;
+	margin: auto;
+}
+
+.composer-cache-status summary::-webkit-details-marker {
+	display: none;
+}
+
+.composer-cache-status summary:focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 3px;
+	border-radius: 3px;
+}
+
+.composer-cache-status[data-state="expired"] summary,
+.node-cache-status[data-state="expired"] {
+	color: var(--color-warning, #a16207);
+}
+
+.composer-cache-details {
+	margin-top: 6px;
+	line-height: 1.5;
+	text-align: left;
+}
+
+.composer-cache-details p {
+	margin: 4px 0;
+}
+
+.node-cache-status {
+	position: absolute;
+	top: 12px;
+	right: 11px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	color: #64748b;
+	border-radius: 5px;
+	background: #f1f5f9;
+	cursor: help;
+}
+
+.session-graph-node:has(.node-cache-status) .session-graph-node-main > header {
+	padding-right: 24px;
+}
+
+.node-cache-status:focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 2px;
+}
+
+html[data-theme="dark"] .node-cache-status {
+	background: #293241;
+	color: #aab8cb;
+}
+
+html[data-theme="dark"] .node-cache-status[data-state="expired"],
+html[data-theme="dark"] .composer-cache-status[data-state="expired"] summary {
+	color: #fbbf24;
+}
