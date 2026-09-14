@@ -10,6 +10,7 @@ import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types"
 import { usageTokens } from "../../utils/branchUsage";
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
+import { normalizeMarkdownEmphasis } from "../../utils/markdown";
 import { MermaidDiagram } from "../MermaidDiagram";
 import { ArchifyDiagram } from "../ArchifyDiagram";
 import { isArchifyCodeBlock } from "../../shared/archify";
@@ -225,6 +226,7 @@ function MarkdownContent({ content, compact = false, finalized = true, reference
 	onTextSelection?: (text: string, rect: DOMRect) => void;
 }) {
 	const knowledgeReferences = references ?? emptyKnowledgeReferences;
+	const normalizedContent = useMemo(() => normalizeMarkdownEmphasis(content), [content]);
 	const remarkPlugins = useMemo<NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>>(
 		() => [remarkGfm, [remarkKnowledgeLinks, { references: knowledgeReferences }]],
 		[knowledgeReferences],
@@ -263,7 +265,7 @@ function MarkdownContent({ content, compact = false, finalized = true, reference
 				remarkPlugins={remarkPlugins}
 				components={components}
 			>
-				{content}
+				{normalizedContent}
 			</ReactMarkdown>
 		</div>
 	);

@@ -77,11 +77,7 @@ export class ArchifyService {
 			try {
 				const inputPath = path.join(workDirectory, "diagram.json");
 				const outputPath = path.join(workDirectory, "diagram.html");
-				const spec = structuredClone(parsed.spec);
-				if (isRecord(spec.meta)) {
-					delete spec.meta.output;
-					spec.meta.visual_preset = "classic";
-				}
+				const spec = prepareArchifySpec(parsed.spec);
 				applyEstimatedComponentWidths(spec);
 				await writeFile(inputPath, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
 				const cliPath = path.join(this.skillRoot, "bin", "archify.mjs");
@@ -193,6 +189,15 @@ export class ArchifyService {
 	}
 }
 
+export function prepareArchifySpec(source: Record<string, unknown>): Record<string, unknown> {
+	const spec = structuredClone(source);
+	if (!isRecord(spec.meta)) return spec;
+	delete spec.meta.output;
+	delete spec.meta.viewBox;
+	spec.meta.visual_preset = "classic";
+	return spec;
+}
+
 function cacheEntryBytes(response: ArchifyRenderResponse): number {
 	return Buffer.byteLength(response.html ?? "", "utf8") + Buffer.byteLength(response.fallbackMermaid ?? "", "utf8");
 }
@@ -301,7 +306,11 @@ function errorSummary(error: string): string {
 async function runArchify(cliPath: string, args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(process.execPath, [cliPath, ...args], {
-			env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+			env: {
+				...process.env,
+				ARCHIFY_SKIP_LAYOUT_VALIDATION: "1",
+				ELECTRON_RUN_AS_NODE: "1",
+			},
 			stdio: ["ignore", "pipe", "pipe"],
 			windowsHide: true,
 		});

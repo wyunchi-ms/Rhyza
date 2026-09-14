@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { esc, renderDefinitions, renderSemanticSigil, textUnits } from '../shared/utils.mjs';
-import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
+import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, shouldValidateLayout, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
 import { throwDiagnosticProblems } from '../shared/diagnostics.mjs';
 import { resolveLegend, renderLegend as renderResolvedLegend } from '../shared/legend.mjs';
 import { availableNodeTextWidth, fittedNodeFontSize, minimumNodeTextWidth } from '../shared/text-fit.mjs';
@@ -187,7 +187,7 @@ function validateWorkflow() {
   if (workflow.cards !== undefined && !Array.isArray(workflow.cards)) {
     problems.push('Workflow "cards" must be an array.');
   }
-  if (problems.length) {
+  if (shouldValidateLayout() && problems.length) {
     throwDiagnosticProblems('Workflow layout validation failed', problems, {
       subject: { diagramType: 'workflow' },
     });
@@ -444,7 +444,7 @@ function validateWorkflow() {
     problems.push(`Legend exceeds viewBox height ${viewBox[1]} — set meta.viewBox[1] to at least ${legendY() + 18}.`);
   }
 
-  if (problems.length) {
+  if (shouldValidateLayout() && problems.length) {
     throwDiagnosticProblems('Workflow layout validation failed', problems, {
       subject: { diagramType: 'workflow' },
     });

@@ -13,6 +13,10 @@ installRendererDiagnosticBoundary();
 
 const outputPathGuards = new Map();
 
+export function shouldValidateLayout() {
+  return process.env.ARCHIFY_SKIP_LAYOUT_VALIDATION !== '1';
+}
+
 // Common CLI head: node render-<type>.mjs [input.json] [output.html]
 // Keep this synchronous because callers also use it to establish the guarded
 // output path before testing a last-moment filesystem alias change.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyEstimatedComponentWidths, applySuggestedComponentWidths, applySuggestedLabelPositions } from "../electron/main/archify-service";
+import { applyEstimatedComponentWidths, applySuggestedComponentWidths, applySuggestedLabelPositions, prepareArchifySpec } from "../electron/main/archify-service";
 import { archifyToMermaid, isArchifyCodeBlock, parseArchifySource } from "../src/shared/archify";
 import { prepareArchifyViewerHtml } from "../src/shared/archify-viewer";
 
@@ -120,6 +120,24 @@ test("estimates readable architecture widths before validation", () => {
 	assert.equal(applyEstimatedComponentWidths(spec), 0);
 });
 
+test("removes authored canvas limits before rendering", () => {
+	const source = {
+		diagram_type: "architecture",
+		meta: {
+			title: "Unbounded layout",
+			output: "fixed.html",
+			viewBox: [800, 600],
+			visual_preset: "editorial",
+		},
+	};
+	const prepared = prepareArchifySpec(source);
+	const meta = prepared.meta as Record<string, unknown>;
+	assert.equal(meta.output, undefined);
+	assert.equal(meta.viewBox, undefined);
+	assert.equal(meta.visual_preset, "classic");
+	assert.deepEqual((source.meta as Record<string, unknown>).viewBox, [800, 600]);
+});
+
 test("adapts Archify HTML for the app-owned inline viewer", () => {
 	const html = '<!doctype html><html lang="en" data-theme="dark" data-preset="editorial"><head></head><body><button id="btn-theme"></button><div class="cards"></div></body></html>';
 	const prepared = prepareArchifyViewerHtml(html, { theme: "light", mode: "inline" });
@@ -131,6 +149,8 @@ test("adapts Archify HTML for the app-owned inline viewer", () => {
 	assert.match(prepared, /\.cards/);
 	assert.match(prepared, /\.pulse-dot/);
 	assert.match(prepared, /MutationObserver/);
+	assert.match(prepared, /getBBox/);
+	assert.match(prepared, /data-rhyza-fitted/);
 	assert.match(prepared, /rhyza:archify-size/);
 	assert.match(prepared, /rhyza:archify-measure/);
 	assert.match(prepared, /root\.scrollHeight/);

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { esc, renderDefinitions, renderSemanticSigil, textUnits } from '../shared/utils.mjs';
-import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
+import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, shouldValidateLayout, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
 import { throwDiagnosticProblems } from '../shared/diagnostics.mjs';
 import { resolveLegend, renderLegend as renderResolvedLegend } from '../shared/legend.mjs';
 import { availableNodeTextWidth, fittedNodeFontSize, minimumNodeTextWidth } from '../shared/text-fit.mjs';
@@ -299,7 +299,7 @@ function validateDataflow() {
     problems.push(`Stages exceed viewBox width — set meta.viewBox[0] to at least ${Math.ceil(lastStageX + layout.stageW / 2 + 24)}.`);
   }
 
-  if (problems.length) {
+  if (shouldValidateLayout() && problems.length) {
     throwDiagnosticProblems('Data-flow layout validation failed', problems, {
       subject: { diagramType: 'dataflow' },
     });

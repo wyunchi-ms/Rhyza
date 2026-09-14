@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { esc, renderDefinitions, renderSemanticSigil, textUnits } from '../shared/utils.mjs';
-import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
+import { animateAttr, focusEdgeAttrs, focusNodeAttrs, focusNodeTitle, loadDiagramWithBrandMarks, shouldValidateLayout, writeDiagram, svgAccessibleText, svgRootAttrs } from '../shared/cli.mjs';
 import { componentBox, boundaryBox, connectionPath } from '../shared/layout-report.mjs';
 import { throwDiagnosticProblems } from '../shared/diagnostics.mjs';
 import { legendFootprint, relationshipLegendObstacles, resolveLegend, renderLegend as renderResolvedLegend } from '../shared/legend.mjs';
@@ -607,7 +607,7 @@ function validateArchitecture() {
     profile: arch.meta?.quality_profile,
   }));
 
-  if (problems.length) {
+  if (shouldValidateLayout() && problems.length) {
     throwDiagnosticProblems('Architecture layout validation failed', problems, {
       subject: { diagramType: 'architecture' },
     });
