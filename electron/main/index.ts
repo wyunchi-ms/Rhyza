@@ -37,6 +37,15 @@ import {
 import { AppStateStore } from "./app-state-store.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const applicationId = "com.rhyza.desktop";
+// Direct script launches resolve app.getAppPath() to dist-electron/electron/main.
+const brandingDirectory = app.isPackaged
+	? path.join(process.resourcesPath, "branding")
+	: path.resolve(currentDirectory, "..", "..", "..", "resources", "branding");
+const applicationIcon = path.join(
+	brandingDirectory,
+	process.platform === "win32" ? "icon.ico" : "icon.png",
+);
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined;
 const isSmoke = process.env.KNOWBRANCH_ELECTRON_SMOKE === "1";
 setDefaultResultOrder("ipv4first");
@@ -49,6 +58,9 @@ const smokeUserDataPath = isSmoke
 	? path.join(app.getPath("temp"), `knowbranch-electron-smoke-${process.pid}`)
 	: undefined;
 app.setName("Rhyza");
+if (process.platform === "win32") {
+	app.setAppUserModelId(applicationId);
+}
 app.setPath("userData", smokeUserDataPath ?? path.join(app.getPath("appData"), "PiGraph"));
 const ownsSingleInstanceLock = isSmoke || app.requestSingleInstanceLock();
 
@@ -97,6 +109,7 @@ if (!ownsSingleInstanceLock) {
 
 async function createWindow(): Promise<void> {
 	mainWindow = new BrowserWindow({
+		icon: applicationIcon,
 		width: 1280,
 		height: 860,
 		minWidth: 760,
@@ -109,11 +122,16 @@ async function createWindow(): Promise<void> {
 			sandbox: true,
 		},
 	});
+	if (process.platform === "win32") {
+		mainWindow.setAppDetails({
+			appId: applicationId,
+			appIconPath: applicationIcon,
+			appIconIndex: 0,
+		});
+	}
 	allowedRendererUrls = new Set([
 		devServerUrl,
-		pathToFileURL(
-			path.join(currentDirectory, "..", "..", "..", "dist", "index.html"),
-		).toString(),
+		pathToFileURL(path.join(currentDirectory, "..", "..", "..", "dist", "index.html")).toString(),
 	]);
 	mainWindow.webContents.on("will-navigate", (event, url) => {
 		if (!isAllowedRendererUrl(url)) {
@@ -125,10 +143,18 @@ async function createWindow(): Promise<void> {
 	);
 
 	mainWindow.once("ready-to-show", () => mainWindow?.show());
-	mainWindow.on("unresponsive", () => { void writeDiagnostic("window-unresponsive", mainProcessSnapshot()); });
-	mainWindow.on("responsive", () => { void writeDiagnostic("window-responsive", mainProcessSnapshot()); });
+	mainWindow.on("unresponsive", () => {
+		void writeDiagnostic("window-unresponsive", mainProcessSnapshot());
+	});
+	mainWindow.on("responsive", () => {
+		void writeDiagnostic("window-responsive", mainProcessSnapshot());
+	});
 	mainWindow.webContents.on("render-process-gone", (_event, details) => {
-		void writeDiagnostic("renderer-process-gone", { ...mainProcessSnapshot(), reason: details.reason, exitCode: details.exitCode });
+		void writeDiagnostic("renderer-process-gone", {
+			...mainProcessSnapshot(),
+			reason: details.reason,
+			exitCode: details.exitCode,
+		});
 	});
 	if (isSmoke) {
 		mainWindow.webContents.once("did-finish-load", () => {
@@ -143,9 +169,7 @@ async function createWindow(): Promise<void> {
 			mainWindow.webContents.openDevTools({ mode: "detach" });
 		}
 	} else {
-		await mainWindow.loadFile(
-			path.join(currentDirectory, "..", "..", "..", "dist", "index.html"),
-		);
+		await mainWindow.loadFile(path.join(currentDirectory, "..", "..", "..", "dist", "index.html"));
 	}
 }
 
@@ -168,7 +192,10 @@ function registerIpcHandlers(): void {
 		withValidSender(event, async () => {
 			const request = validateAppStateSaveRequest(payload);
 			if (process.env.KNOWBRANCH_STATE_DEBUG === "1") {
-				console.log("APP_STATE_SAVE", { workspacePath: request.workspacePath, bytes: request.value.length });
+				console.log("APP_STATE_SAVE", {
+					workspacePath: request.workspacePath,
+					bytes: request.value.length,
+				});
 			}
 			await appStateStore.save(request.workspacePath, request.value);
 			return { ok: true as const };
@@ -214,9 +241,7 @@ function registerIpcHandlers(): void {
 		),
 	);
 	ipcMain.handle(ipcChannels.modelCatalog, async (event, payload) =>
-		withValidSender(event, () =>
-			piService.getModelCatalog(validateModelCatalogRequest(payload)),
-		),
+		withValidSender(event, () => piService.getModelCatalog(validateModelCatalogRequest(payload))),
 	);
 	ipcMain.handle(ipcChannels.pluginList, async (event) =>
 		withValidSender(event, () => piPluginService.list()),
@@ -282,7 +307,9 @@ function registerIpcHandlers(): void {
 	);
 	ipcMain.handle(ipcChannels.workspaceExportPatch, async (event, payload) =>
 		withValidSender(event, async () => {
-			const diff = await piService.getWorkspaceDiff(validateWorkspaceDiffRequest(payload).frontendSessionId);
+			const diff = await piService.getWorkspaceDiff(
+				validateWorkspaceDiffRequest(payload).frontendSessionId,
+			);
 			const selection = await dialog.showSaveDialog(mainWindow!, {
 				title: "Export session patch",
 				defaultPath: "knowbranch-session.patch",
@@ -296,10 +323,11 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.agentPrompt, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateAgentPromptRequest(payload);
-			return timedDiagnostic("agent-prompt", { frontendSessionId: request.frontendSessionId }, async () => piService.promptAgent(
-				request,
-				await settingsStore.requireWorkspacePath(),
-			));
+			return timedDiagnostic(
+				"agent-prompt",
+				{ frontendSessionId: request.frontendSessionId },
+				async () => piService.promptAgent(request, await settingsStore.requireWorkspacePath()),
+			);
 		}),
 	);
 	ipcMain.handle(ipcChannels.modelRequestHistory, async (event, payload) =>
@@ -311,25 +339,26 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.workspaceTodos, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateWorkspaceTodosRequest(payload);
-			return piService.getWorkspaceTodos(request.frontendSessionId, await settingsStore.requireWorkspacePath());
+			return piService.getWorkspaceTodos(
+				request.frontendSessionId,
+				await settingsStore.requireWorkspacePath(),
+			);
 		}),
 	);
 	ipcMain.handle(ipcChannels.generateSummary, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateSummaryRequest(payload);
-			return timedDiagnostic("generate-summary", {}, async () => piService.generateSummary(
-				request,
-				await settingsStore.requireWorkspacePath(),
-			));
+			return timedDiagnostic("generate-summary", {}, async () =>
+				piService.generateSummary(request, await settingsStore.requireWorkspacePath()),
+			);
 		}),
 	);
 	ipcMain.handle(ipcChannels.extractKnowledge, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateKnowledgeExtractionRequest(payload);
-			return timedDiagnostic("extract-knowledge", {}, async () => piService.extractKnowledge(
-				request,
-				await settingsStore.requireWorkspacePath(),
-			));
+			return timedDiagnostic("extract-knowledge", {}, async () =>
+				piService.extractKnowledge(request, await settingsStore.requireWorkspacePath()),
+			);
 		}),
 	);
 	ipcMain.handle(ipcChannels.renderArchify, async (event, payload) =>
@@ -370,7 +399,12 @@ function isAllowedRendererUrl(url: string): boolean {
 }
 
 function safeDebugFilePart(value: string): string {
-	return value.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 100) || "unknown";
+	return (
+		value
+			.replace(/[^a-zA-Z0-9_-]/g, "-")
+			.replace(/-+/g, "-")
+			.slice(0, 100) || "unknown"
+	);
 }
 
 app.whenReady().then(async () => {
@@ -406,10 +440,7 @@ app.whenReady().then(async () => {
 		sourceService,
 		archifyHarness,
 	);
-	piPluginService = new PiPluginService(
-		getAgentDir(),
-		() => settingsStore.getWorkspacePath(),
-	);
+	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
 	registerIpcHandlers();
 	mainLoopDelay.enable();
 	setInterval(() => {
@@ -428,7 +459,8 @@ app.whenReady().then(async () => {
 function validateDiagnosticReport(value: unknown): DiagnosticReport {
 	if (!value || typeof value !== "object") throw new Error("Invalid diagnostic report.");
 	const report = value as DiagnosticReport;
-	if (typeof report.timestamp !== "string" || typeof report.route !== "string") throw new Error("Invalid diagnostic report.");
+	if (typeof report.timestamp !== "string" || typeof report.route !== "string")
+		throw new Error("Invalid diagnostic report.");
 	return JSON.parse(JSON.stringify(report)) as DiagnosticReport;
 }
 
@@ -437,15 +469,23 @@ function validateArchifyParseFailureReport(value: unknown): ArchifyParseFailureR
 	const report = value as Partial<ArchifyParseFailureReport>;
 	if (
 		typeof report.timestamp !== "string" ||
-		typeof report.source !== "string" || report.source.length > 1_000_000 ||
-		typeof report.sourceHash !== "string" || report.sourceHash.length > 64 ||
-		typeof report.sourceBytes !== "number" || !Number.isSafeInteger(report.sourceBytes) || report.sourceBytes < 0 ||
-		typeof report.error !== "string" || report.error.length > 1_000 ||
+		typeof report.source !== "string" ||
+		report.source.length > 1_000_000 ||
+		typeof report.sourceHash !== "string" ||
+		report.sourceHash.length > 64 ||
+		typeof report.sourceBytes !== "number" ||
+		!Number.isSafeInteger(report.sourceBytes) ||
+		report.sourceBytes < 0 ||
+		typeof report.error !== "string" ||
+		report.error.length > 1_000 ||
 		typeof report.sourceContextStart !== "number" ||
-		typeof report.sourceContext !== "string" || report.sourceContext.length > 600
-	) throw new Error("Invalid Archify parse failure report.");
+		typeof report.sourceContext !== "string" ||
+		report.sourceContext.length > 600
+	)
+		throw new Error("Invalid Archify parse failure report.");
 	for (const location of [report.position, report.line, report.column, report.sourceContextStart]) {
-		if (location !== undefined && (!Number.isSafeInteger(location) || location < 0)) throw new Error("Invalid Archify parse failure location.");
+		if (location !== undefined && (!Number.isSafeInteger(location) || location < 0))
+			throw new Error("Invalid Archify parse failure location.");
 	}
 	return JSON.parse(JSON.stringify(report)) as ArchifyParseFailureReport;
 }
@@ -454,7 +494,10 @@ async function writeArchifyParseFailure(report: ArchifyParseFailureReport): Prom
 	await mkdir(archifyErrorsDirectory, { recursive: true });
 	const hash = safeDebugFilePart(report.sourceHash);
 	const existingFiles = await readdir(archifyErrorsDirectory);
-	if (existingFiles.some((name) => name.endsWith(`-${hash}.json`) && !name.endsWith(".source.json"))) return;
+	if (
+		existingFiles.some((name) => name.endsWith(`-${hash}.json`) && !name.endsWith(".source.json"))
+	)
+		return;
 	const receivedAt = new Date();
 	const filenameTimestamp = receivedAt.toISOString().replace(/[:.]/g, "-");
 	const stem = `archify-parse-failure-${filenameTimestamp}-${hash}`;
@@ -467,7 +510,11 @@ async function writeArchifyParseFailure(report: ArchifyParseFailureReport): Prom
 		...metadata,
 	};
 	await writeFile(path.join(archifyErrorsDirectory, sourceFile), source, "utf8");
-	await writeFile(path.join(archifyErrorsDirectory, `${stem}.json`), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+	await writeFile(
+		path.join(archifyErrorsDirectory, `${stem}.json`),
+		`${JSON.stringify(payload, null, 2)}\n`,
+		"utf8",
+	);
 }
 
 function mainProcessSnapshot() {
@@ -487,22 +534,45 @@ function mainProcessSnapshot() {
 function writeDiagnostic(kind: string, payload: object): Promise<void> {
 	const day = new Date().toISOString().slice(0, 10);
 	const filePath = path.join(diagnosticsDirectory, `performance-${day}.jsonl`);
-	diagnosticsWriteQueue = diagnosticsWriteQueue.then(async () => {
-		await mkdir(diagnosticsDirectory, { recursive: true });
-		await appendFile(filePath, `${JSON.stringify({ kind, ...payload })}\n`, "utf8");
-	}).catch((error: unknown) => console.error("DIAGNOSTIC_WRITE_FAILED", error));
+	diagnosticsWriteQueue = diagnosticsWriteQueue
+		.then(async () => {
+			await mkdir(diagnosticsDirectory, { recursive: true });
+			await appendFile(filePath, `${JSON.stringify({ kind, ...payload })}\n`, "utf8");
+		})
+		.catch((error: unknown) => console.error("DIAGNOSTIC_WRITE_FAILED", error));
 	return diagnosticsWriteQueue;
 }
 
-async function timedDiagnostic<T>(operation: string, metadata: object, action: () => Promise<T>): Promise<T> {
+async function timedDiagnostic<T>(
+	operation: string,
+	metadata: object,
+	action: () => Promise<T>,
+): Promise<T> {
 	const startedAt = Date.now();
-	await writeDiagnostic("operation-start", { timestamp: new Date(startedAt).toISOString(), operation, ...metadata });
+	await writeDiagnostic("operation-start", {
+		timestamp: new Date(startedAt).toISOString(),
+		operation,
+		...metadata,
+	});
 	try {
 		const result = await action();
-		await writeDiagnostic("operation-end", { timestamp: new Date().toISOString(), operation, durationMs: Date.now() - startedAt, ok: true, ...metadata });
+		await writeDiagnostic("operation-end", {
+			timestamp: new Date().toISOString(),
+			operation,
+			durationMs: Date.now() - startedAt,
+			ok: true,
+			...metadata,
+		});
 		return result;
 	} catch (error) {
-		await writeDiagnostic("operation-end", { timestamp: new Date().toISOString(), operation, durationMs: Date.now() - startedAt, ok: false, error: error instanceof Error ? error.name : "UnknownError", ...metadata });
+		await writeDiagnostic("operation-end", {
+			timestamp: new Date().toISOString(),
+			operation,
+			durationMs: Date.now() - startedAt,
+			ok: false,
+			error: error instanceof Error ? error.name : "UnknownError",
+			...metadata,
+		});
 		throw error;
 	}
 }
@@ -595,13 +665,22 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 			);
 		}
 		if (!evidence.chatAtEnd) {
-			throw new Error(`Active conversation did not open at its final turn; evidence=${JSON.stringify(evidence)}`);
+			throw new Error(
+				`Active conversation did not open at its final turn; evidence=${JSON.stringify(evidence)}`,
+			);
 		}
 		if (!evidence.branchLoadingVisible) {
-			throw new Error(`Branch loading feedback did not render; evidence=${JSON.stringify(evidence)}`);
+			throw new Error(
+				`Branch loading feedback did not render; evidence=${JSON.stringify(evidence)}`,
+			);
 		}
-		if (evidence.knowledgeReferenceCount > 0 && (!evidence.entityPreviewOpened || !evidence.entityPreviewClosed)) {
-			throw new Error(`Entity preview did not open and close cleanly; evidence=${JSON.stringify(evidence)}`);
+		if (
+			evidence.knowledgeReferenceCount > 0 &&
+			(!evidence.entityPreviewOpened || !evidence.entityPreviewClosed)
+		) {
+			throw new Error(
+				`Entity preview did not open and close cleanly; evidence=${JSON.stringify(evidence)}`,
+			);
 		}
 		console.log(`ELECTRON_SMOKE ${JSON.stringify(evidence)}`);
 		clearSmokeTimeout();

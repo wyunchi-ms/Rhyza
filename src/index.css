@@ -315,9 +315,8 @@ body {
 	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
-	border-radius: 50%;
-	background: #212121;
-	color: #fff;
+	border-radius: 22%;
+	object-fit: contain;
 }
 .brand-mark.large {
 	width: 2.5rem;

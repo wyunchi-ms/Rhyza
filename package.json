@@ -29,10 +29,26 @@
 		"electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
 	},
 	"build": {
+		"appId": "com.rhyza.desktop",
+		"win": {
+			"icon": "resources/branding/icon.ico"
+		},
+		"linux": {
+			"icon": "resources/branding/icon.png"
+		},
 		"files": [
+			"!resources/branding/rhyza-icon-v*.png",
 			"!resources/skills/archify/**"
 		],
 		"extraResources": [
+			{
+				"from": "resources/branding",
+				"to": "branding",
+				"filter": [
+					"icon.png",
+					"icon.ico"
+				]
+			},
 			{
 				"from": "resources/skills/archify",
 				"to": "skills/archify"
