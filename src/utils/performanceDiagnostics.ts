@@ -1,7 +1,11 @@
 import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
 import { isTurnActive } from "./sessionRuntime";
-import { branchSwitchEndEvent, branchSwitchStartEvent, type BranchSwitchDetail } from "./branchSwitch";
+import {
+	branchSwitchEndEvent,
+	branchSwitchStartEvent,
+	type BranchSwitchDetail,
+} from "./branchSwitch";
 import { drainPerformanceTimings, recordPerformanceTiming } from "./performanceMarks";
 
 const sampleIntervalMs = 10_000;
@@ -25,18 +29,21 @@ export function startPerformanceDiagnostics(): () => void {
 	window.addEventListener("pointerdown", rememberRegion, true);
 	window.addEventListener("keydown", rememberRegion, true);
 
-	const observer = typeof PerformanceObserver !== "undefined" && PerformanceObserver.supportedEntryTypes.includes("longtask")
-		? new PerformanceObserver((list) => {
-			for (const entry of list.getEntries()) {
-				const duration = Math.round(entry.duration);
-				longTasks.count += 1;
-				longTasks.totalMs += duration;
-				longTasks.maxMs = Math.max(longTasks.maxMs, duration);
-				const region = performance.now() - lastRegionAt <= 2_000 ? lastRegion : "render/background";
-				regionStalls[region] = (regionStalls[region] ?? 0) + duration;
-			}
-		})
-		: null;
+	const observer =
+		typeof PerformanceObserver !== "undefined" &&
+		PerformanceObserver.supportedEntryTypes.includes("longtask")
+			? new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) {
+						const duration = Math.round(entry.duration);
+						longTasks.count += 1;
+						longTasks.totalMs += duration;
+						longTasks.maxMs = Math.max(longTasks.maxMs, duration);
+						const region =
+							performance.now() - lastRegionAt <= 2_000 ? lastRegion : "render/background";
+						regionStalls[region] = (regionStalls[region] ?? 0) + duration;
+					}
+				})
+			: null;
 	observer?.observe({ entryTypes: ["longtask"] });
 
 	const heartbeatTimer = window.setInterval(() => {
@@ -50,14 +57,17 @@ export function startPerformanceDiagnostics(): () => void {
 		}
 		expectedHeartbeat = now + heartbeatIntervalMs;
 	}, heartbeatIntervalMs);
-	const resetHeartbeat = () => { expectedHeartbeat = performance.now() + heartbeatIntervalMs; };
+	const resetHeartbeat = () => {
+		expectedHeartbeat = performance.now() + heartbeatIntervalMs;
+	};
 	const branchStart = (event: Event) => {
 		branchSwitchStartedAt = performance.now();
 		const sessionId = (event as CustomEvent<BranchSwitchDetail>).detail?.sessionId;
 		if (sessionId) lastRegion = "branch-switch";
 	};
 	const branchEnd = () => {
-		if (branchSwitchStartedAt !== undefined) recordPerformanceTiming("branch-switch-total", performance.now() - branchSwitchStartedAt);
+		if (branchSwitchStartedAt !== undefined)
+			recordPerformanceTiming("branch-switch-total", performance.now() - branchSwitchStartedAt);
 		branchSwitchStartedAt = undefined;
 	};
 	document.addEventListener("visibilitychange", resetHeartbeat);
@@ -67,22 +77,24 @@ export function startPerformanceDiagnostics(): () => void {
 	const flush = () => {
 		const state = useAppStore.getState();
 		const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
-		void bridge.diagnosticReport({
-			timestamp: new Date().toISOString(),
-			route: window.location.hash || "#/",
-			visibility: document.visibilityState,
-			uptimeMs: Math.round(performance.now()),
-			domNodes: document.getElementsByTagName("*").length,
-			memoryBytes: memory?.usedJSHeapSize,
-			activeSessionId: state.activeSessionId ?? undefined,
-			turnCount: state.turns.length,
-			runningTurnCount: state.turns.filter(isTurnActive).length,
-			entityCount: state.entities.length,
-			longTasks,
-			heartbeat,
-			regionStalls,
-			timings: drainPerformanceTimings(),
-		}).catch(() => undefined);
+		void bridge
+			.diagnosticReport({
+				timestamp: new Date().toISOString(),
+				route: window.location.hash || "#/",
+				visibility: document.visibilityState,
+				uptimeMs: Math.round(performance.now()),
+				domNodes: document.getElementsByTagName("*").length,
+				memoryBytes: memory?.usedJSHeapSize,
+				activeSessionId: state.activeSessionId ?? undefined,
+				turnCount: state.turns.length,
+				runningTurnCount: state.turns.filter(isTurnActive).length,
+				entityCount: state.entities.length,
+				longTasks,
+				heartbeat,
+				regionStalls,
+				timings: drainPerformanceTimings(),
+			})
+			.catch(() => undefined);
 		longTasks = { count: 0, totalMs: 0, maxMs: 0 };
 		heartbeat = { delayedCount: 0, totalDelayMs: 0, maxDelayMs: 0 };
 		regionStalls = {};
@@ -107,7 +119,7 @@ function diagnosticRegion(target: EventTarget | null): string {
 	if (!(target instanceof Element)) return "unknown";
 	for (const [selector, name] of [
 		[".mermaid-diagram", "diagram"],
-		[".archify-diagram", "interactive-diagram"],
+		[".html-preview", "interactive-diagram"],
 		[".chat-scroll", "chat"],
 		[".chat-composer", "composer"],
 		[".app-sidebar", "sidebar"],

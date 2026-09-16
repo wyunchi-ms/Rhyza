@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } f
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
-import { readdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { appendFile, mkdir } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,8 +10,6 @@ import { PiService } from "./pi-service.js";
 import { PiPluginService } from "./pi-plugin-service.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
-import { ArchifyService } from "./archify-service.js";
-import { GptArchifyHarness, resolveBundledArchifySkillRoot } from "./archify-harness.js";
 import {
 	ipcChannels,
 	validateAgentPromptRequest,
@@ -27,11 +25,9 @@ import {
 	validateWorkspaceDiffRequest,
 	validateSummaryRequest,
 	validateKnowledgeExtractionRequest,
-	validateArchifyRenderRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
 	validateForkDebugDumpRequest,
-	type ArchifyParseFailureReport,
 	type DiagnosticReport,
 } from "../../src/shared/ipc.js";
 import { AppStateStore } from "./app-state-store.js";
@@ -88,11 +84,9 @@ let piService: PiService;
 let piPluginService: PiPluginService;
 let sourceService: SourceService;
 let appStateStore: AppStateStore;
-let archifyService: ArchifyService;
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
 const diagnosticsDirectory = path.join(dataRootPath, "diagnostics");
-const archifyErrorsDirectory = path.join(dataRootPath, "archify-errors");
 const mainLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 let diagnosticsWriteQueue = Promise.resolve();
 
@@ -135,6 +129,11 @@ async function createWindow(): Promise<void> {
 	]);
 	mainWindow.webContents.on("will-navigate", (event, url) => {
 		if (!isAllowedRendererUrl(url)) {
+			event.preventDefault();
+		}
+	});
+	mainWindow.webContents.on("will-frame-navigate", (event) => {
+		if (!isAllowedRendererUrl(event.url) && event.url !== "about:srcdoc") {
 			event.preventDefault();
 		}
 	});
@@ -207,12 +206,6 @@ function registerIpcHandlers(): void {
 			return { ok: true as const };
 		}),
 	);
-	ipcMain.handle(ipcChannels.archifyParseFailure, async (event, payload) =>
-		withValidSender(event, async () => {
-			await writeArchifyParseFailure(validateArchifyParseFailureReport(payload));
-			return { ok: true as const };
-		}),
-	);
 	ipcMain.handle(ipcChannels.forkDebugDump, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateForkDebugDumpRequest(payload);
@@ -250,14 +243,28 @@ function registerIpcHandlers(): void {
 		withValidSender(event, async () => {
 			const { source } = validatePiPluginSource(payload);
 			const plugins = await piPluginService.install(source);
+
 			piService.reloadInstalledPlugins();
 			return { ok: true as const, plugins };
+		}),
+	);
+	ipcMain.handle(ipcChannels.pluginSelectLocal, async (event) =>
+		withValidSender(event, async () => {
+			const options = {
+				title: "Install local extension",
+				properties: ["openDirectory"] as Array<"openDirectory">,
+			};
+			const result = mainWindow
+				? await dialog.showOpenDialog(mainWindow, options)
+				: await dialog.showOpenDialog(options);
+			return { source: result.canceled ? null : (result.filePaths[0] ?? null) };
 		}),
 	);
 	ipcMain.handle(ipcChannels.pluginRemove, async (event, payload) =>
 		withValidSender(event, async () => {
 			const { source } = validatePiPluginSource(payload);
 			const plugins = await piPluginService.remove(source);
+
 			piService.reloadInstalledPlugins();
 			return { ok: true as const, plugins };
 		}),
@@ -361,12 +368,6 @@ function registerIpcHandlers(): void {
 			);
 		}),
 	);
-	ipcMain.handle(ipcChannels.renderArchify, async (event, payload) =>
-		withValidSender(event, async () => {
-			const request = validateArchifyRenderRequest(payload);
-			return timedDiagnostic("render-archify", {}, () => archifyService.render(request.source));
-		}),
-	);
 	ipcMain.handle(ipcChannels.openExternal, async (event, payload) =>
 		withValidSender(event, async () => {
 			await shell.openExternal(validateOpenExternalRequest(payload).url);
@@ -422,25 +423,14 @@ app.whenReady().then(async () => {
 		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),
 	);
 	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
-	const archifySkillRoot = resolveBundledArchifySkillRoot({
-		appPath: app.getAppPath(),
-		resourcesPath: process.resourcesPath,
-		isPackaged: app.isPackaged,
-	});
-	const archifyHarness = new GptArchifyHarness(archifySkillRoot);
-	archifyService = new ArchifyService(archifySkillRoot, app.getPath("temp"), async (event) => {
-		if (process.env.RHYZA_ARCHIFY_DEBUG === "1") console.log("ARCHIFY_RENDER", event);
-		await writeDiagnostic("archify-render", event);
-	});
+	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
 	piService = new PiService(
 		dataRootPath,
 		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
 		undefined,
 		sourceService,
-		archifyHarness,
 	);
-	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
 	registerIpcHandlers();
 	mainLoopDelay.enable();
 	setInterval(() => {
@@ -462,59 +452,6 @@ function validateDiagnosticReport(value: unknown): DiagnosticReport {
 	if (typeof report.timestamp !== "string" || typeof report.route !== "string")
 		throw new Error("Invalid diagnostic report.");
 	return JSON.parse(JSON.stringify(report)) as DiagnosticReport;
-}
-
-function validateArchifyParseFailureReport(value: unknown): ArchifyParseFailureReport {
-	if (!value || typeof value !== "object") throw new Error("Invalid Archify parse failure report.");
-	const report = value as Partial<ArchifyParseFailureReport>;
-	if (
-		typeof report.timestamp !== "string" ||
-		typeof report.source !== "string" ||
-		report.source.length > 1_000_000 ||
-		typeof report.sourceHash !== "string" ||
-		report.sourceHash.length > 64 ||
-		typeof report.sourceBytes !== "number" ||
-		!Number.isSafeInteger(report.sourceBytes) ||
-		report.sourceBytes < 0 ||
-		typeof report.error !== "string" ||
-		report.error.length > 1_000 ||
-		typeof report.sourceContextStart !== "number" ||
-		typeof report.sourceContext !== "string" ||
-		report.sourceContext.length > 600
-	)
-		throw new Error("Invalid Archify parse failure report.");
-	for (const location of [report.position, report.line, report.column, report.sourceContextStart]) {
-		if (location !== undefined && (!Number.isSafeInteger(location) || location < 0))
-			throw new Error("Invalid Archify parse failure location.");
-	}
-	return JSON.parse(JSON.stringify(report)) as ArchifyParseFailureReport;
-}
-
-async function writeArchifyParseFailure(report: ArchifyParseFailureReport): Promise<void> {
-	await mkdir(archifyErrorsDirectory, { recursive: true });
-	const hash = safeDebugFilePart(report.sourceHash);
-	const existingFiles = await readdir(archifyErrorsDirectory);
-	if (
-		existingFiles.some((name) => name.endsWith(`-${hash}.json`) && !name.endsWith(".source.json"))
-	)
-		return;
-	const receivedAt = new Date();
-	const filenameTimestamp = receivedAt.toISOString().replace(/[:.]/g, "-");
-	const stem = `archify-parse-failure-${filenameTimestamp}-${hash}`;
-	const sourceFile = `${stem}.source.json`;
-	const { source, ...metadata } = report;
-	const payload = {
-		kind: "archify-parse-failure",
-		receivedAt: receivedAt.toISOString(),
-		sourceFile,
-		...metadata,
-	};
-	await writeFile(path.join(archifyErrorsDirectory, sourceFile), source, "utf8");
-	await writeFile(
-		path.join(archifyErrorsDirectory, `${stem}.json`),
-		`${JSON.stringify(payload, null, 2)}\n`,
-		"utf8",
-	);
 }
 
 function mainProcessSnapshot() {

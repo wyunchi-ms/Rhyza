@@ -47,6 +47,8 @@ test("reserved directories and paths outside the repo are rejected before readin
 		"dist/app.js",
 		"dist-electron/app.js",
 		"resources/skills/vendor/index.js",
+		"archify-extension/skills/archify/renderers/index.mjs",
+		"dist-extensions/archify/index.js",
 		"../outside.ts",
 		"package-lock.json",
 		"app.min.js",

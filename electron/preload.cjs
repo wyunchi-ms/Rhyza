@@ -9,6 +9,7 @@ const ipcChannels = {
 	modelCatalog: "knowbranch:model-catalog",
 	pluginList: "knowbranch:plugin-list",
 	pluginInstall: "knowbranch:plugin-install",
+	pluginSelectLocal: "knowbranch:plugin-select-local",
 	pluginRemove: "knowbranch:plugin-remove",
 	getWorkspace: "knowbranch:get-workspace",
 	selectWorkspace: "knowbranch:select-workspace",
@@ -24,12 +25,12 @@ const ipcChannels = {
 	workspaceTodos: "knowbranch:workspace-todos",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
-	renderArchify: "knowbranch:render-archify",
+
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
 	diagnosticReport: "knowbranch:diagnostic-report",
-	archifyParseFailure: "knowbranch:archify-parse-failure",
+
 	forkDebugDump: "knowbranch:fork-debug-dump",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
@@ -37,14 +38,13 @@ const ipcChannels = {
 
 contextBridge.exposeInMainWorld("knowbranch", {
 	isElectron: true,
-	providerStatus: (request) =>
-		ipcRenderer.invoke(ipcChannels.providerStatus, request),
+	providerStatus: (request) => ipcRenderer.invoke(ipcChannels.providerStatus, request),
 	providerLogin: (request) => ipcRenderer.invoke(ipcChannels.providerLogin, request),
-	providerLogout: (request) =>
-		ipcRenderer.invoke(ipcChannels.providerLogout, request),
+	providerLogout: (request) => ipcRenderer.invoke(ipcChannels.providerLogout, request),
 	modelCatalog: (request) => ipcRenderer.invoke(ipcChannels.modelCatalog, request),
 	pluginList: () => ipcRenderer.invoke(ipcChannels.pluginList),
 	pluginInstall: (request) => ipcRenderer.invoke(ipcChannels.pluginInstall, request),
+	pluginSelectLocal: () => ipcRenderer.invoke(ipcChannels.pluginSelectLocal),
 	pluginRemove: (request) => ipcRenderer.invoke(ipcChannels.pluginRemove, request),
 	getWorkspace: () => ipcRenderer.invoke(ipcChannels.getWorkspace),
 	selectWorkspace: () => ipcRenderer.invoke(ipcChannels.selectWorkspace),
@@ -60,12 +60,12 @@ contextBridge.exposeInMainWorld("knowbranch", {
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
-	renderArchify: (request) => ipcRenderer.invoke(ipcChannels.renderArchify, request),
+
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
-	archifyParseFailure: (report) => ipcRenderer.invoke(ipcChannels.archifyParseFailure, report),
+
 	forkDebugDump: (request) => ipcRenderer.invoke(ipcChannels.forkDebugDump, request),
 	onAuthEvent: (listener) => {
 		const wrapped = (_event, payload) => listener(payload);

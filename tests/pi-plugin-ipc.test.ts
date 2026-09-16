@@ -9,6 +9,8 @@ test("accepts supported Pi package sources", () => {
 		"https://github.com/user/repo",
 		"ssh://git@github.com/user/repo",
 		"C:\\plugins\\my-package",
+		"C:\\plugins with spaces\\my-package",
+		"\\\\server\\share\\my-package",
 		"/opt/pi/my-package",
 	]) {
 		assert.equal(validatePiPluginSource({ source }).source, source);

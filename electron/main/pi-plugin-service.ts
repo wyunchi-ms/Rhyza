@@ -27,8 +27,11 @@ export class PiPluginService {
 		return toPluginInfo(manager);
 	}
 
-	private async createManager(): Promise<{ manager: DefaultPackageManager; settingsManager: SettingsManager }> {
-		const cwd = await this.getWorkspacePath() ?? process.cwd();
+	private async createManager(): Promise<{
+		manager: DefaultPackageManager;
+		settingsManager: SettingsManager;
+	}> {
+		const cwd = (await this.getWorkspacePath()) ?? process.cwd();
 		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
 		return {
 			manager: new DefaultPackageManager({ cwd, agentDir: this.agentDir, settingsManager }),
@@ -38,12 +41,14 @@ export class PiPluginService {
 }
 
 function toPluginInfo(manager: DefaultPackageManager): PiPluginInfo[] {
-	return manager.listConfiguredPackages().map((item) => ({
-		source: item.source,
-		scope: item.scope,
-		installed: item.installedPath !== undefined,
-		...(item.installedPath ? { installedPath: item.installedPath } : {}),
-	}));
+	return manager
+		.listConfiguredPackages()
+		.map((item) => ({
+			source: item.source,
+			scope: item.scope,
+			installed: item.installedPath !== undefined,
+			...(item.installedPath ? { installedPath: item.installedPath } : {}),
+		}));
 }
 
 async function flushSettings(settingsManager: SettingsManager): Promise<void> {

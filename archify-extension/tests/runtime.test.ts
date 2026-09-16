@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyEstimatedComponentWidths, applySuggestedComponentWidths, applySuggestedLabelPositions, prepareArchifySpec } from "../electron/main/archify-service";
-import { archifyToMermaid, isArchifyCodeBlock, parseArchifySource } from "../src/shared/archify";
-import { prepareArchifyViewerHtml } from "../src/shared/archify-viewer";
+import {
+	applyEstimatedComponentWidths,
+	applySuggestedComponentWidths,
+	applySuggestedLabelPositions,
+	prepareArchifySpec,
+} from "../src/runtime";
+import { archifyToMermaid, isArchifyCodeBlock, parseArchifySource } from "../src/spec";
+import { prepareArchifyViewerHtml } from "../src/viewer";
 
 const architectureSource = JSON.stringify({
 	schema_version: 1,
@@ -19,7 +24,10 @@ test("parses Archify topology and creates a Mermaid fallback", () => {
 	const parsed = parseArchifySource(architectureSource);
 	assert.equal(parsed.type, "architecture");
 	assert.equal(parsed.title, "Runtime map");
-	assert.deepEqual(parsed.nodes.map((node) => node.key), ["ui", "api"]);
+	assert.deepEqual(
+		parsed.nodes.map((node) => node.key),
+		["ui", "api"],
+	);
 	assert.deepEqual(parsed.edges[0], { sourceKey: "ui", targetKey: "api", label: "HTTPS" });
 	assert.match(archifyToMermaid(architectureSource), /ui -->\|"HTTPS"\| api/);
 });
@@ -27,7 +35,10 @@ test("parses Archify topology and creates a Mermaid fallback", () => {
 test("recognizes only explicitly tagged Archify blocks", () => {
 	assert.equal(isArchifyCodeBlock("language-archify"), true);
 	assert.equal(isArchifyCodeBlock("language-json"), false);
-	assert.throws(() => parseArchifySource('{"diagram_type":"unknown"}'), /diagram_type must be one of/);
+	assert.throws(
+		() => parseArchifySource('{"diagram_type":"unknown"}'),
+		/diagram_type must be one of/,
+	);
 });
 
 test("normalizes generic node-edge JSON mislabeled as Archify", () => {
@@ -44,7 +55,10 @@ test("normalizes generic node-edge JSON mislabeled as Archify", () => {
 	assert.equal(parsed.type, "architecture");
 	assert.equal(parsed.spec.diagram_type, "architecture");
 	assert.equal(parsed.spec.schema_version, 1);
-	assert.deepEqual(parsed.nodes.map((node) => node.key), ["ui", "api"]);
+	assert.deepEqual(
+		parsed.nodes.map((node) => node.key),
+		["ui", "api"],
+	);
 	assert.match(archifyToMermaid(source), /ui -->\|"HTTPS"\| api/);
 });
 
@@ -53,7 +67,10 @@ test("normalizes legacy lane-event sequence JSON", () => {
 		version: "1.0",
 		title: "Request path",
 		type: "sequence",
-		lanes: [{ id: "client", label: "Client" }, { id: "api", label: "API" }],
+		lanes: [
+			{ id: "client", label: "Client" },
+			{ id: "api", label: "API" },
+		],
 		events: [
 			{ lane: "client", kind: "note", label: "Starts request" },
 			{ from: "client", to: "api", label: "GET /items" },
@@ -101,7 +118,14 @@ test("widens architecture components from Archify readability diagnostics", () =
 - Label "SessionStore / Database" (~152px) is wider than component "storage" (120px) — shorten the label or widen size.`;
 	assert.equal(applySuggestedComponentWidths(spec, error), 3);
 	const components = spec.components as Array<Record<string, unknown>>;
-	assert.deepEqual(components.map((component) => component.size), [[128, 72], [153, 72], [164, 72]]);
+	assert.deepEqual(
+		components.map((component) => component.size),
+		[
+			[128, 72],
+			[153, 72],
+			[164, 72],
+		],
+	);
 	assert.equal(applySuggestedComponentWidths(spec, error), 0);
 });
 
@@ -109,14 +133,31 @@ test("estimates readable architecture widths before validation", () => {
 	const spec: Record<string, unknown> = {
 		diagram_type: "architecture",
 		components: [
-			{ id: "execution", label: "Execution", sublabel: "Execution · Coordinator · Runner", size: [112, 72] },
-			{ id: "models", label: "Models", sublabel: "Anthropic · OpenAI · Google · Azure · …", size: [112, 72] },
+			{
+				id: "execution",
+				label: "Execution",
+				sublabel: "Execution · Coordinator · Runner",
+				size: [112, 72],
+			},
+			{
+				id: "models",
+				label: "Models",
+				sublabel: "Anthropic · OpenAI · Google · Azure · …",
+				size: [112, 72],
+			},
 			{ id: "storage", label: "SessionStore / Database", size: [120, 72] },
 		],
 	};
 	assert.equal(applyEstimatedComponentWidths(spec), 3);
 	const components = spec.components as Array<Record<string, unknown>>;
-	assert.deepEqual(components.map((component) => component.size), [[131, 72], [157, 72], [159, 72]]);
+	assert.deepEqual(
+		components.map((component) => component.size),
+		[
+			[131, 72],
+			[157, 72],
+			[159, 72],
+		],
+	);
 	assert.equal(applyEstimatedComponentWidths(spec), 0);
 });
 
@@ -139,7 +180,8 @@ test("removes authored canvas limits before rendering", () => {
 });
 
 test("adapts Archify HTML for the app-owned inline viewer", () => {
-	const html = '<!doctype html><html lang="en" data-theme="dark" data-preset="editorial"><head></head><body><button id="btn-theme"></button><div class="cards"></div></body></html>';
+	const html =
+		'<!doctype html><html lang="en" data-theme="dark" data-preset="editorial"><head></head><body><button id="btn-theme"></button><div class="cards"></div></body></html>';
 	const prepared = prepareArchifyViewerHtml(html, { theme: "light", mode: "inline" });
 	assert.match(prepared, /data-rhyza-viewer="true"/);
 	assert.match(prepared, /data-rhyza-mode="inline"/);
@@ -161,7 +203,8 @@ test("adapts Archify HTML for the app-owned inline viewer", () => {
 });
 
 test("expanded Archify viewer keeps advanced content while hiding host-owned controls", () => {
-	const html = '<html data-theme="light" data-preset="signal-flow"><head></head><body><div class="cards"></div></body></html>';
+	const html =
+		'<html data-theme="light" data-preset="signal-flow"><head></head><body><div class="cards"></div></body></html>';
 	const prepared = prepareArchifyViewerHtml(html, { theme: "dark", mode: "expanded" });
 	assert.match(prepared, /data-rhyza-mode="expanded"/);
 	assert.match(prepared, /data-theme="dark"/);

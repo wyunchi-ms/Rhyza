@@ -223,7 +223,6 @@ export const ChatPane: React.FC = () => {
 					images: promptImages,
 					knowledgeContext,
 					thinkingLevel: store.settings.thinkingLevel,
-					diagramMode: store.settings.diagramRenderer,
 					model: selectedModel,
 					writable: true,
 				});
@@ -244,6 +243,7 @@ export const ChatPane: React.FC = () => {
 					.turns.find((turn) => turn.id === assistantTurnId)?.reasoning;
 				store.updateTurn(assistantTurnId, {
 					content: response,
+					htmlPreviews: result.htmlPreviews,
 					reasoning: result.reasoningText ?? streamedReasoning,
 					status: "finalizing",
 					summary: summarize(response),

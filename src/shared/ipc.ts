@@ -9,6 +9,7 @@ export const ipcChannels = {
 	modelCatalog: "knowbranch:model-catalog",
 	pluginList: "knowbranch:plugin-list",
 	pluginInstall: "knowbranch:plugin-install",
+	pluginSelectLocal: "knowbranch:plugin-select-local",
 	pluginRemove: "knowbranch:plugin-remove",
 	getWorkspace: "knowbranch:get-workspace",
 	selectWorkspace: "knowbranch:select-workspace",
@@ -24,12 +25,12 @@ export const ipcChannels = {
 	workspaceTodos: "knowbranch:workspace-todos",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
-	renderArchify: "knowbranch:render-archify",
+
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
 	appStateSave: "knowbranch:app-state-save",
 	diagnosticReport: "knowbranch:diagnostic-report",
-	archifyParseFailure: "knowbranch:archify-parse-failure",
+
 	forkDebugDump: "knowbranch:fork-debug-dump",
 	agentEvent: "knowbranch:agent-event",
 	authEvent: "knowbranch:auth-event",
@@ -167,7 +168,6 @@ export interface AgentPromptRequest {
 		modelId: string;
 	};
 	writable?: boolean;
-	diagramMode?: "archify" | "mermaid";
 }
 
 export interface AgentPromptImage {
@@ -183,6 +183,7 @@ export interface AgentTranscriptTurn {
 }
 
 export interface AgentPromptResponse {
+	htmlPreviews?: import("./html-preview.js").HtmlPreviewDocument[];
 	ok: boolean;
 	sessionId?: string;
 	assistantText?: string;
@@ -255,8 +256,7 @@ export interface KnowledgeDiagramCandidate {
 		| "lifecycle";
 	existingDiagramId?: string;
 	mermaidSource: string;
-	archifySource?: string;
-	archifyType?: "architecture" | "workflow" | "sequence" | "dataflow" | "lifecycle";
+
 	nodes: Array<{ key: string; label: string; type?: string }>;
 	edges: Array<{ sourceKey: string; targetKey: string; label?: string }>;
 }
@@ -284,17 +284,6 @@ export interface KnowledgeExtractionResponse {
 	diagrams: KnowledgeDiagramCandidate[];
 	error?: string;
 	usage?: AgentUsage;
-}
-
-export interface ArchifyRenderRequest {
-	source: string;
-}
-export interface ArchifyRenderResponse {
-	ok: boolean;
-	html?: string;
-	error?: string;
-	diagnostics?: unknown[];
-	fallbackMermaid?: string;
 }
 
 export interface OpenExternalRequest {
@@ -393,19 +382,6 @@ export interface WorkspaceTodosResponse {
 	files: WorkspaceTodoFile[];
 }
 
-export interface ArchifyParseFailureReport {
-	timestamp: string;
-	source: string;
-	sourceHash: string;
-	sourceBytes: number;
-	error: string;
-	position?: number;
-	line?: number;
-	column?: number;
-	sourceContextStart: number;
-	sourceContext: string;
-}
-
 export interface ForkDebugDumpRequest {
 	kind: "fork" | "selection-append";
 	timestamp: string;
@@ -447,6 +423,7 @@ export interface KnowbranchBridge {
 	modelCatalog(request?: ModelCatalogRequest): Promise<ModelCatalogResponse>;
 	pluginList(): Promise<PiPluginInfo[]>;
 	pluginInstall(request: PiPluginInstallRequest): Promise<PiPluginMutationResponse>;
+	pluginSelectLocal(): Promise<{ source: string | null }>;
 	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;
 	getWorkspace(): Promise<WorkspaceInfo>;
 	selectWorkspace(): Promise<WorkspaceInfo>;
@@ -462,12 +439,12 @@ export interface KnowbranchBridge {
 	workspaceTodos(request?: WorkspaceTodosRequest): Promise<WorkspaceTodosResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
 	extractKnowledge(request: KnowledgeExtractionRequest): Promise<KnowledgeExtractionResponse>;
-	renderArchify(request: ArchifyRenderRequest): Promise<ArchifyRenderResponse>;
+
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
-	archifyParseFailure(report: ArchifyParseFailureReport): Promise<{ ok: true }>;
+
 	forkDebugDump(request: ForkDebugDumpRequest): Promise<{ ok: true; path: string }>;
 	onAuthEvent(listener: (event: AuthBridgeEvent) => void): () => void;
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;
@@ -496,6 +473,7 @@ export function validatePiPluginSource(value: unknown): { source: string } {
 	const supported =
 		/^(npm:|git:|https?:\/\/|ssh:\/\/|git:\/\/)/i.test(source) ||
 		/^[a-zA-Z]:[\\/]/.test(source) ||
+		source.startsWith("\\\\") ||
 		source.startsWith("/");
 	if (!supported) {
 		throw new Error("Use an npm:, git:, HTTPS, SSH, or absolute local path source.");
@@ -571,9 +549,6 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		};
 	}
 	request.writable = value.writable === true;
-	if (value.diagramMode === "archify" || value.diagramMode === "mermaid") {
-		request.diagramMode = value.diagramMode;
-	}
 	return request;
 }
 
@@ -594,14 +569,6 @@ export function validateWorkspaceTodosRequest(value: unknown): WorkspaceTodosReq
 	return typeof value.frontendSessionId === "string" && value.frontendSessionId.trim()
 		? { frontendSessionId: value.frontendSessionId.slice(0, 180) }
 		: {};
-}
-
-export function validateArchifyRenderRequest(value: unknown): ArchifyRenderRequest {
-	if (!isRecord(value) || typeof value.source !== "string" || !value.source.trim()) {
-		throw new Error("Archify source is required.");
-	}
-	if (value.source.length > 1_000_000) throw new Error("Archify source exceeds the 1 MB limit.");
-	return { source: value.source };
 }
 
 export function validateAppStateSaveRequest(value: unknown): AppStateSaveRequest {

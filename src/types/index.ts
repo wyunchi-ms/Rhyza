@@ -21,6 +21,7 @@ export interface SessionNode {
 }
 
 export interface Turn {
+	htmlPreviews?: import("../shared/html-preview").HtmlPreviewDocument[];
 	id: string;
 	/** Original turn represented by a copied branch-history turn. */
 	sourceTurnId?: string;
@@ -178,8 +179,7 @@ export interface Diagram {
 	nodes: DiagramNode[];
 	edges: DiagramEdge[];
 	mermaidSource: string;
-	archifySource?: string;
-	archifyType?: "architecture" | "workflow" | "sequence" | "dataflow" | "lifecycle";
+
 	sourceRefs?: SourceRef[];
 	version: number;
 	versions: DiagramVersion[];
@@ -234,5 +234,4 @@ export interface Settings {
 	highContrast: boolean;
 	fontScale: number;
 	maxConcurrentRequests: number;
-	diagramRenderer: "archify" | "mermaid";
 }

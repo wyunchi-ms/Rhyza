@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
-import type { KnowledgeCandidate, KnowledgeDiagramCandidate, KnowledgeRelationCandidate } from "../shared/ipc";
+import type {
+	KnowledgeCandidate,
+	KnowledgeDiagramCandidate,
+	KnowledgeRelationCandidate,
+} from "../shared/ipc";
 import type {
 	ChangeOperation,
 	ChangeSet,
@@ -17,14 +21,19 @@ import type {
 	Turn,
 } from "../types";
 import { createId } from "../utils/common";
-import { normalizeKnowledgeLabel as normalizeLabel, reconcileKnowledgeGraph } from "../utils/knowledgeReconciliation";
+import {
+	normalizeKnowledgeLabel as normalizeLabel,
+	reconcileKnowledgeGraph,
+} from "../utils/knowledgeReconciliation";
 import { cloneSessionNode, forkSessionAtTurn, forkSessionNode } from "../utils/sessionFork";
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
-import { archifyToMermaid, parseArchifySource } from "../shared/archify";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { errorToMessage } from "../shared/value";
-import { prioritizeKnowledgeSourceRefs, sourceRefsForKnowledgeScope } from "../utils/knowledgeExtraction";
+import {
+	prioritizeKnowledgeSourceRefs,
+	sourceRefsForKnowledgeScope,
+} from "../utils/knowledgeExtraction";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 
 interface AppState {
@@ -54,7 +63,9 @@ interface AppState {
 	openTurnInspector: (turnId: string, view: Exclude<RightPaneView, "todo">) => void;
 	closeRightPane: () => void;
 	createRootSession: () => string;
-	forkSession: (turnId: string) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
+	forkSession: (
+		turnId: string,
+	) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
 	forkNode: (sessionId: string, turnId?: string) => string | null;
 	cloneNode: (sessionId: string, turnId?: string) => string | null;
 	renameSession: (id: string, title: string, keepPending?: boolean) => void;
@@ -65,14 +76,25 @@ interface AppState {
 	addTurnUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addManualTurn: (turn: Turn) => void;
 	updateTurn: (turnId: string, patch: Partial<Turn>) => void;
-	finalizeTurn: (sessionId: string, turnId: string, content: string, candidates?: KnowledgeCandidate[], relationCandidates?: KnowledgeRelationCandidate[], diagramCandidates?: KnowledgeDiagramCandidate[], sourceRefs?: SourceRef[]) => void;
+	finalizeTurn: (
+		sessionId: string,
+		turnId: string,
+		content: string,
+		candidates?: KnowledgeCandidate[],
+		relationCandidates?: KnowledgeRelationCandidate[],
+		diagramCandidates?: KnowledgeDiagramCandidate[],
+		sourceRefs?: SourceRef[],
+	) => void;
 	upsertSources: (sources: Source[]) => void;
 	setSourceStatus: (id: string, patch: Partial<Source>) => void;
 	archiveSource: (id: string) => void;
 	saveEntity: (entity: Entity) => void;
 	softDeleteEntity: (id: string) => void;
 	saveRelation: (relation: Relation) => void;
-	applyRelationCandidates: (candidates: KnowledgeRelationCandidate[]) => { created: number; updated: number };
+	applyRelationCandidates: (candidates: KnowledgeRelationCandidate[]) => {
+		created: number;
+		updated: number;
+	};
 	softDeleteRelation: (id: string) => void;
 	saveDiagram: (diagram: Diagram) => void;
 	softDeleteDiagram: (id: string) => void;
@@ -97,7 +119,6 @@ const defaultSettings: Settings = {
 	highContrast: false,
 	fontScale: 1,
 	maxConcurrentRequests: 5,
-	diagramRenderer: "archify",
 };
 
 function withoutModelRequestTelemetry(turn: Turn): Turn {
@@ -130,16 +151,32 @@ const workspaceStorage: StateStorage = {
 		if (!persistenceWorkspacePath) return undefined;
 		const prepareStartedAt = performance.now();
 		const stampedValue = stampWorkspaceState(value, persistenceWorkspacePath);
-		recordPerformanceTiming("state-persist-prepare", performance.now() - prepareStartedAt, stampedValue.length);
+		recordPerformanceTiming(
+			"state-persist-prepare",
+			performance.now() - prepareStartedAt,
+			stampedValue.length,
+		);
 		if (!useAppStore.persist.hasHydrated()) {
 			const currentValue = bridge.appStateLoad();
 			if (persistedStateScore(stampedValue) <= persistedStateScore(currentValue)) return undefined;
 		}
 		const saveStartedAt = performance.now();
-		return bridge.appStateSave({ value: stampedValue, workspacePath: persistenceWorkspacePath }).then(
-				() => { recordPerformanceTiming("state-persist-roundtrip", performance.now() - saveStartedAt, stampedValue.length); },
+		return bridge
+			.appStateSave({ value: stampedValue, workspacePath: persistenceWorkspacePath })
+			.then(
+				() => {
+					recordPerformanceTiming(
+						"state-persist-roundtrip",
+						performance.now() - saveStartedAt,
+						stampedValue.length,
+					);
+				},
 				(error: unknown) => {
-					recordPerformanceTiming("state-persist-roundtrip-error", performance.now() - saveStartedAt, stampedValue.length);
+					recordPerformanceTiming(
+						"state-persist-roundtrip-error",
+						performance.now() - saveStartedAt,
+						stampedValue.length,
+					);
 					console.error("Failed to persist workspace state.", error);
 				},
 			);
@@ -162,12 +199,14 @@ function persistedStateScore(serialized: string | null): number {
 		const parsed = JSON.parse(serialized) as { state?: Partial<AppState> };
 		const state = parsed.state;
 		if (!state) return -1;
-		return (state.turns?.length ?? 0) * 100
-			+ (state.entities?.length ?? 0) * 20
-			+ (state.diagrams?.length ?? 0) * 20
-			+ (state.changesets?.length ?? 0) * 5
-			+ (state.sources?.length ?? 0) * 2
-			+ (state.sessions?.length ?? 0);
+		return (
+			(state.turns?.length ?? 0) * 100 +
+			(state.entities?.length ?? 0) * 20 +
+			(state.diagrams?.length ?? 0) * 20 +
+			(state.changesets?.length ?? 0) * 5 +
+			(state.sources?.length ?? 0) * 2 +
+			(state.sessions?.length ?? 0)
+		);
 	} catch {
 		return -1;
 	}
@@ -198,10 +237,14 @@ export const useAppStore = create<AppState>()(
 			setSelectedEntity: (id) => set({ selectedEntityId: id, selectedDiagramId: null }),
 			setSelectedDiagram: (id) => set({ selectedDiagramId: id, selectedEntityId: null }),
 			toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-			toggleRightPane: () => set((state) => state.rightPaneOpen && state.rightPaneView === "todo"
-				? { rightPaneOpen: false }
-				: { rightPaneOpen: true, rightPaneView: "todo" }),
-			openTurnInspector: (turnId, view) => set({ inspectedTurnId: turnId, rightPaneView: view, rightPaneOpen: true }),
+			toggleRightPane: () =>
+				set((state) =>
+					state.rightPaneOpen && state.rightPaneView === "todo"
+						? { rightPaneOpen: false }
+						: { rightPaneOpen: true, rightPaneView: "todo" },
+				),
+			openTurnInspector: (turnId, view) =>
+				set({ inspectedTurnId: turnId, rightPaneView: view, rightPaneOpen: true }),
 			closeRightPane: () => set({ rightPaneOpen: false }),
 
 			createRootSession: () => {
@@ -226,8 +269,14 @@ export const useAppStore = create<AppState>()(
 				const result = forkSessionAtTurn(state, turnId, createId);
 				if (!result) return null;
 				const debugSnapshot = createForkDebugSnapshot(state, turnId, result);
-				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.forkSessionId, visibleSessionId: result.forkSessionId });
-				const dumpWriter = typeof window !== "undefined" ? window.knowbranch?.forkDebugDump : undefined;
+				set({
+					sessions: result.sessions,
+					turns: result.turns,
+					activeSessionId: result.forkSessionId,
+					visibleSessionId: result.forkSessionId,
+				});
+				const dumpWriter =
+					typeof window !== "undefined" ? window.knowbranch?.forkDebugDump : undefined;
 				if (typeof dumpWriter === "function") {
 					void dumpWriter({
 						kind: "fork",
@@ -236,38 +285,66 @@ export const useAppStore = create<AppState>()(
 						snapshot: debugSnapshot,
 					}).then(
 						(response) => announceForkDebug({ ok: true, message: `Fork dump: ${response.path}` }),
-						(error: unknown) => announceForkDebug({ ok: false, message: `Fork dump failed: ${errorToMessage(error)}` }),
+						(error: unknown) =>
+							announceForkDebug({
+								ok: false,
+								message: `Fork dump failed: ${errorToMessage(error)}`,
+							}),
 					);
 				} else {
-					announceForkDebug({ ok: false, message: "Fork dump unavailable. Restart Electron to load the updated preload bridge." });
+					announceForkDebug({
+						ok: false,
+						message: "Fork dump unavailable. Restart Electron to load the updated preload bridge.",
+					});
 				}
-				return { forkSessionId: result.forkSessionId, originalSessionId: result.originalSessionId, branchPointSessionId: result.branchPointSessionId };
+				return {
+					forkSessionId: result.forkSessionId,
+					originalSessionId: result.originalSessionId,
+					branchPointSessionId: result.branchPointSessionId,
+				};
 			},
 
 			forkNode: (sessionId, turnId) => {
 				const result = forkSessionNode(get(), sessionId, createId, turnId);
 				if (!result) return null;
-				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.forkSessionId, visibleSessionId: result.forkSessionId });
+				set({
+					sessions: result.sessions,
+					turns: result.turns,
+					activeSessionId: result.forkSessionId,
+					visibleSessionId: result.forkSessionId,
+				});
 				return result.forkSessionId;
 			},
 			cloneNode: (sessionId, turnId) => {
 				const result = cloneSessionNode(get(), sessionId, createId, turnId);
 				if (!result) return null;
-				set({ sessions: result.sessions, turns: result.turns, activeSessionId: result.cloneSessionId, visibleSessionId: result.cloneSessionId });
+				set({
+					sessions: result.sessions,
+					turns: result.turns,
+					activeSessionId: result.cloneSessionId,
+					visibleSessionId: result.cloneSessionId,
+				});
 				return result.cloneSessionId;
 			},
 
 			renameSession: (id, title, refreshOnNextPrompt = false) =>
 				set((state) => ({
 					sessions: state.sessions.map((session) =>
-						session.id === id ? { ...session, title: title.trim() || session.title, titlePending: false, refreshTitleOnNextPrompt: refreshOnNextPrompt } : session,
+						session.id === id
+							? {
+									...session,
+									title: title.trim() || session.title,
+									titlePending: false,
+									refreshTitleOnNextPrompt: refreshOnNextPrompt,
+								}
+							: session,
 					),
 				})),
 			setSessionProgressStatus: (id, status) =>
 				set((state) => ({
-					sessions: state.sessions.map((session) => session.id === id
-						? { ...session, progressStatus: status }
-						: session),
+					sessions: state.sessions.map((session) =>
+						session.id === id ? { ...session, progressStatus: status } : session,
+					),
 				})),
 			deleteSession: (id) => {
 				const state = get();
@@ -276,7 +353,11 @@ export const useAppStore = create<AppState>()(
 				while (added) {
 					added = false;
 					for (const session of state.sessions) {
-						if (session.parentId && descendants.has(session.parentId) && !descendants.has(session.id)) {
+						if (
+							session.parentId &&
+							descendants.has(session.parentId) &&
+							!descendants.has(session.id)
+						) {
 							descendants.add(session.id);
 							added = true;
 						}
@@ -285,11 +366,22 @@ export const useAppStore = create<AppState>()(
 				let sessions = state.sessions.filter((session) => !descendants.has(session.id));
 				let activeSessionId = state.activeSessionId;
 				if (activeSessionId && descendants.has(activeSessionId)) {
-					activeSessionId = state.sessions.find((session) => session.id === id)?.parentId ?? sessions[0]?.id ?? null;
+					activeSessionId =
+						state.sessions.find((session) => session.id === id)?.parentId ??
+						sessions[0]?.id ??
+						null;
 				}
 				if (sessions.length === 0) {
 					const replacementId = createId("session");
-					sessions = [{ id: replacementId, parentId: null, title: "New session", isRoot: true, status: "idle" }];
+					sessions = [
+						{
+							id: replacementId,
+							parentId: null,
+							title: "New session",
+							isRoot: true,
+							status: "idle",
+						},
+					];
 					activeSessionId = replacementId;
 				}
 				set({
@@ -308,34 +400,47 @@ export const useAppStore = create<AppState>()(
 			addSessionTitleUsage: (id, usage) => {
 				if (!usage) return;
 				set((state) => ({
-					sessions: state.sessions.map((session) => session.id === id
-						? { ...session, titleUsage: addUsage(session.titleUsage ?? emptyUsage(), usage) }
-						: session),
+					sessions: state.sessions.map((session) =>
+						session.id === id
+							? { ...session, titleUsage: addUsage(session.titleUsage ?? emptyUsage(), usage) }
+							: session,
+					),
 				}));
 			},
 			addTurnUsage: (id, usage) => {
 				if (!usage) return;
 				set((state) => ({
-					turns: state.turns.map((turn) => turn.id === id
-						? { ...turn, usage: addUsage(turn.usage ?? emptyUsage(), usage) }
-						: turn),
+					turns: state.turns.map((turn) =>
+						turn.id === id ? { ...turn, usage: addUsage(turn.usage ?? emptyUsage(), usage) } : turn,
+					),
 				}));
 			},
 			addManualTurn: (turn) => set((state) => ({ turns: [...state.turns, turn] })),
 			updateTurn: (turnId, patch) =>
 				set((state) => ({
-					turns: state.turns.map((turn) =>
-						turn.id === turnId ? { ...turn, ...patch } : turn,
-					),
+					turns: state.turns.map((turn) => (turn.id === turnId ? { ...turn, ...patch } : turn)),
 				})),
 
-			finalizeTurn: (sessionId, turnId, content, candidates = [], relationCandidates = [], diagramCandidates = [], sourceRefs = []) => {
+			finalizeTurn: (
+				sessionId,
+				turnId,
+				content,
+				candidates = [],
+				relationCandidates = [],
+				diagramCandidates = [],
+				sourceRefs = [],
+			) => {
 				const state = get();
 				if (!state.settings.autoExtract || state.settings.knowledgeMode === "read_only") {
 					const completedAt = new Date().toISOString();
 					set((current) => {
-						const turns = current.turns.map((turn) => turn.id === turnId ? { ...turn, status: "complete" as const, completedAt } : turn);
-						return { turns, sessions: syncSessionExecutionStatus(current.sessions, turns, sessionId) };
+						const turns = current.turns.map((turn) =>
+							turn.id === turnId ? { ...turn, status: "complete" as const, completedAt } : turn,
+						);
+						return {
+							turns,
+							sessions: syncSessionExecutionStatus(current.sessions, turns, sessionId),
+						};
 					});
 					return;
 				}
@@ -344,17 +449,25 @@ export const useAppStore = create<AppState>()(
 				const nextEntities = [...state.entities];
 				const nextRelations = [...state.relations];
 				const mentions: EntityMention[] = [];
-				const evidence = prioritizeKnowledgeSourceRefs([{ sessionId, turnId }, ...sourceRefs], content);
+				const evidence = prioritizeKnowledgeSourceRefs(
+					[{ sessionId, turnId }, ...sourceRefs],
+					content,
+				);
 
 				for (const candidate of candidates.slice(0, 3)) {
 					const candidateQuery = `${candidate.name} ${candidate.summary}`;
-					const candidateEvidence = sourceRefsForKnowledgeScope(candidate.sourceScope, evidence, candidateQuery);
+					const candidateEvidence = sourceRefsForKnowledgeScope(
+						candidate.sourceScope,
+						evidence,
+						candidateQuery,
+					);
 					const existing = nextEntities.find(
 						(entity) =>
 							!entity.deletedAt &&
-							(entity.id === candidate.existingEntityId || [entity.name, ...entity.aliases].some(
-								(value) => value.toLocaleLowerCase() === candidate.name.toLocaleLowerCase(),
-							)),
+							(entity.id === candidate.existingEntityId ||
+								[entity.name, ...entity.aliases].some(
+									(value) => value.toLocaleLowerCase() === candidate.name.toLocaleLowerCase(),
+								)),
 					);
 					if (existing) {
 						mentions.push({ id: existing.id, name: existing.name, type: existing.type });
@@ -367,13 +480,24 @@ export const useAppStore = create<AppState>()(
 								content: candidate.content,
 								confidence: candidate.confidence === "explicit" ? "confirmed" : existing.confidence,
 								sourceScope: candidate.sourceScope,
-								sourceRefs: sourceRefsForKnowledgeScope(candidate.sourceScope, [...existing.sourceRefs, ...candidateEvidence], candidateQuery),
+								sourceRefs: sourceRefsForKnowledgeScope(
+									candidate.sourceScope,
+									[...existing.sourceRefs, ...candidateEvidence],
+									candidateQuery,
+								),
 								version: existing.version + 1,
 								updatedAt: timestamp,
 							};
 							const index = nextEntities.findIndex((entity) => entity.id === existing.id);
 							nextEntities[index] = after;
-							operations.push({ kind: "entity", action: "update", objectId: after.id, label: after.name, before: existing, after });
+							operations.push({
+								kind: "entity",
+								action: "update",
+								objectId: after.id,
+								label: after.name,
+								before: existing,
+								after,
+							});
 						}
 						continue;
 					}
@@ -405,16 +529,51 @@ export const useAppStore = create<AppState>()(
 					const source = findEntity(nextEntities, candidate.sourceEntityId, candidate.sourceName);
 					const target = findEntity(nextEntities, candidate.targetEntityId, candidate.targetName);
 					if (!source || !target || source.id === target.id) continue;
-					const existing = nextRelations.find((relation) => !relation.deletedAt && relation.sourceEntityId === source.id && relation.targetEntityId === target.id && relation.type === candidate.type);
+					const existing = nextRelations.find(
+						(relation) =>
+							!relation.deletedAt &&
+							relation.sourceEntityId === source.id &&
+							relation.targetEntityId === target.id &&
+							relation.type === candidate.type,
+					);
 					if (existing) {
 						if (!candidate.description || candidate.description === existing.description) continue;
-						const after: Relation = { ...existing, description: candidate.description, confidence: candidate.confidence === "explicit" ? "confirmed" : existing.confidence, sourceRefs: dedupeSourceRefs([...existing.sourceRefs, ...evidence]), version: existing.version + 1 };
-						nextRelations[nextRelations.findIndex((relation) => relation.id === existing.id)] = after;
-						operations.push({ kind: "relation", action: "update", objectId: after.id, label: `${source.name} ${after.type} ${target.name}`, before: existing, after });
+						const after: Relation = {
+							...existing,
+							description: candidate.description,
+							confidence: candidate.confidence === "explicit" ? "confirmed" : existing.confidence,
+							sourceRefs: dedupeSourceRefs([...existing.sourceRefs, ...evidence]),
+							version: existing.version + 1,
+						};
+						nextRelations[nextRelations.findIndex((relation) => relation.id === existing.id)] =
+							after;
+						operations.push({
+							kind: "relation",
+							action: "update",
+							objectId: after.id,
+							label: `${source.name} ${after.type} ${target.name}`,
+							before: existing,
+							after,
+						});
 					} else {
-						const relation: Relation = { id: createId("relation"), sourceEntityId: source.id, targetEntityId: target.id, type: candidate.type, description: candidate.description, confidence: candidate.confidence === "explicit" ? "confirmed" : "inferred", sourceRefs: evidence, version: 1 };
+						const relation: Relation = {
+							id: createId("relation"),
+							sourceEntityId: source.id,
+							targetEntityId: target.id,
+							type: candidate.type,
+							description: candidate.description,
+							confidence: candidate.confidence === "explicit" ? "confirmed" : "inferred",
+							sourceRefs: evidence,
+							version: 1,
+						};
 						nextRelations.push(relation);
-						operations.push({ kind: "relation", action: "create", objectId: relation.id, label: `${source.name} ${relation.type} ${target.name}`, after: relation });
+						operations.push({
+							kind: "relation",
+							action: "create",
+							objectId: relation.id,
+							label: `${source.name} ${relation.type} ${target.name}`,
+							after: relation,
+						});
 					}
 				}
 
@@ -465,11 +624,21 @@ export const useAppStore = create<AppState>()(
 
 			upsertSources: (sources) =>
 				set((state) => {
-					const changedRevisions = new Map(sources.flatMap((source) => {
-						const previous = state.sources.find((item) => item.id === source.id);
-						return previous?.revision && source.revision && previous.revision !== source.revision ? [[source.id, source.revision] as const] : [];
-					}));
-					const markRefs = (refs: SourceRef[] = []) => refs.map((ref) => changedRevisions.has(ref.sourceId ?? "") && ref.revision !== changedRevisions.get(ref.sourceId ?? "") ? { ...ref, stale: true } : ref);
+					const changedRevisions = new Map(
+						sources.flatMap((source) => {
+							const previous = state.sources.find((item) => item.id === source.id);
+							return previous?.revision && source.revision && previous.revision !== source.revision
+								? [[source.id, source.revision] as const]
+								: [];
+						}),
+					);
+					const markRefs = (refs: SourceRef[] = []) =>
+						refs.map((ref) =>
+							changedRevisions.has(ref.sourceId ?? "") &&
+							ref.revision !== changedRevisions.get(ref.sourceId ?? "")
+								? { ...ref, stale: true }
+								: ref,
+						);
 					const updates = new Map(sources.map((source) => [source.id, source]));
 					const existingIds = new Set(state.sources.map((source) => source.id));
 					return {
@@ -477,9 +646,24 @@ export const useAppStore = create<AppState>()(
 							...state.sources.map((source) => updates.get(source.id) ?? source),
 							...sources.filter((source) => !existingIds.has(source.id)),
 						],
-						entities: changedRevisions.size ? state.entities.map((entity) => ({ ...entity, sourceRefs: markRefs(entity.sourceRefs) })) : state.entities,
-						relations: changedRevisions.size ? state.relations.map((relation) => ({ ...relation, sourceRefs: markRefs(relation.sourceRefs) })) : state.relations,
-						diagrams: changedRevisions.size ? state.diagrams.map((diagram) => ({ ...diagram, sourceRefs: markRefs(diagram.sourceRefs) })) : state.diagrams,
+						entities: changedRevisions.size
+							? state.entities.map((entity) => ({
+									...entity,
+									sourceRefs: markRefs(entity.sourceRefs),
+								}))
+							: state.entities,
+						relations: changedRevisions.size
+							? state.relations.map((relation) => ({
+									...relation,
+									sourceRefs: markRefs(relation.sourceRefs),
+								}))
+							: state.relations,
+						diagrams: changedRevisions.size
+							? state.diagrams.map((diagram) => ({
+									...diagram,
+									sourceRefs: markRefs(diagram.sourceRefs),
+								}))
+							: state.diagrams,
 					};
 				}),
 			setSourceStatus: (id, patch) =>
@@ -498,7 +682,11 @@ export const useAppStore = create<AppState>()(
 			saveEntity: (entity) => {
 				const state = get();
 				const before = state.entities.find((item) => item.id === entity.id);
-				const after = { ...entity, version: (before?.version ?? 0) + 1, updatedAt: new Date().toISOString() };
+				const after = {
+					...entity,
+					version: (before?.version ?? 0) + 1,
+					updatedAt: new Date().toISOString(),
+				};
 				const operation: ChangeOperation = {
 					kind: "entity",
 					action: before ? "update" : "create",
@@ -519,34 +707,63 @@ export const useAppStore = create<AppState>()(
 				if (!entity || entity.deletedAt) return;
 				const timestamp = new Date().toISOString();
 				const after = { ...entity, deletedAt: timestamp, version: entity.version + 1 };
-				const operations: ChangeOperation[] = [{
-					kind: "entity",
-					action: "soft_delete",
-					objectId: id,
-					label: entity.name,
-					before: entity,
-					after,
-				}];
+				const operations: ChangeOperation[] = [
+					{
+						kind: "entity",
+						action: "soft_delete",
+						objectId: id,
+						label: entity.name,
+						before: entity,
+						after,
+					},
+				];
 				set((state) => ({
 					entities: state.entities.map((item) => (item.id === id ? after : item)),
 					relations: state.relations.map((relation) => {
-						if (relation.deletedAt || (relation.sourceEntityId !== id && relation.targetEntityId !== id)) return relation;
+						if (
+							relation.deletedAt ||
+							(relation.sourceEntityId !== id && relation.targetEntityId !== id)
+						)
+							return relation;
 						const deleted = { ...relation, deletedAt: timestamp, version: relation.version + 1 };
-						operations.push({ kind: "relation", action: "soft_delete", objectId: relation.id, label: relation.type, before: relation, after: deleted });
+						operations.push({
+							kind: "relation",
+							action: "soft_delete",
+							objectId: relation.id,
+							label: relation.type,
+							before: relation,
+							after: deleted,
+						});
 						return deleted;
 					}),
 					changesets: [knowledgeChangeSet("Archived entity", operations), ...state.changesets],
 					selectedEntityId: state.selectedEntityId === id ? null : state.selectedEntityId,
 				}));
 			},
-				saveRelation: (relation) => {
-					const before = get().relations.find((item) => item.id === relation.id);
-					const after = { ...relation, version: (before?.version ?? 0) + 1 };
-				const source = get().entities.find((entity) => entity.id === after.sourceEntityId)?.name ?? after.sourceEntityId;
-				const target = get().entities.find((entity) => entity.id === after.targetEntityId)?.name ?? after.targetEntityId;
-				const operation: ChangeOperation = { kind: "relation", action: before ? "update" : "create", objectId: after.id, label: `${source} ${after.type} ${target}`, before, after };
-					set((state) => ({ relations: before ? state.relations.map((item) => item.id === after.id ? after : item) : [...state.relations, after], changesets: [manualChangeSet(operation), ...state.changesets] }));
-				},
+			saveRelation: (relation) => {
+				const before = get().relations.find((item) => item.id === relation.id);
+				const after = { ...relation, version: (before?.version ?? 0) + 1 };
+				const source =
+					get().entities.find((entity) => entity.id === after.sourceEntityId)?.name ??
+					after.sourceEntityId;
+				const target =
+					get().entities.find((entity) => entity.id === after.targetEntityId)?.name ??
+					after.targetEntityId;
+				const operation: ChangeOperation = {
+					kind: "relation",
+					action: before ? "update" : "create",
+					objectId: after.id,
+					label: `${source} ${after.type} ${target}`,
+					before,
+					after,
+				};
+				set((state) => ({
+					relations: before
+						? state.relations.map((item) => (item.id === after.id ? after : item))
+						: [...state.relations, after],
+					changesets: [manualChangeSet(operation), ...state.changesets],
+				}));
+			},
 			applyRelationCandidates: (candidates) => {
 				const state = get();
 				const nextRelations = [...state.relations];
@@ -557,14 +774,40 @@ export const useAppStore = create<AppState>()(
 					const source = findEntity(state.entities, candidate.sourceEntityId, candidate.sourceName);
 					const target = findEntity(state.entities, candidate.targetEntityId, candidate.targetName);
 					if (!source || !target || source.id === target.id) continue;
-					const existing = nextRelations.find((relation) => !relation.deletedAt && relation.sourceEntityId === source.id && relation.targetEntityId === target.id && relation.type === candidate.type);
+					const existing = nextRelations.find(
+						(relation) =>
+							!relation.deletedAt &&
+							relation.sourceEntityId === source.id &&
+							relation.targetEntityId === target.id &&
+							relation.type === candidate.type,
+					);
 					if (existing) {
 						const description = candidate.description || existing.description;
-						const confidence = candidate.confidence === "explicit" ? "confirmed" as const : existing.confidence;
-						if (description === existing.description && confidence === existing.confidence) continue;
-						const after: Relation = { ...existing, description, confidence, sourceRefs: dedupeSourceRefs([...existing.sourceRefs, ...source.sourceRefs, ...target.sourceRefs]), version: existing.version + 1 };
-						nextRelations[nextRelations.findIndex((relation) => relation.id === existing.id)] = after;
-						operations.push({ kind: "relation", action: "update", objectId: after.id, label: `${source.name} ${after.type} ${target.name}`, before: existing, after });
+						const confidence =
+							candidate.confidence === "explicit" ? ("confirmed" as const) : existing.confidence;
+						if (description === existing.description && confidence === existing.confidence)
+							continue;
+						const after: Relation = {
+							...existing,
+							description,
+							confidence,
+							sourceRefs: dedupeSourceRefs([
+								...existing.sourceRefs,
+								...source.sourceRefs,
+								...target.sourceRefs,
+							]),
+							version: existing.version + 1,
+						};
+						nextRelations[nextRelations.findIndex((relation) => relation.id === existing.id)] =
+							after;
+						operations.push({
+							kind: "relation",
+							action: "update",
+							objectId: after.id,
+							label: `${source.name} ${after.type} ${target.name}`,
+							before: existing,
+							after,
+						});
 						updated += 1;
 						continue;
 					}
@@ -579,7 +822,13 @@ export const useAppStore = create<AppState>()(
 						version: 1,
 					};
 					nextRelations.push(relation);
-					operations.push({ kind: "relation", action: "create", objectId: relation.id, label: `${source.name} ${relation.type} ${target.name}`, after: relation });
+					operations.push({
+						kind: "relation",
+						action: "create",
+						objectId: relation.id,
+						label: `${source.name} ${relation.type} ${target.name}`,
+						after: relation,
+					});
 					created += 1;
 				}
 				if (operations.length) {
@@ -594,37 +843,72 @@ export const useAppStore = create<AppState>()(
 						status: state.settings.knowledgeMode === "suggest" ? "proposed" : "committed",
 						operations,
 					};
-					set((current) => ({ relations: nextRelations, changesets: [changeSet, ...current.changesets] }));
+					set((current) => ({
+						relations: nextRelations,
+						changesets: [changeSet, ...current.changesets],
+					}));
 				}
 				return { created, updated };
 			},
 			softDeleteRelation: (id) => {
 				const before = get().relations.find((item) => item.id === id);
 				if (!before || before.deletedAt) return;
-				const after = { ...before, deletedAt: new Date().toISOString(), version: before.version + 1 };
-				const operation: ChangeOperation = { kind: "relation", action: "soft_delete", objectId: id, label: before.type, before, after };
-				set((state) => ({ relations: state.relations.map((item) => item.id === id ? after : item), changesets: [manualChangeSet(operation), ...state.changesets] }));
+				const after = {
+					...before,
+					deletedAt: new Date().toISOString(),
+					version: before.version + 1,
+				};
+				const operation: ChangeOperation = {
+					kind: "relation",
+					action: "soft_delete",
+					objectId: id,
+					label: before.type,
+					before,
+					after,
+				};
+				set((state) => ({
+					relations: state.relations.map((item) => (item.id === id ? after : item)),
+					changesets: [manualChangeSet(operation), ...state.changesets],
+				}));
 			},
 			saveDiagram: (diagram) => {
 				const before = get().diagrams.find((item) => item.id === diagram.id);
-				if (!before || before.deletedAt || !isMermaidSource(diagram.mermaidSource) || (diagram.archifySource !== undefined && !isArchifySource(diagram.archifySource))) return;
+				if (!before || before.deletedAt || !isMermaidSource(diagram.mermaidSource)) return;
 				const timestamp = new Date().toISOString();
-				const normalizedDiagram = diagram.archifySource ? normalizeEditedArchifyDiagram(diagram, before) : diagram;
+				const normalizedDiagram = diagram;
 				const after: Diagram = {
 					...normalizedDiagram,
 					name: normalizedDiagram.name.trim() || before.name,
 					version: before.version + 1,
 					updatedAt: timestamp,
-					versions: [...before.versions, {
-						version: before.version + 1,
-						timestamp,
-						addedNodeIds: diagram.nodes.filter((node) => !before.nodes.some((item) => item.id === node.id)).map((node) => node.id),
-						addedEdgeIds: diagram.edges.filter((edge) => !before.edges.some((item) => item.id === edge.id)).map((edge) => edge.id),
-						removedNodeIds: before.nodes.filter((node) => !diagram.nodes.some((item) => item.id === node.id)).map((node) => node.id),
-						removedEdgeIds: before.edges.filter((edge) => !diagram.edges.some((item) => item.id === edge.id)).map((edge) => edge.id),
-					}],
+					versions: [
+						...before.versions,
+						{
+							version: before.version + 1,
+							timestamp,
+							addedNodeIds: diagram.nodes
+								.filter((node) => !before.nodes.some((item) => item.id === node.id))
+								.map((node) => node.id),
+							addedEdgeIds: diagram.edges
+								.filter((edge) => !before.edges.some((item) => item.id === edge.id))
+								.map((edge) => edge.id),
+							removedNodeIds: before.nodes
+								.filter((node) => !diagram.nodes.some((item) => item.id === node.id))
+								.map((node) => node.id),
+							removedEdgeIds: before.edges
+								.filter((edge) => !diagram.edges.some((item) => item.id === edge.id))
+								.map((edge) => edge.id),
+						},
+					],
 				};
-				const operation: ChangeOperation = { kind: "diagram", action: "update", objectId: after.id, label: after.name, before, after };
+				const operation: ChangeOperation = {
+					kind: "diagram",
+					action: "update",
+					objectId: after.id,
+					label: after.name,
+					before,
+					after,
+				};
 				set((state) => ({
 					diagrams: state.diagrams.map((item) => (item.id === after.id ? after : item)),
 					changesets: [manualChangeSet(operation), ...state.changesets],
@@ -633,8 +917,19 @@ export const useAppStore = create<AppState>()(
 			softDeleteDiagram: (id) => {
 				const before = get().diagrams.find((item) => item.id === id);
 				if (!before || before.deletedAt) return;
-				const after: Diagram = { ...before, deletedAt: new Date().toISOString(), version: before.version + 1 };
-				const operation: ChangeOperation = { kind: "diagram", action: "soft_delete", objectId: id, label: before.name, before, after };
+				const after: Diagram = {
+					...before,
+					deletedAt: new Date().toISOString(),
+					version: before.version + 1,
+				};
+				const operation: ChangeOperation = {
+					kind: "diagram",
+					action: "soft_delete",
+					objectId: id,
+					label: before.name,
+					before,
+					after,
+				};
 				set((state) => ({
 					diagrams: state.diagrams.map((item) => (item.id === id ? after : item)),
 					selectedDiagramId: state.selectedDiagramId === id ? null : state.selectedDiagramId,
@@ -702,15 +997,36 @@ export const useAppStore = create<AppState>()(
 					entities,
 					relations,
 					diagrams,
-					changesets: current.changesets.map((item) => item.id === id ? { ...item, status: "superseded" as const } : item),
+					changesets: current.changesets.map((item) =>
+						item.id === id ? { ...item, status: "superseded" as const } : item,
+					),
 				}));
 			},
 			updateSettings: (newSettings) =>
-				set((state) => ({ settings: { ...state.settings, ...newSettings, maxConcurrentRequests: Math.min(10, Math.max(1, Math.round(newSettings.maxConcurrentRequests ?? state.settings.maxConcurrentRequests) || 5)) } })),
+				set((state) => ({
+					settings: {
+						...state.settings,
+						...newSettings,
+						maxConcurrentRequests: Math.min(
+							10,
+							Math.max(
+								1,
+								Math.round(
+									newSettings.maxConcurrentRequests ?? state.settings.maxConcurrentRequests,
+								) || 5,
+							),
+						),
+					},
+				})),
 			reconcileKnowledge: () => {
 				const state = get();
 				const timestamp = new Date().toISOString();
-				const reconciled = reconcileKnowledgeGraph(state.entities, state.relations, state.diagrams, timestamp);
+				const reconciled = reconcileKnowledgeGraph(
+					state.entities,
+					state.relations,
+					state.diagrams,
+					timestamp,
+				);
 				if (reconciled.length === 0) return;
 				const replacements = new Map(reconciled.map(({ after }) => [after.id, after]));
 				const operations: ChangeOperation[] = reconciled.map(({ before, after }) => ({
@@ -740,8 +1056,13 @@ export const useAppStore = create<AppState>()(
 				set((state) => {
 					const diagrams = migrateMermaidDiagrams(state.diagrams);
 					if (diagrams.length === state.diagrams.length) return state;
-					const selectedStillExists = diagrams.some((diagram) => diagram.id === state.selectedDiagramId);
-					return { diagrams, selectedDiagramId: selectedStillExists ? state.selectedDiagramId : null };
+					const selectedStillExists = diagrams.some(
+						(diagram) => diagram.id === state.selectedDiagramId,
+					);
+					return {
+						diagrams,
+						selectedDiagramId: selectedStillExists ? state.selectedDiagramId : null,
+					};
 				}),
 		}),
 		{
@@ -801,43 +1122,50 @@ export function loadWorkspaceState(serialized: string | null): void {
 }
 
 function normalizeSettings(settings: Partial<Settings> | undefined): Settings {
-	const legacy = (settings ?? {}) as Partial<Settings> & { enhancedDiagrams?: unknown };
-	const { enhancedDiagrams, ...current } = legacy;
-	const diagramRenderer = current.diagramRenderer === "archify" || current.diagramRenderer === "mermaid"
-		? current.diagramRenderer
-		: enhancedDiagrams === false ? "mermaid" : "archify";
+	const current = settings ?? {};
 	const theme = current.theme === "dark" ? "dark" : "light";
-	return { ...defaultSettings, ...current, theme, diagramRenderer };
+	return { ...defaultSettings, ...current, theme };
 }
 
 function recoverInterruptedTurns(turns: Turn[]): Turn[] {
 	const recoveredAt = new Date().toISOString();
-	return turns.map((turn) => isTurnActive(turn)
-		? {
-			...turn,
-			content: turn.content || "The response was interrupted because the application closed before the agent finished.",
-			status: "interrupted",
-			summary: "Interrupted before completion",
-			completedAt: recoveredAt,
-			tools: turn.tools?.map((tool) => tool.status === "running" ? {
-				...tool,
-				status: "error" as const,
-				completedAt: recoveredAt,
-				durationMs: Math.max(0, new Date(recoveredAt).getTime() - new Date(tool.startedAt).getTime()),
-			} : tool),
-		}
-		: turn);
+	return turns.map((turn) =>
+		isTurnActive(turn)
+			? {
+					...turn,
+					content:
+						turn.content ||
+						"The response was interrupted because the application closed before the agent finished.",
+					status: "interrupted",
+					summary: "Interrupted before completion",
+					completedAt: recoveredAt,
+					tools: turn.tools?.map((tool) =>
+						tool.status === "running"
+							? {
+									...tool,
+									status: "error" as const,
+									completedAt: recoveredAt,
+									durationMs: Math.max(
+										0,
+										new Date(recoveredAt).getTime() - new Date(tool.startedAt).getTime(),
+									),
+								}
+							: tool,
+					),
+				}
+			: turn,
+	);
 }
 
 function recoverInterruptedSessions(sessions: SessionNode[], turns: Turn[]): SessionNode[] {
-	const interruptedSessionIds = new Set(turns
-		.filter(isTurnActive)
-		.map((turn) => turn.sessionId));
+	const interruptedSessionIds = new Set(turns.filter(isTurnActive).map((turn) => turn.sessionId));
 	return sessions.map((session) => ({
 		...session,
 		status: interruptedSessionIds.has(session.id)
 			? "interrupted"
-			: session.status === "running" ? "idle" : session.status,
+			: session.status === "running"
+				? "idle"
+				: session.status,
 		titlePending: false,
 		refreshTitleOnNextPrompt: session.titlePending || session.refreshTitleOnNextPrompt,
 	}));
@@ -858,17 +1186,26 @@ function applyExtractedDiagrams(
 		const existing = findMatchingDiagram(nextDiagrams, candidate);
 		const nodeIds = new Map<string, string>();
 		const nodes = candidate.nodes.map((node) => {
-			const previous = existing?.nodes.find((item) => normalizeLabel(item.label) === normalizeLabel(node.label));
+			const previous = existing?.nodes.find(
+				(item) => normalizeLabel(item.label) === normalizeLabel(node.label),
+			);
 			const id = previous?.id ?? createId("diagram_node");
 			nodeIds.set(node.key, id);
-			const entity = entities.find((item) => !item.deletedAt && normalizeLabel(item.name) === normalizeLabel(node.label));
+			const entity = entities.find(
+				(item) => !item.deletedAt && normalizeLabel(item.name) === normalizeLabel(node.label),
+			);
 			return { id, entityId: entity?.id, label: node.label, type: node.type };
 		});
 		const edges = candidate.edges.flatMap((edge) => {
 			const source = nodeIds.get(edge.sourceKey);
 			const target = nodeIds.get(edge.targetKey);
 			if (!source || !target) return [];
-			const previous = existing?.edges.find((item) => item.source === source && item.target === target && normalizeLabel(item.label ?? "") === normalizeLabel(edge.label ?? ""));
+			const previous = existing?.edges.find(
+				(item) =>
+					item.source === source &&
+					item.target === target &&
+					normalizeLabel(item.label ?? "") === normalizeLabel(edge.label ?? ""),
+			);
 			return [{ id: previous?.id ?? createId("diagram_edge"), source, target, label: edge.label }];
 		});
 		const version = (existing?.version ?? 0) + 1;
@@ -879,8 +1216,7 @@ function applyExtractedDiagrams(
 			nodes,
 			edges,
 			mermaidSource: candidate.mermaidSource,
-			archifySource: candidate.archifySource,
-			archifyType: candidate.archifyType,
+
 			sourceRefs: [...(existing?.sourceRefs ?? []), { sessionId, turnId }],
 			version,
 			versions: [
@@ -888,16 +1224,26 @@ function applyExtractedDiagrams(
 				{
 					version,
 					timestamp,
-					addedNodeIds: nodes.filter((node) => !existing?.nodes.some((item) => item.id === node.id)).map((node) => node.id),
-					addedEdgeIds: edges.filter((edge) => !existing?.edges.some((item) => item.id === edge.id)).map((edge) => edge.id),
-					removedNodeIds: existing?.nodes.filter((node) => !nodes.some((item) => item.id === node.id)).map((node) => node.id) ?? [],
-					removedEdgeIds: existing?.edges.filter((edge) => !edges.some((item) => item.id === edge.id)).map((edge) => edge.id) ?? [],
+					addedNodeIds: nodes
+						.filter((node) => !existing?.nodes.some((item) => item.id === node.id))
+						.map((node) => node.id),
+					addedEdgeIds: edges
+						.filter((edge) => !existing?.edges.some((item) => item.id === edge.id))
+						.map((edge) => edge.id),
+					removedNodeIds:
+						existing?.nodes
+							.filter((node) => !nodes.some((item) => item.id === node.id))
+							.map((node) => node.id) ?? [],
+					removedEdgeIds:
+						existing?.edges
+							.filter((edge) => !edges.some((item) => item.id === edge.id))
+							.map((edge) => edge.id) ?? [],
 				},
 			],
 			updatedAt: timestamp,
 		};
 		nextDiagrams = existing
-			? nextDiagrams.map((diagram) => diagram.id === existing.id ? next : diagram)
+			? nextDiagrams.map((diagram) => (diagram.id === existing.id ? next : diagram))
 			: [...nextDiagrams, next];
 		operations.push({
 			kind: "diagram",
@@ -911,13 +1257,20 @@ function applyExtractedDiagrams(
 	return { diagrams: nextDiagrams, operations };
 }
 
-function findMatchingDiagram(diagrams: Diagram[], candidate: KnowledgeDiagramCandidate): Diagram | undefined {
-	const available = diagrams.filter((diagram) => !diagram.deletedAt && diagram.id !== "workspace-knowledge-map");
+function findMatchingDiagram(
+	diagrams: Diagram[],
+	candidate: KnowledgeDiagramCandidate,
+): Diagram | undefined {
+	const available = diagrams.filter(
+		(diagram) => !diagram.deletedAt && diagram.id !== "workspace-knowledge-map",
+	);
 	const byId = candidate.existingDiagramId
 		? available.find((diagram) => diagram.id === candidate.existingDiagramId)
 		: undefined;
 	if (byId) return byId;
-	const byName = available.find((diagram) => normalizeLabel(diagram.name) === normalizeLabel(candidate.name));
+	const byName = available.find(
+		(diagram) => normalizeLabel(diagram.name) === normalizeLabel(candidate.name),
+	);
 	if (byName) return byName;
 	const labels = new Set(candidate.nodes.map((node) => normalizeLabel(node.label)));
 	return available
@@ -933,13 +1286,28 @@ function findMatchingDiagram(diagrams: Diagram[], candidate: KnowledgeDiagramCan
 }
 
 function findEntity(entities: Entity[], id: string | undefined, name: string): Entity | undefined {
-	return entities.find((entity) => !entity.deletedAt && (entity.id === id || [entity.name, ...entity.aliases].some((label) => normalizeLabel(label) === normalizeLabel(name))));
+	return entities.find(
+		(entity) =>
+			!entity.deletedAt &&
+			(entity.id === id ||
+				[entity.name, ...entity.aliases].some(
+					(label) => normalizeLabel(label) === normalizeLabel(name),
+				)),
+	);
 }
 
 function dedupeSourceRefs(sourceRefs: SourceRef[]): SourceRef[] {
 	const seen = new Set<string>();
 	return sourceRefs.filter((source) => {
-		const key = [source.sourceId, source.revision, source.path, source.lineStart, source.lineEnd, source.sessionId, source.turnId].join(":" );
+		const key = [
+			source.sourceId,
+			source.revision,
+			source.path,
+			source.lineStart,
+			source.lineEnd,
+			source.sessionId,
+			source.turnId,
+		].join(":");
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;
@@ -956,44 +1324,12 @@ function isMermaidSource(source: unknown): source is string {
 		.split(/\r?\n/)
 		.map((line) => line.trim())
 		.find((line) => line && !line.startsWith("%%"));
-	return Boolean(firstLine && /^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|gitGraph|C4\w*)\b/i.test(firstLine));
-}
-
-function isArchifySource(source: unknown): source is string {
-	if (typeof source !== "string" || source.length > 1_000_000) return false;
-	try {
-		parseArchifySource(source);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function normalizeEditedArchifyDiagram(diagram: Diagram, before: Diagram): Diagram {
-	const source = diagram.archifySource!;
-	const parsed = parseArchifySource(source);
-	const nodeIds = new Map<string, string>();
-	const nodes = parsed.nodes.map((node) => {
-		const previous = before.nodes.find((item) => normalizeLabel(item.label) === normalizeLabel(node.label));
-		const id = previous?.id ?? createId("diagram_node");
-		nodeIds.set(node.key, id);
-		return { id, entityId: previous?.entityId, label: node.label, type: node.type };
-	});
-	const edges = parsed.edges.flatMap((edge) => {
-		const sourceId = nodeIds.get(edge.sourceKey);
-		const targetId = nodeIds.get(edge.targetKey);
-		if (!sourceId || !targetId) return [];
-		const previous = before.edges.find((item) => item.source === sourceId && item.target === targetId && normalizeLabel(item.label ?? "") === normalizeLabel(edge.label ?? ""));
-		return [{ id: previous?.id ?? createId("diagram_edge"), source: sourceId, target: targetId, relationId: previous?.relationId, label: edge.label }];
-	});
-	return {
-		...diagram,
-		type: parsed.type,
-		archifyType: parsed.type,
-		mermaidSource: archifyToMermaid(source),
-		nodes,
-		edges,
-	};
+	return Boolean(
+		firstLine &&
+		/^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|gitGraph|C4\w*)\b/i.test(
+			firstLine,
+		),
+	);
 }
 
 function manualChangeSet(operation: ChangeOperation): ChangeSet {

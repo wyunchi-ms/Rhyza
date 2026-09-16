@@ -5450,99 +5450,40 @@ a:focus-visible {
 .mermaid-diagram-error pre {
 	margin-bottom: 0;
 }
-.archify-diagram {
-	position: relative;
-	min-height: 0;
+.html-preview {
 	margin: 0.9rem 0;
 	overflow: hidden;
-	border: 1px solid #dbe2ea;
+	border: 1px solid var(--ui-border, #dbe2ea);
 	border-radius: 8px;
-	background: #f8fafc;
-	box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+	background: var(--ui-surface, #fff);
 }
-.archify-diagram > iframe {
-	display: block;
-	width: 100%;
-	min-height: 17.5rem;
-	border: 0;
-	background: #fff;
-	transition: height 160ms ease;
-}
-.archify-diagram-expand {
-	position: absolute;
-	right: 0.65rem;
-	top: 0.5rem;
-	z-index: 3;
-	display: grid;
-	width: 2rem;
-	height: 2rem;
-	place-items: center;
-	border: 1px solid #dbe2ea;
-	border-radius: 6px;
-	background: rgb(255 255 255 / 92%);
-	color: #475569;
-	box-shadow: 0 4px 12px rgb(15 23 42 / 9%);
-	opacity: 0.72;
-	transition:
-		opacity 140ms ease,
-		border-color 140ms ease;
-}
-.archify-diagram:hover .archify-diagram-expand,
-.archify-diagram-expand:focus-visible {
-	opacity: 1;
-}
-.archify-diagram-expand:hover {
-	border-color: var(--ui-brand-border, #5eead4);
-	color: var(--ui-brand-ink, #0f766e);
-}
-.archify-diagram-state {
+.html-preview > header {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	gap: 0.55rem;
-	color: #64748b;
+	gap: 0.5rem;
+	padding: 0.6rem 0.8rem;
+	border-bottom: 1px solid var(--ui-border, #dbe2ea);
+}
+.html-preview > header strong {
+	flex: 1;
 	font-size: 0.8rem;
 }
-.archify-fallback-note {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0.45rem;
-	margin: 0.9rem 0 -0.45rem;
-	border: 1px solid #dbe2ea;
-	border-radius: 7px;
-	background: #f8fafc;
-	padding: 0.55rem 0.7rem;
-	color: #64748b;
-	font-size: 0.72rem;
-}
-.archify-fallback-note.is-error {
-	border-color: #fecaca;
-	background: #fff7ed;
-	color: #9a3412;
-}
-.archify-fallback-note details {
+.html-preview > iframe {
+	display: block;
 	width: 100%;
+	height: 32rem;
+	border: 0;
+	background: #fff;
 }
-.archify-fallback-note summary {
-	cursor: pointer;
-	font-weight: 700;
+.html-preview-state {
+	padding: 1rem;
+	margin: 0.9rem 0;
+	border: 1px solid var(--ui-border, #dbe2ea);
+	border-radius: 8px;
+	font-size: 0.8rem;
+	overflow-wrap: anywhere;
 }
-.archify-fallback-note pre {
-	max-height: 10rem;
-	margin: 0.45rem 0 0;
-	overflow: auto;
-	white-space: pre-wrap;
-}
-.archify-source-error {
-	margin: 0.75rem 0;
-	border-radius: 7px;
-	background: #0f172a;
-	padding: 0.8rem;
-	color: #fecaca;
-	font-size: 0.75rem;
-}
-.archify-preview-backdrop {
+.html-preview-backdrop {
 	position: fixed;
 	inset: 0;
 	z-index: 1100;
@@ -5552,7 +5493,7 @@ a:focus-visible {
 	background: rgb(15 23 42 / 66%);
 	padding: clamp(0.5rem, 2vw, 1.5rem);
 }
-.archify-preview-dialog {
+.html-preview-dialog {
 	display: flex;
 	width: min(98vw, 120rem);
 	height: min(96vh, 80rem);
@@ -5563,7 +5504,7 @@ a:focus-visible {
 	background: #fff;
 	box-shadow: 0 28px 90px rgb(15 23 42 / 38%);
 }
-.archify-preview-dialog > header {
+.html-preview-dialog > header {
 	display: flex;
 	min-height: 3.25rem;
 	flex: none;
@@ -5572,24 +5513,24 @@ a:focus-visible {
 	border-bottom: 1px solid #e2e8f0;
 	padding: 0.55rem 0.7rem 0.55rem 1rem;
 }
-.archify-preview-dialog > header div {
+.html-preview-dialog > header div {
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
 }
-.archify-preview-dialog > header strong {
+.html-preview-dialog > header strong {
 	overflow: hidden;
 	color: #0f172a;
 	font-size: 0.83rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.archify-preview-dialog > header span {
+.html-preview-dialog > header span {
 	color: #94a3b8;
 	font-size: 0.65rem;
 	text-transform: capitalize;
 }
-.archify-preview-dialog > header button {
+.html-preview-dialog > header button {
 	display: grid;
 	width: 2rem;
 	height: 2rem;
@@ -5597,17 +5538,17 @@ a:focus-visible {
 	border-radius: 6px;
 	color: #64748b;
 }
-.archify-preview-dialog > header button:hover {
+.html-preview-dialog > header button:hover {
 	background: #f1f5f9;
 	color: #0f172a;
 }
-.archify-preview-dialog > iframe {
+.html-preview-dialog > iframe {
 	min-height: 0;
 	flex: 1;
 	border: 0;
 	background: #fff;
 }
-.diagram-viewer-compact .archify-diagram {
+.diagram-viewer-compact .html-preview {
 	min-height: 0;
 	margin: 0;
 }
@@ -5658,7 +5599,7 @@ a:focus-visible {
 	opacity: 0.4;
 }
 
-/* App-owned color mode. Archify iframes receive the same value through their host adapter. */
+/* App-owned color mode. Embedded HTML owns its document presentation. */
 html[data-theme="dark"] {
 	--color-primary: #f4f4f5;
 	--color-secondary: #a1a1aa;
@@ -5849,7 +5790,7 @@ html[data-theme="dark"] .turn-context-menu,
 html[data-theme="dark"] .text-selection-menu,
 html[data-theme="dark"] .text-selection-popover,
 html[data-theme="dark"] .diagram-export-menu,
-html[data-theme="dark"] .archify-preview-dialog {
+html[data-theme="dark"] .html-preview-dialog {
 	border-color: #34363a !important;
 	background: #191a1d !important;
 	color: #e7e7e9;
@@ -5988,24 +5929,24 @@ html[data-theme="dark"] .usage-chart {
 html[data-theme="dark"] .theme-options input::before {
 	background: #2dd4bf;
 }
-html[data-theme="dark"] .archify-diagram,
-html[data-theme="dark"] .archify-diagram > iframe,
-html[data-theme="dark"] .archify-preview-dialog > iframe {
+html[data-theme="dark"] .html-preview,
+html[data-theme="dark"] .html-preview > iframe,
+html[data-theme="dark"] .html-preview-dialog > iframe {
 	border-color: #34363a;
 	background: #101521;
 }
-html[data-theme="dark"] .archify-diagram-expand {
+html[data-theme="dark"] .html-preview-expand {
 	border-color: #3d4654;
 	background: rgb(23 25 28 / 94%);
 	color: #cbd5e1;
 }
-html[data-theme="dark"] .archify-preview-dialog > header {
+html[data-theme="dark"] .html-preview-dialog > header {
 	border-color: #34363a;
 }
-html[data-theme="dark"] .archify-preview-dialog > header strong {
+html[data-theme="dark"] .html-preview-dialog > header strong {
 	color: #f1f5f9;
 }
-html[data-theme="dark"] .archify-preview-dialog > header button:hover {
+html[data-theme="dark"] .html-preview-dialog > header button:hover {
 	background: #2a2c30;
 	color: #fff;
 }

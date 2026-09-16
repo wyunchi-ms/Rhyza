@@ -34,6 +34,7 @@ const excludedDirectories = new Set([
 	"node_modules",
 	"dist",
 	"dist-electron",
+	"dist-extensions",
 	"build",
 	"coverage",
 ]);
@@ -52,6 +53,7 @@ export function isSourcePath(root, file) {
 	return (
 		!parts.some((part) => excludedDirectories.has(part)) &&
 		!(parts[0] === "resources" && parts[1] === "skills") &&
+		!(parts[0] === "archify-extension" && parts[1] === "skills") &&
 		extensions.has(path.extname(file).toLowerCase()) &&
 		!/(?:^|[\\/])package-lock\.json$|\.min\.(?:js|css)$|sample\.json$/i.test(file)
 	);

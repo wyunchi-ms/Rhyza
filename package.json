@@ -24,7 +24,6 @@
 		"smoke:knowledge-reconciliation": "tsx scripts/knowledge-reconciliation-smoke.ts",
 		"smoke:mvp": "tsx scripts/mvp-smoke.ts",
 		"smoke:state-store": "tsx scripts/app-state-store-smoke.ts",
-		"smoke:archify": "tsx scripts/archify-smoke.ts",
 		"diagnostics:analyze": "node scripts/analyze-performance.mjs",
 		"electron:smoke": "npm run build && cross-env KNOWBRANCH_ELECTRON_SMOKE=1 electron dist-electron/electron/main/index.js"
 	},
@@ -38,7 +37,9 @@
 		},
 		"files": [
 			"!resources/branding/rhyza-icon-v*.png",
-			"!resources/skills/archify/**"
+			"!archify-extension/**",
+			"!dist-extensions/**",
+			"!dist-electron/electron/main/archify-*"
 		],
 		"extraResources": [
 			{
@@ -48,10 +49,6 @@
 					"icon.png",
 					"icon.ico"
 				]
-			},
-			{
-				"from": "resources/skills/archify",
-				"to": "skills/archify"
 			}
 		]
 	},

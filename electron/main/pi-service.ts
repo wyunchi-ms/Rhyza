@@ -1,3 +1,4 @@
+import { collectHtmlPreviews } from "./html-preview-service.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -39,8 +40,6 @@ import type {
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
-import type { GptArchifyHarness } from "./archify-harness.js";
-import { archifyToMermaid, parseArchifySource } from "../../src/shared/archify.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
 import { responseCacheEvidence } from "../../src/shared/cacheEvidence.js";
@@ -56,6 +55,7 @@ interface ActiveSession {
 	frontendSessionId: string;
 	frontendTurnId?: string;
 	modelKey?: string;
+
 	unsubscribe: () => void;
 	sourceRefs: Map<string, SourceReference>;
 }
@@ -75,7 +75,6 @@ export class PiService {
 		private readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
 		agentDir: string = getAgentDir(),
 		private readonly sourceService?: SourceService,
-		private readonly archifyHarness?: GptArchifyHarness,
 	) {
 		this.agentDir = agentDir;
 		this.requestDumpDir = path.join(userDataPath, "model-request-dumps");
@@ -252,12 +251,9 @@ export class PiService {
 				if (usage) addUsage(promptUsage, usage);
 			});
 			try {
-				const promptWithDiagramMode = this.archifyHarness
-					? this.archifyHarness.wrapUserPrompt(request.prompt, request.diagramMode ?? "mermaid")
-					: request.prompt;
 				const promptText = request.knowledgeContext
-					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${promptWithDiagramMode}\n</user_question>`
-					: promptWithDiagramMode;
+					? `<knowledge_context>\n${request.knowledgeContext}\n</knowledge_context>\n\n<user_question>\n${request.prompt}\n</user_question>`
+					: request.prompt;
 				const promptContent: string | Array<{ type: "text"; text: string } | ImageContent> = request
 					.images?.length
 					? [
@@ -277,6 +273,10 @@ export class PiService {
 				ok: true,
 				sessionId: session.sessionId,
 				assistantText: getLastAssistantText(session),
+				htmlPreviews: await collectHtmlPreviews(
+					getLastAssistantText(session) ?? "",
+					active.workspacePath,
+				),
 				reasoningText: getLastAssistantReasoning(session),
 				usage: hasUsage(promptUsage) ? promptUsage : undefined,
 				workspacePath: active.workspacePath,
@@ -411,16 +411,19 @@ export class PiService {
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: sessionWorkspace.path,
 			agentDir: this.agentDir,
-			additionalSkillPaths: this.archifyHarness?.additionalSkillPaths,
+
 			appendSystemPromptOverride: (base) => [
 				...base,
 				workspaceExplorationGuidance,
 				todoTrackingGuidance,
 				...(this.sourceService ? [sourceRetrievalGuidance] : []),
-				this.archifyHarness?.responseGuidance ?? responsePresentationGuidance,
+				responsePresentationGuidance,
 			],
 		});
 		await resourceLoader.reload();
+		const extensionToolNames = resourceLoader
+			.getExtensions()
+			.extensions.flatMap((extension) => [...extension.tools.keys()]);
 		const { sessionManager } = await openOrCreatePiSession({
 			workspacePath: sessionWorkspace.path,
 			sessionDir: path.join(this.agentDir, "knowbranch-sessions"),
@@ -443,7 +446,13 @@ export class PiService {
 			thinkingLevel: request.thinkingLevel ?? "medium",
 			sessionManager,
 			resourceLoader,
-			tools: [...builtInTools, ...customTools.map((tool) => tool.name)],
+			tools: [
+				...new Set([
+					...builtInTools,
+					...customTools.map((tool) => tool.name),
+					...extensionToolNames,
+				]),
+			],
 			customTools,
 		});
 		let requestSequence = 0;
@@ -772,6 +781,8 @@ const sourceRetrievalGuidance = `## Attached sources
 - Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
 
 const responsePresentationGuidance = `## Response presentation
+- Installed extensions may supply other visualization tools and formats; follow their presentation instructions when available. The Mermaid rules below are the default when no extension overrides them.
+- To embed an existing self-contained HTML file, return a fenced html-preview JSON block: {"version":1,"path":"relative/path.html","title":"Preview title"}. The file must be inside the current session workspace. Do not return its full HTML as prose. HTML previews are sandboxed and cannot fetch network resources.
 - When visualizing a process, call chain, sequence, architecture, state transition, decision path, or relationship graph, use a concise Mermaid diagram. Never use an ASCII-art tree, arrow-filled plain-text diagram, or a \`\`\`text block as a substitute for a diagram.
 - Every diagram MUST use a fenced \`\`\`mermaid block with valid Mermaid syntax and the exact \`mermaid\` language tag. Choose the diagram type that best matches the information, such as flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, or erDiagram.
 - Before finishing, verify that every visual block begins with a supported Mermaid declaration and that no diagram was emitted as an unlabeled or plain-text code block.
@@ -886,8 +897,6 @@ function buildKnowledgeExtractionPrompt(request: KnowledgeExtractionRequest): st
 			source: match[1].trim(),
 		}),
 	);
-	const archifyBlockCount = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)]
-		.length;
 	return `You are a conservative learning-gap detector for a personal knowledge workspace.
 
 Decide whether the USER'S QUESTION demonstrates that the user does not understand a concept. Create knowledge entities only for those learning gaps.
@@ -909,7 +918,7 @@ Rules:
 - Classify each entity's sourceScope. Use "workspace" when its identity or stated behavior is defined by this repository (files, modules, project-specific components/configuration), "general" for stable common knowledge independent of this repository (products, protocols, languages, established patterns), and "mixed" only when both are essential. General entities must not acquire workspace file citations merely because the conversation happened in this project.
 - Extract only meaningful relations supported by the answer between returned or existing entities. Prefer stable existing IDs when available.
 - When the question explicitly asks to rebuild relationships, return zero entities and zero diagrams, scan all supplied existing entities and diagram topology, and return every high-confidence useful relation without duplicating the existing graph.
-- Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Archify blocks are parsed deterministically by the host, so do not return them in the diagrams array. Do not invent diagrams when MERMAID_BLOCKS is empty.
+- Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Do not invent diagrams when MERMAID_BLOCKS is empty.
 - For each diagram, choose existingDiagramId only when it represents the same subject as an EXISTING_DIAGRAM. Never choose the reserved "workspace-knowledge-map". Otherwise omit existingDiagramId to create a new diagram.
 - Diagram node keys must be short stable identifiers. Every edge sourceKey and targetKey must reference a returned node key.
 - Map Mermaid types to architecture, structure, flowchart, sequence, swimlane, or dependency.
@@ -924,9 +933,6 @@ ${JSON.stringify(request.existingDiagrams)}
 
 MERMAID_BLOCKS:
 ${JSON.stringify(mermaidBlocks)}
-
-ARCHIFY_BLOCK_COUNT (host-extracted, informational only):
-${archifyBlockCount}
 
 USER_QUESTION:
 ${request.question}
@@ -949,10 +955,7 @@ function parseKnowledgeExtraction(
 	return {
 		entities: parseKnowledgeCandidates(parsed.entities, request),
 		relations: parseRelationCandidates(parsed.relations, request),
-		diagrams: [
-			...parseDiagramCandidates(parsed.diagrams, request),
-			...extractArchifyDiagramCandidates(request),
-		],
+		diagrams: parseDiagramCandidates(parsed.diagrams, request),
 	};
 }
 
@@ -1164,42 +1167,17 @@ export function extractMermaidDiagramCandidates(
 	});
 }
 
-export function extractArchifyDiagramCandidates(
-	request: KnowledgeExtractionRequest,
-): KnowledgeDiagramCandidate[] {
-	const matches = [...request.answer.matchAll(/```archify\s*\r?\n([\s\S]*?)```/gi)];
-	return matches.flatMap((match, index): KnowledgeDiagramCandidate[] => {
-		const archifySource = match[1].trim();
-		try {
-			const parsed = parseArchifySource(archifySource);
-			return [
-				{
-					name:
-						nearestMarkdownHeading(request.answer, match.index ?? 0) ||
-						parsed.title ||
-						`Interactive diagram ${index + 1}`,
-					type: parsed.type,
-					mermaidSource: archifyToMermaid(archifySource),
-					archifySource,
-					archifyType: parsed.type,
-					nodes: parsed.nodes,
-					edges: parsed.edges,
-				},
-			];
-		} catch {
-			return [];
-		}
-	});
-}
-
 function extractDiagramCandidates(
 	request: KnowledgeExtractionRequest,
 ): KnowledgeDiagramCandidate[] {
-	return [...extractMermaidDiagramCandidates(request), ...extractArchifyDiagramCandidates(request)];
+	return extractMermaidDiagramCandidates(request);
 }
 
 function stripDiagramCode(answer: string): string {
-	return answer.replace(/```(?:mermaid|archify)\s*\r?\n[\s\S]*?```/gi, "[diagram omitted]");
+	return answer.replace(
+		/```(?:mermaid|html-preview|html)\s*\r?\n[\s\S]*?```/gi,
+		"[diagram omitted]",
+	);
 }
 
 function parseMermaidStructure(

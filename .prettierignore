@@ -14,3 +14,6 @@ resources/skills/
 **/*sample.json
 **/*.min.js
 **/*.min.css
+
+archify-extension/skills/
+dist-extensions/

@@ -1,7 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { extractArchifyDiagramCandidates, extractMermaidDiagramCandidates, isDurableKnowledgeEntityCandidate, PiService } from "../electron/main/pi-service.js";
+import {
+	extractMermaidDiagramCandidates,
+	isDurableKnowledgeEntityCandidate,
+	PiService,
+} from "../electron/main/pi-service.js";
 import {
 	validateAgentPromptRequest,
 	validateModelCatalogRequest,
@@ -10,18 +14,12 @@ import {
 	validateKnowledgeExtractionRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
-	validateArchifyRenderRequest,
 } from "../src/shared/ipc.js";
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "knowbranch-ipc-smoke-"));
 
 try {
-	const service = new PiService(
-		tempRoot,
-		undefined,
-		undefined,
-		path.join(tempRoot, "pi-agent"),
-	);
+	const service = new PiService(tempRoot, undefined, undefined, path.join(tempRoot, "pi-agent"));
 
 	assertThrows(() => validateProviderStatusRequest({ providerId: "openai" }));
 	assertThrows(() => validateAgentPromptRequest({ prompt: "missing workspace" }));
@@ -29,10 +27,20 @@ try {
 		frontendSessionId: "image-session",
 		prompt: "",
 		images: [{ mimeType: "image/png", data: "aGVsbG8=" }],
-		transcript: [{ id: "image-turn", role: "user", content: "", images: [{ mimeType: "image/png", data: "aGVsbG8=" }] }],
+		transcript: [
+			{
+				id: "image-turn",
+				role: "user",
+				content: "",
+				images: [{ mimeType: "image/png", data: "aGVsbG8=" }],
+			},
+		],
 	});
 	assert(imageOnlyPrompt.images?.length === 1, "An image-only prompt must retain its attachment.");
-	assert(imageOnlyPrompt.transcript[0]?.images?.length === 1, "Transcript attachments must survive validation.");
+	assert(
+		imageOnlyPrompt.transcript[0]?.images?.length === 1,
+		"Transcript attachments must survive validation.",
+	);
 	validateProviderStatusRequest({ providerId: "github-copilot" });
 	validateModelCatalogRequest({ providerId: "github-copilot", refresh: false });
 	validateSummaryRequest({ text: "How does the session tree work?" });
@@ -43,13 +51,19 @@ try {
 		existingEntities: [],
 		existingDiagrams: [],
 	});
-	assertThrows(() => validateKnowledgeExtractionRequest({ question: "", answer: "x", existingEntities: [], existingDiagrams: [] }));
+	assertThrows(() =>
+		validateKnowledgeExtractionRequest({
+			question: "",
+			answer: "x",
+			existingEntities: [],
+			existingDiagrams: [],
+		}),
+	);
 	validateOpenExternalRequest({ url: "https://github.com/login/device" });
 	assertThrows(() => validateOpenExternalRequest({ url: "file:///etc/passwd" }));
 	validateAppStateSaveRequest({ value: "{}", workspacePath: tempRoot });
 	assertThrows(() => validateAppStateSaveRequest({ value: "{}" }));
-	validateArchifyRenderRequest({ source: '{"diagram_type":"architecture"}' });
-	assertThrows(() => validateArchifyRenderRequest({ source: "" }));
+
 	const diagramCandidates = extractMermaidDiagramCandidates({
 		question: "Explain the architecture",
 		answer: [
@@ -68,24 +82,46 @@ try {
 		existingEntities: [],
 		existingDiagrams: [],
 	});
-	assert(diagramCandidates.length === 2, "Every Mermaid block must produce a deterministic diagram candidate.");
-	assert(diagramCandidates[0]?.name === "Request flow" && diagramCandidates[0].nodes.length === 2, "Sequence diagram fallback was not parsed.");
-	assert(diagramCandidates[1]?.name === "Top-level structure" && diagramCandidates[1].edges.length === 1, "Flowchart fallback was not parsed.");
-	const archifyCandidates = extractArchifyDiagramCandidates({
-		question: "Explain the runtime",
-		answer: ["## Interactive runtime", "```archify", JSON.stringify({ schema_version: 1, diagram_type: "workflow", meta: { title: "Runtime", quality_profile: "showcase" }, nodes: [{ id: "agent", label: "Agent", type: "backend" }, { id: "tool", label: "Tool", type: "messagebus" }], edges: [{ id: "call", from: "agent", to: "tool", label: "invoke" }] }), "```"].join("\n"),
-		existingEntities: [],
-		existingDiagrams: [],
-	});
-	assert(archifyCandidates.length === 1 && archifyCandidates[0]?.archifyType === "workflow", "Archify blocks must produce deterministic diagram candidates.");
-	assert(archifyCandidates[0]?.mermaidSource.startsWith("flowchart TD"), "Archify candidates must carry a Mermaid fallback.");
-	assert(!isDurableKnowledgeEntityCandidate("OpenCode 架构", "Technology"), "A project architecture view must not become an entity.");
-	assert(!isDurableKnowledgeEntityCandidate("OpenCode Core 与 Legacy 服务边界", "Pattern"), "A relationship title must not become an entity.");
-	assert(!isDurableKnowledgeEntityCandidate("OpenCode 协议适配层", "Pattern"), "An explanatory layer must not become an entity.");
-	assert(!isDurableKnowledgeEntityCandidate("登录流程", "Concept"), "A flow title must not become an entity.");
-	assert(isDurableKnowledgeEntityCandidate("OpenCode", "Technology"), "A named product should remain eligible as an entity.");
-	assert(isDurableKnowledgeEntityCandidate("Agent Loop", "Pattern"), "An established technical concept should remain eligible as an entity.");
-	assert(isDurableKnowledgeEntityCandidate("Hexagonal Architecture", "Pattern"), "An established architecture pattern should remain eligible as an entity.");
+	assert(
+		diagramCandidates.length === 2,
+		"Every Mermaid block must produce a deterministic diagram candidate.",
+	);
+	assert(
+		diagramCandidates[0]?.name === "Request flow" && diagramCandidates[0].nodes.length === 2,
+		"Sequence diagram fallback was not parsed.",
+	);
+	assert(
+		diagramCandidates[1]?.name === "Top-level structure" && diagramCandidates[1].edges.length === 1,
+		"Flowchart fallback was not parsed.",
+	);
+	assert(
+		!isDurableKnowledgeEntityCandidate("OpenCode 架构", "Technology"),
+		"A project architecture view must not become an entity.",
+	);
+	assert(
+		!isDurableKnowledgeEntityCandidate("OpenCode Core 与 Legacy 服务边界", "Pattern"),
+		"A relationship title must not become an entity.",
+	);
+	assert(
+		!isDurableKnowledgeEntityCandidate("OpenCode 协议适配层", "Pattern"),
+		"An explanatory layer must not become an entity.",
+	);
+	assert(
+		!isDurableKnowledgeEntityCandidate("登录流程", "Concept"),
+		"A flow title must not become an entity.",
+	);
+	assert(
+		isDurableKnowledgeEntityCandidate("OpenCode", "Technology"),
+		"A named product should remain eligible as an entity.",
+	);
+	assert(
+		isDurableKnowledgeEntityCandidate("Agent Loop", "Pattern"),
+		"An established technical concept should remain eligible as an entity.",
+	);
+	assert(
+		isDurableKnowledgeEntityCandidate("Hexagonal Architecture", "Pattern"),
+		"An established architecture pattern should remain eligible as an entity.",
+	);
 
 	const status = await service.getProviderStatus("github-copilot");
 	if (status.providerId !== "github-copilot") {
@@ -100,9 +136,7 @@ try {
 		throw new Error("Model catalog did not return an array.");
 	}
 
-	console.log(
-		`IPC smoke passed: configured=${status.configured}, models=${catalog.models.length}`,
-	);
+	console.log(`IPC smoke passed: configured=${status.configured}, models=${catalog.models.length}`);
 } finally {
 	await rm(tempRoot, { recursive: true, force: true });
 }

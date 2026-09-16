@@ -24,6 +24,7 @@ const bridge: KnowbranchBridge = {
 		ipcRenderer.invoke(ipcChannels.modelCatalog, request),
 	pluginList: () => ipcRenderer.invoke(ipcChannels.pluginList),
 	pluginInstall: (request) => ipcRenderer.invoke(ipcChannels.pluginInstall, request),
+	pluginSelectLocal: () => ipcRenderer.invoke(ipcChannels.pluginSelectLocal),
 	pluginRemove: (request) => ipcRenderer.invoke(ipcChannels.pluginRemove, request),
 	getWorkspace: () => ipcRenderer.invoke(ipcChannels.getWorkspace),
 	selectWorkspace: () => ipcRenderer.invoke(ipcChannels.selectWorkspace),
@@ -40,12 +41,12 @@ const bridge: KnowbranchBridge = {
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
-	renderArchify: (request) => ipcRenderer.invoke(ipcChannels.renderArchify, request),
+
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
-	archifyParseFailure: (report) => ipcRenderer.invoke(ipcChannels.archifyParseFailure, report),
+
 	forkDebugDump: (request) => ipcRenderer.invoke(ipcChannels.forkDebugDump, request),
 	onAuthEvent: (listener: (event: AuthBridgeEvent) => void) => {
 		const wrapped = (_event: Electron.IpcRendererEvent, payload: AuthBridgeEvent) =>
