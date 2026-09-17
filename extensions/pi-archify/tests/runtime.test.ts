@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	applyAdaptiveGridSpacing,
 	applyEstimatedComponentWidths,
 	applySuggestedComponentWidths,
 	applySuggestedLabelPositions,
 	prepareArchifySpec,
 } from "../src/runtime";
 import { archifyToMermaid, isArchifyCodeBlock, parseArchifySource } from "../src/spec";
-import { prepareArchifyViewerHtml } from "../src/viewer";
+import { createArchifyPreviewHtml, prepareArchifyViewerHtml } from "../src/viewer";
+import { patchArchifyExportHtml } from "../src/export";
 
 const architectureSource = JSON.stringify({
 	schema_version: 1,
@@ -179,35 +181,82 @@ test("removes authored canvas limits before rendering", () => {
 	assert.deepEqual((source.meta as Record<string, unknown>).viewBox, [800, 600]);
 });
 
-test("adapts Archify HTML for the app-owned inline viewer", () => {
+test("grows grid columns with readable components without moving free-positioned nodes", () => {
+	const spec: Record<string, unknown> = {
+		diagram_type: "architecture",
+		layout: { mode: "grid", cols: 10, cellW: 112, gapX: 40 },
+		components: [
+			{ id: "wide", row: 0, col: 0, size: [320, 72] },
+			{ id: "next", row: 0, col: 1, size: [164, 72] },
+			{ id: "free", pos: [20, 200], size: [700, 72] },
+		],
+	};
+	applyAdaptiveGridSpacing(spec);
+	assert.deepEqual(spec.layout, { mode: "grid", cols: 10, cellW: 320, gapX: 40 });
+	const prepared = structuredClone(spec);
+	applyAdaptiveGridSpacing(spec);
+	assert.deepEqual(spec, prepared);
+});
+
+test("keeps generous authored grid spacing", () => {
+	const spec = {
+		diagram_type: "architecture",
+		layout: { mode: "grid", cellW: 400 },
+		components: [{ row: 0, col: 0, size: [164, 72] }],
+	};
+	applyAdaptiveGridSpacing(spec);
+	assert.equal(spec.layout.cellW, 400);
+});
+
+test("embeds compact customization before the upstream viewer starts", () => {
 	const html =
-		'<!doctype html><html lang="en" data-theme="dark" data-preset="editorial"><head></head><body><button id="btn-theme"></button><div class="cards"></div></body></html>';
+		'<!doctype html><html lang="en" data-theme="dark" data-preset="editorial"><head></head><body><button id="btn-theme"></button><div class="cards"></div><script>startViewer()</script></body></html>';
 	const prepared = prepareArchifyViewerHtml(html, { theme: "light", mode: "inline" });
-	assert.match(prepared, /data-rhyza-viewer="true"/);
-	assert.match(prepared, /data-rhyza-mode="inline"/);
-	assert.match(prepared, /data-theme="light"/);
-	assert.match(prepared, /data-preset="classic"/);
+	assert(prepared.indexOf('id="rhyza-archify-host"') < prepared.indexOf("startViewer()"));
+	assert.match(prepared, /const theme = "light"/);
+	assert.match(prepared, /<html[^>]*data-rhyza-mode="inline"/);
+	assert.match(prepared, /root\.setAttribute\("data-preset", "classic"\)/);
 	assert.match(prepared, /#btn-route-probe/);
 	assert.match(prepared, /\.cards/);
 	assert.match(prepared, /\.pulse-dot/);
 	assert.match(prepared, /MutationObserver/);
 	assert.match(prepared, /getBBox/);
 	assert.match(prepared, /data-rhyza-fitted/);
-	assert.match(prepared, /rhyza:archify-size/);
-	assert.match(prepared, /rhyza:archify-measure/);
-	assert.match(prepared, /root\.scrollHeight/);
-	assert.match(prepared, /body\.scrollHeight/);
-	assert.match(prepared, /\.export-menu-section:has\(button\[data-format="share-card"\]\)/);
-	assert.match(prepared, /scrollbar-width: none/);
-	assert.doesNotMatch(prepared, /data-preset="editorial"/);
+	assert.match(prepared, /ResizeObserver/);
+	assert.match(prepared, /max-width: none !important/);
+	assert.match(prepared, /min-width: 0 !important/);
+	assert.doesNotMatch(prepared, /--rhyza-diagram-height|window\.innerHeight/);
+	assert.match(prepared, /new Set\(\["png", "webp", "svg"\]\)/);
+	assert.doesNotMatch(prepared, /postMessage/);
+	assert.doesNotMatch(prepared, /setTimeout/);
 });
 
-test("expanded Archify viewer keeps advanced content while hiding host-owned controls", () => {
+test("full Archify viewer restores toolbar, title, and guided content", () => {
 	const html =
 		'<html data-theme="light" data-preset="signal-flow"><head></head><body><div class="cards"></div></body></html>';
 	const prepared = prepareArchifyViewerHtml(html, { theme: "dark", mode: "expanded" });
-	assert.match(prepared, /data-rhyza-mode="expanded"/);
-	assert.match(prepared, /data-theme="dark"/);
-	assert.match(prepared, /\.toolbar > :not\(\.export-wrap\)/);
-	assert.doesNotMatch(prepared, /data-preset="signal-flow"/);
+	assert.match(prepared, /<html[^>]*data-rhyza-mode="expanded"/);
+	assert.match(prepared, /const theme = "dark"/);
+	assert.doesNotMatch(prepared, /\.toolbar > :not\(\.export-wrap\)/);
+});
+
+test("standalone artifacts default to full mode and the system theme", () => {
+	const prepared = prepareArchifyViewerHtml("<html><head></head><body></body></html>");
+	assert.match(prepared, /<html[^>]*data-rhyza-mode="expanded"/);
+	assert.match(prepared, /const theme = null/);
+	assert.match(prepared, /prefers-color-scheme: dark/);
+});
+
+test("compact previews are derived from full HTML without changing content or scripts", () => {
+	const full = prepareArchifyViewerHtml(
+		'<html><head></head><body><div class="header">Title</div><svg><text>Diagram</text></svg></body></html>',
+	);
+	const preview = createArchifyPreviewHtml(full);
+	assert.equal(preview.replace('data-rhyza-mode="inline"', 'data-rhyza-mode="expanded"'), full);
+	assert.equal((preview.match(/id="rhyza-archify-host"/g) ?? []).length, 1);
+	assert.throws(() => createArchifyPreviewHtml("<html></html>"), /derived from the full/);
+});
+
+test("export adaptation fails explicitly when the upstream serializer changes", () => {
+	assert.throws(() => patchArchifyExportHtml("<html></html>"), /does not match/);
 });

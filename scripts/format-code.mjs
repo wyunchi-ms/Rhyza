@@ -54,6 +54,7 @@ export function isSourcePath(root, file) {
 		!parts.some((part) => excludedDirectories.has(part)) &&
 		!(parts[0] === "resources" && parts[1] === "skills") &&
 		!(parts[0] === "archify-extension" && parts[1] === "skills") &&
+		!(parts[0] === "extensions" && parts[2] === "skills") &&
 		extensions.has(path.extname(file).toLowerCase()) &&
 		!/(?:^|[\\/])package-lock\.json$|\.min\.(?:js|css)$|sample\.json$/i.test(file)
 	);

@@ -16,4 +16,5 @@ resources/skills/
 **/*.min.css
 
 archify-extension/skills/
+extensions/*/skills/
 dist-extensions/

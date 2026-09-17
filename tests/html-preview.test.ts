@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
 import { collectHtmlPreviews } from "../electron/main/html-preview-service";
@@ -14,38 +13,119 @@ import {
 import { PiPluginService } from "../electron/main/pi-plugin-service";
 import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
 
-const fence = (filename: string) =>
-	`\`\`\`html-preview\n${JSON.stringify({ version: 1, path: filename, title: "Preview" })}\n\`\`\``;
+const fence = (filename: string, previewPath?: string, title = "Preview") =>
+	`\`\`\`html-preview\n${JSON.stringify({ version: 1, path: filename, previewPath, title })}\n\`\`\``;
 
-test("preview declarations require a version and preserve paths with spaces", () => {
+test("preview declarations preserve legacy references and optional compact paths with spaces", () => {
 	assert.deepEqual(parseHtmlPreviewReference('{"version":1,"path":"output/a b.html"}'), {
 		version: 1,
 		path: "output/a b.html",
 	});
+	const reference = {
+		version: 1,
+		path: "output/full page.html",
+		previewPath: "output/compact page.htm",
+		title: "A page",
+	};
+	assert.deepEqual(parseHtmlPreviewReference(JSON.stringify(reference)), reference);
 	assert.throws(() => parseHtmlPreviewReference('{"path":"a.html"}'));
 	assert.throws(() => parseHtmlPreviewReference('{"version":1,"path":"a.html","title":5}'));
-	assert.equal(extractHtmlPreviewReferences(`${fence("a.html")}\n${fence("a.html")}`).length, 1);
+	assert.throws(() => parseHtmlPreviewReference('{"version":2,"path":"a.html"}'));
 	assert.deepEqual(extractHtmlPreviewReferences("```html-preview\ninvalid\n```"), []);
 });
 
-test("HTML is snapshotted and survives deleting its source file", async () => {
-	const root = await mkdtemp(path.join(os.tmpdir(), "rhyza-html-preview-"));
+test("full and compact paths share string, length and control-character validation", () => {
+	for (const field of ["path", "previewPath"]) {
+		for (const value of [
+			null,
+			0,
+			false,
+			[],
+			{},
+			"",
+			" \t ",
+			"x".repeat(2049),
+			...Array.from({ length: 32 }, (_, code) => `page${String.fromCharCode(code)}.html`),
+		]) {
+			const reference = { version: 1, path: "full.html", [field]: value };
+			assert.throws(() => parseHtmlPreviewReference(JSON.stringify(reference)));
+			assert.deepEqual(
+				extractHtmlPreviewReferences(`\`\`\`html-preview\n${JSON.stringify(reference)}\n\`\`\``),
+				[],
+			);
+		}
+		const reference = { version: 1, path: "full.html", [field]: "x".repeat(2048) };
+		assert.deepEqual(parseHtmlPreviewReference(JSON.stringify(reference)), reference);
+	}
+});
+
+test("deduplication uses the full and compact path pair, ignores titles and keeps eight pairs", () => {
+	const references = extractHtmlPreviewReferences(
+		[
+			fence("full.html"),
+			fence("full.html", undefined, "Another title"),
+			fence("full.html", "compact-a.html"),
+			fence("full.html", "compact-a.html", "Another title"),
+			fence("full.html", "compact-b.html"),
+		].join("\n"),
+	);
+	assert.deepEqual(
+		references.map(({ path, previewPath }) => [path, previewPath]),
+		[
+			["full.html", undefined],
+			["full.html", "compact-a.html"],
+			["full.html", "compact-b.html"],
+		],
+	);
+	assert(references.every(({ title }) => title === "Preview"));
+	assert.equal(
+		extractHtmlPreviewReferences(
+			Array.from({ length: 10 }, (_, index) => fence("full.html", `compact-${index}.html`)).join(
+				"\n",
+			),
+		).length,
+		8,
+	);
+});
+
+test("both snapshots and legacy documents survive serialization and deleting their source files", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-preview-"));
 	try {
 		const html =
 			'<!doctype html><h1>A standalone page</h1><script>document.body.dataset.ready="yes"</script>';
+		const previewHtml = "<!doctype html><p>Compact page</p>";
 		const filename = path.join(root, "page with spaces.html");
 		await writeFile(filename, html);
-		const documents = await collectHtmlPreviews(fence("page with spaces.html"), root);
+		const compactFilename = path.join(root, "compact page.htm");
+		await writeFile(compactFilename, previewHtml);
+		const documents = await collectHtmlPreviews(
+			[
+				fence("page with spaces.html"),
+				fence("page with spaces.html", "compact page.htm"),
+				fence("page with spaces.html", "compact page.htm", "Duplicate"),
+			].join("\n"),
+			root,
+		);
 		await rm(filename);
-		assert.equal(JSON.parse(JSON.stringify(documents))[0].html, html);
-		assert.equal(documents[0].error, undefined);
+		await rm(compactFilename);
+		assert.deepEqual(JSON.parse(JSON.stringify(documents)), [
+			{ version: 1, path: "page with spaces.html", title: "Preview", html },
+			{
+				version: 1,
+				path: "page with spaces.html",
+				previewPath: "compact page.htm",
+				title: "Preview",
+				html,
+				previewHtml,
+			},
+		]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 });
 
-test("file boundaries reject traversal, junction escapes, non-HTML and oversize files without failing other previews", async () => {
-	const root = await mkdtemp(path.join(os.tmpdir(), "rhyza-html-boundary-"));
+test("both files reject traversal, junction escapes, non-HTML, non-files and oversize content", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-boundary-"));
 	try {
 		const workspace = path.join(root, "workspace");
 		const outside = path.join(root, "outside");
@@ -60,22 +140,153 @@ test("file boundaries reject traversal, junction escapes, non-HTML and oversize 
 		await writeFile(path.join(workspace, "text.txt"), "text");
 		await writeFile(path.join(workspace, "big.html"), "x".repeat(5_000_001));
 		await writeFile(path.join(workspace, "ok.html"), "<h1>OK</h1>");
+		await writeFile(path.join(workspace, "compact.HTM"), "<p>Compact</p>");
+		await mkdir(path.join(workspace, "directory.html"));
+		const invalidPaths = [
+			path.join("..", "outside", "private.html"),
+			path.join(outside, "private.html"),
+			path.join("linked", "private.html"),
+			"text.txt",
+			"big.html",
+			"missing.html",
+			"directory.html",
+		];
+		for (const field of ["path", "previewPath"]) {
+			const documents = await collectHtmlPreviews(
+				[
+					...invalidPaths.map((filename) =>
+						field === "path" ? fence(filename, "compact.HTM") : fence("ok.html", filename),
+					),
+					fence("ok.html", "compact.HTM"),
+				].join("\n"),
+				workspace,
+			);
+			assert.equal(documents.length, 8);
+			for (const document of documents.slice(0, 7)) {
+				assert.equal(document.previewHtml, undefined);
+				if (field === "path") {
+					assert(document.error);
+					assert.equal(document.html, undefined);
+					assert.equal(document.previewError, undefined);
+				} else {
+					assert.equal(document.html, "<h1>OK</h1>");
+					assert.equal(document.error, undefined);
+					assert(document.previewError);
+				}
+			}
+			assert.equal(documents[7].html, "<h1>OK</h1>");
+			assert.equal(documents[7].previewHtml, "<p>Compact</p>");
+			assert.equal(documents[7].error, undefined);
+			assert.equal(documents[7].previewError, undefined);
+		}
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("optional preview errors persist beside full HTML and empty compact documents are valid", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-fallback-"));
+	try {
+		await writeFile(path.join(root, "full.html"), "<h1>Full page</h1>");
+		await writeFile(path.join(root, "empty.html"), "");
+		const documents = await collectHtmlPreviews(
+			[fence("full.html", "missing.html"), fence("full.html", "empty.html")].join("\n"),
+			root,
+		);
+		await rm(path.join(root, "full.html"));
+		const saved = JSON.parse(JSON.stringify(documents));
+		assert.equal(saved[0].html, "<h1>Full page</h1>");
+		assert.match(saved[0].previewError, /ENOENT/);
+		assert.equal(saved[0].previewHtml, undefined);
+		assert.equal(saved[0].error, undefined);
+		assert.equal(saved[1].previewHtml, "");
+		assert.equal(saved[1].previewError, undefined);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("both snapshots accept exactly 5MB each, count UTF-8 bytes and enforce 10MB total", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-limit-"));
+	try {
+		const html = "é".repeat(2_500_000);
+		const previewHtml = "p".repeat(5_000_000);
+		await writeFile(path.join(root, "full.html"), html);
+		await writeFile(path.join(root, "compact.html"), previewHtml);
+		await writeFile(path.join(root, "one.html"), "x");
+		const documents = await collectHtmlPreviews(
+			[fence("full.html", "compact.html"), fence("one.html")].join("\n"),
+			root,
+		);
+		assert.equal(documents[0].html, html);
+		assert.equal(documents[0].previewHtml, previewHtml);
+		assert.equal(documents[0].error, undefined);
+		assert.equal(documents[0].previewError, undefined);
+		assert.match(documents[1].error ?? "", /size limit/);
+		assert.equal(documents[1].html, undefined);
+		const sameFile = await collectHtmlPreviews(
+			[fence("full.html", "full.html"), fence("one.html")].join("\n"),
+			root,
+		);
+		assert.equal(sameFile[0].html, html);
+		assert.equal(sameFile[0].previewHtml, html);
+		assert.match(sameFile[1].error ?? "", /size limit/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("the shared budget retains full HTML when compact exceeds the remaining total", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-total-"));
+	try {
+		await writeFile(path.join(root, "first.html"), "a".repeat(4_000_000));
+		await writeFile(path.join(root, "first-compact.html"), "b".repeat(4_000_000));
+		await writeFile(path.join(root, "next.html"), "c".repeat(1_000_000));
+		await writeFile(path.join(root, "too-large-compact.html"), "d".repeat(1_000_001));
+		await writeFile(path.join(root, "last.html"), "e".repeat(1_000_000));
+		await writeFile(path.join(root, "one.html"), "x");
 		const documents = await collectHtmlPreviews(
 			[
-				"../outside/private.html",
-				"linked/private.html",
-				"text.txt",
-				"big.html",
-				"missing.html",
-				"ok.html",
-			]
-				.map(fence)
-				.join("\n"),
-			workspace,
+				fence("first.html", "first-compact.html"),
+				fence("next.html", "too-large-compact.html"),
+				fence("last.html"),
+				fence("one.html"),
+			].join("\n"),
+			root,
 		);
-		assert.equal(documents.length, 6);
-		assert(documents.slice(0, 5).every((item) => item.error && item.html === undefined));
-		assert.equal(documents[5].html, "<h1>OK</h1>");
+		assert.equal(documents[0].previewHtml?.length, 4_000_000);
+		assert.equal(documents[1].html?.length, 1_000_000);
+		assert.equal(documents[1].previewHtml, undefined);
+		assert.match(documents[1].previewError ?? "", /size limit/);
+		assert.equal(documents[1].error, undefined);
+		assert.equal(documents[2].html?.length, 1_000_000);
+		assert.equal(documents[2].error, undefined);
+		assert.match(documents[3].error ?? "", /size limit/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("distinct compact paths keep separate full copies and cannot bypass the total limit", async () => {
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-html-identity-"));
+	try {
+		await writeFile(path.join(root, "full.html"), "x".repeat(3_000_000));
+		await writeFile(path.join(root, "compact-a.html"), "a".repeat(2_000_000));
+		await writeFile(path.join(root, "compact-b.html"), "b".repeat(2_000_001));
+		const documents = await collectHtmlPreviews(
+			[
+				fence("full.html", "compact-a.html"),
+				fence("full.html", "compact-a.html"),
+				fence("full.html", "compact-b.html"),
+				fence("full.html"),
+			].join("\n"),
+			root,
+		);
+		assert.equal(documents.length, 3);
+		assert.equal(documents[0].previewHtml?.length, 2_000_000);
+		assert.equal(documents[1].html?.length, 3_000_000);
+		assert.match(documents[1].previewError ?? "", /size limit/);
+		assert.match(documents[2].error ?? "", /size limit/);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -285,7 +496,7 @@ test("sandbox sizing grows, shrinks, coalesces changes, and cleans up without vi
 });
 
 test("ordinary local Pi extensions install, load tools and guidance, and uninstall without deleting their files", async () => {
-	const root = await mkdtemp(path.join(os.tmpdir(), "rhyza-local-package-"));
+	const root = await mkdtemp(path.join(process.cwd(), ".rhyza-local-package-"));
 	try {
 		const source = path.join(root, "a local extension");
 		await mkdir(source);

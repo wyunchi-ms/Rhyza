@@ -153,6 +153,8 @@ Workspace 有两个作用：
 
 进入 **Settings → Pi Plugins** 可以查看、安装和移除 Pi packages。支持 `npm:`、`git:`、HTTPS/SSH Git URL 和本地绝对路径；操作直接使用内置 Pi SDK，不要求预先安装 Pi CLI。npm 或 Git 来源仍需要本机具备相应的 Node.js/npm 或 Git 环境。
 
+Pi 会将本地插件来源保存为相对于 Agent 配置目录的路径，例如 `..\extensions\pi-archify`。这些已配置的来源可以直接点击 **Remove** 移除，即使目录已经不存在；移除本地插件只取消配置，不删除源文件。
+
 Pi packages 中的扩展会以当前用户权限执行代码，skills 也会影响 Agent 行为，因此只应安装经过审查和信任的来源。安装或移除后，Rhyza 会重建当前 Agent 会话，使下一条消息使用新的插件集合。
 
 ### 4. 配置知识策略
@@ -167,24 +169,16 @@ Pi packages 中的扩展会以当前用户权限执行代码，skills 也会影�
 - **Thinking level**：控制模型推理强度；模型不支持某档位时可能由 Provider 降级或报错。
 - **Confidence threshold**：当前只保存 UI 配置，尚未接入 Finalizer 的过滤逻辑。
 
-### 5. 选择 Diagram 模式
+### 5. 使用 Archify 图表扩展
 
-进入 **Settings → Diagrams** 选择绘图方式：
-
-- **Automatic（默认）**：未安装扩展时使用 Mermaid，安装 Archify extension 后使用 Archify。卸载或扩展文件缺失时回退到 Mermaid。
-- **Archify（需安装扩展）**：Pi/GPT 加载扩展提供的 skill 和提示词，扩展以 `showcase` 质量校验、编译为沙箱化的交互 HTML。这条路径会比 Mermaid 花更多时间、工具调用和 token。
-- **Mermaid**：后续回答使用原始 Mermaid 流程。已有 Archify Diagram 也会立即显示从同一拓扑本地生成的 Mermaid fallback。
-- Archify 的确定性校验或渲染失败时，当前 Diagram 自动降级为 Mermaid，并显示可展开的错误原因；模型生成的任意 HTML 不会直接进入 Renderer。
-
-Archify 的版本、宿主定制边界和升级流程见 [Archify integration and upgrades](docs/archify-integration.md)。
+Archify 是可选的 Pi 插件，独立提供绘图工具、skill、校验器和 HTML 渲染逻辑。宿主通过通用的 `html-preview` 协议展示结果，不需要专用渲染器注册或扩展构建步骤。安装和开发说明见 [Archify Pi extension](extensions/pi-archify/README.md)。
 
 本地安装 Archify：
 
-1. 在项目根目录运行 `npm run extension:archify`，生成独立扩展目录 `dist-extensions/archify`。
-2. 打开 **Settings → Pi plugins → Install from local folder…**，选择这个目录；也可在 Package source 中输入它的绝对路径再点 Install。
-3. 安装后当前工作区自动选择 Automatic，下一条消息使用扩展。可手动选择 Mermaid。
+1. 打开 **Settings → Pi Plugins → Install from local folder…**，选择项目中的 `extensions\pi-archify` 目录；也可在 Package source 中输入它的绝对路径再点 Install。
+2. 下一条消息使用扩展提供的绘图工具，生成可交互的 HTML 图表。
 
-本地安装引用原目录，不复制或删除源文件，请保留该目录。扩展包可整体复制到其他位置再安装，无需另行安装 Archify 依赖。卸载不会修改历史图表，仍可查看 Mermaid 回退图。本地扩展代码修改后请重启应用。
+本地安装引用原目录，不复制或删除源文件，请保留该目录。扩展包可整体复制到其他位置再安装，无需另行安装 Archify 依赖。已有 HTML 图表以快照保存，卸载扩展后仍可查看。本地扩展代码修改后请重启应用；从旧目录迁移后，请移除旧配置并安装新目录。
 
 ### 6. 添加 Sources
 

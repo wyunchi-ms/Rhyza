@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Expand, X } from "lucide-react";
 import {
+	htmlPreviewReferenceKey,
 	parseHtmlPreviewReference,
 	readHtmlPreviewHeight,
 	sandboxHtmlDocument,
@@ -19,9 +20,17 @@ export function HtmlPreviewReference({
 }) {
 	try {
 		const reference = parseHtmlPreviewReference(source);
-		const document = documents.find((item) => item.path === reference.path);
+		const key = htmlPreviewReferenceKey(reference);
+		const document = documents.find((item) => htmlPreviewReferenceKey(item) === key);
 		if (document?.html !== undefined)
-			return <HtmlPreview html={document.html} title={reference.title ?? "HTML preview"} />;
+			return (
+				<HtmlPreview
+					html={document.html}
+					previewHtml={document.previewHtml}
+					previewError={document.previewError}
+					title={reference.title ?? "HTML preview"}
+				/>
+			);
 		return (
 			<div className="html-preview-state">
 				<strong>{reference.title ?? "HTML preview"}</strong>
@@ -95,7 +104,17 @@ function HtmlPreviewFrame({
 	);
 }
 
-export function HtmlPreview({ html, title = "HTML preview" }: { html: string; title?: string }) {
+export function HtmlPreview({
+	html,
+	previewHtml,
+	previewError,
+	title = "HTML preview",
+}: {
+	html: string;
+	previewHtml?: string;
+	previewError?: string;
+	title?: string;
+}) {
 	const [expanded, setExpanded] = useState(false);
 	useEffect(() => {
 		if (!expanded) return;
@@ -135,7 +154,16 @@ export function HtmlPreview({ html, title = "HTML preview" }: { html: string; ti
 						<Expand size={16} />
 					</button>
 				</header>
-				<HtmlPreviewFrame html={html} title={title} autoSize />
+				{previewError !== undefined && (
+					<div className="html-preview-state" role="status">
+						Compact preview unavailable. Showing the full HTML document. {previewError}
+					</div>
+				)}
+				<HtmlPreviewFrame
+					html={previewError === undefined ? (previewHtml ?? html) : html}
+					title={title}
+					autoSize
+				/>
 			</section>
 			{expanded &&
 				createPortal(

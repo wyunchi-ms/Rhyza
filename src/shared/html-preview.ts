@@ -2,13 +2,16 @@
 export interface HtmlPreviewReference {
 	version: 1;
 	path: string;
+	previewPath?: string;
 	title?: string;
 }
 
 /** Persisted with the response so previews survive file deletion and extension removal. */
 export interface HtmlPreviewDocument extends HtmlPreviewReference {
 	html?: string;
+	previewHtml?: string;
 	error?: string;
+	previewError?: string;
 }
 
 export function isHtmlPreviewBlock(className?: string): boolean {
@@ -20,17 +23,34 @@ export function parseHtmlPreviewReference(source: string): HtmlPreviewReference 
 	if (
 		!value ||
 		value.version !== 1 ||
-		typeof value.path !== "string" ||
-		!value.path.trim() ||
-		value.path.length > 2048 ||
-		/[\u0000-\u001f]/.test(value.path) ||
+		!isHtmlPreviewPath(value.path) ||
+		(value.previewPath !== undefined && !isHtmlPreviewPath(value.previewPath)) ||
 		(value.title !== undefined && (typeof value.title !== "string" || value.title.length > 200))
 	) {
 		throw new Error(
-			"Invalid HTML preview reference. Expected version 1, path, and optional title.",
+			"Invalid HTML preview reference. Expected version 1, path, and optional previewPath and title.",
 		);
 	}
-	return { version: 1, path: value.path, ...(value.title ? { title: value.title } : {}) };
+	return {
+		version: 1,
+		path: value.path,
+		...(value.previewPath !== undefined ? { previewPath: value.previewPath } : {}),
+		...(value.title ? { title: value.title } : {}),
+	};
+}
+
+function isHtmlPreviewPath(value: unknown): value is string {
+	return (
+		typeof value === "string" &&
+		value.trim().length > 0 &&
+		value.length <= 2048 &&
+		!/[\u0000-\u001f]/.test(value)
+	);
+}
+
+/** Titles may vary, but different compact files are distinct attachments. */
+export function htmlPreviewReferenceKey(reference: HtmlPreviewReference): string {
+	return JSON.stringify([reference.path, reference.previewPath ?? null]);
 }
 
 export function extractHtmlPreviewReferences(markdown: string): HtmlPreviewReference[] {
@@ -40,7 +60,8 @@ export function extractHtmlPreviewReferences(markdown: string): HtmlPreviewRefer
 	)) {
 		try {
 			const reference = parseHtmlPreviewReference(match[1]);
-			if (!references.has(reference.path)) references.set(reference.path, reference);
+			const key = htmlPreviewReferenceKey(reference);
+			if (!references.has(key)) references.set(key, reference);
 		} catch {
 			// Invalid declarations remain visible as source instead of failing the response.
 		}
