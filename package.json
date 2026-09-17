@@ -10,6 +10,7 @@
 		"format": "node scripts/format-code.mjs",
 		"format:check": "node scripts/format-code.mjs --check",
 		"test:formatter": "node --test tests/format-code.test.mjs",
+		"test:html-preview": "node --test tests/html-preview-rendering.test.cjs",
 		"dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
 		"test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",
 		"electron:compile": "node scripts/patch-pi-cache-metadata.mjs && tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",

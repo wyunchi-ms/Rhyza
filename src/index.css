@@ -5471,7 +5471,6 @@ a:focus-visible {
 .html-preview > iframe {
 	display: block;
 	width: 100%;
-	height: 32rem;
 	border: 0;
 	background: #fff;
 }
