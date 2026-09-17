@@ -617,6 +617,64 @@ type KnowledgeReference = {
 };
 const emptyKnowledgeReferences: KnowledgeReference[] = [];
 
+interface MarkdownRenderContextValue {
+	htmlPreviews?: HtmlPreviewDocument[];
+	compact: boolean;
+	finalized: boolean;
+	references: KnowledgeReference[];
+	onEntityClick?: (id: string) => void;
+	onDiagramClick?: (id: string) => void;
+}
+
+const MarkdownRenderContext = React.createContext<MarkdownRenderContextValue>({
+	compact: false,
+	finalized: true,
+	references: emptyKnowledgeReferences,
+});
+
+// Stable component types preserve iframe documents and diagram state across parent updates.
+const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>["components"]> = {
+	pre: ({ children }) => <>{children}</>,
+	code: function MarkdownCode({ className, children, ...props }) {
+		const { compact, finalized, htmlPreviews } = React.useContext(MarkdownRenderContext);
+		const rawSource = String(children);
+		const source = rawSource.replace(/\n$/, "");
+		if (!compact && isMermaidCodeBlock(className, source)) {
+			return <MermaidDiagram source={source} />;
+		}
+		if (!compact && isHtmlPreviewBlock(className)) {
+			return (
+				<HtmlPreviewReference source={source} documents={htmlPreviews} finalized={finalized} />
+			);
+		}
+		const isBlock = Boolean(className) || rawSource.includes("\n");
+		return isBlock ? (
+			<pre>
+				<code className={className} {...props}>
+					{children}
+				</code>
+			</pre>
+		) : (
+			<code className={className} {...props}>
+				{children}
+			</code>
+		);
+	},
+	a: function MarkdownAnchor({ href, children }) {
+		const { references, onEntityClick, onDiagramClick } = React.useContext(MarkdownRenderContext);
+		return (
+			<KnowledgeAnchor
+				href={href}
+				references={references}
+				onEntityClick={onEntityClick}
+				onDiagramClick={onDiagramClick}
+			>
+				{children}
+			</KnowledgeAnchor>
+		);
+	},
+};
+
 function MarkdownContent({
 	htmlPreviews,
 	content,
@@ -644,62 +702,35 @@ function MarkdownContent({
 		() => [remarkGfm, [remarkKnowledgeLinks, { references: knowledgeReferences }]],
 		[knowledgeReferences],
 	);
-	const components = useMemo<NonNullable<React.ComponentProps<typeof ReactMarkdown>["components"]>>(
+	const renderContext = useMemo<MarkdownRenderContextValue>(
 		() => ({
-			pre: ({ children }) => <>{children}</>,
-			code: ({ className, children, ...props }) => {
-				const rawSource = String(children);
-				const source = rawSource.replace(/\n$/, "");
-				if (!compact && isMermaidCodeBlock(className, source)) {
-					return <MermaidDiagram source={source} />;
-				}
-				if (!compact && isHtmlPreviewBlock(className)) {
-					return (
-						<HtmlPreviewReference source={source} documents={htmlPreviews} finalized={finalized} />
-					);
-				}
-				const isBlock = Boolean(className) || rawSource.includes("\n");
-				return isBlock ? (
-					<pre>
-						<code className={className} {...props}>
-							{children}
-						</code>
-					</pre>
-				) : (
-					<code className={className} {...props}>
-						{children}
-					</code>
-				);
-			},
-			a: ({ href, children }) => (
-				<KnowledgeAnchor
-					href={href}
-					references={knowledgeReferences}
-					onEntityClick={onEntityClick}
-					onDiagramClick={onDiagramClick}
-				>
-					{children}
-				</KnowledgeAnchor>
-			),
+			compact,
+			finalized,
+			htmlPreviews,
+			references: knowledgeReferences,
+			onEntityClick,
+			onDiagramClick,
 		}),
 		[compact, finalized, htmlPreviews, knowledgeReferences, onDiagramClick, onEntityClick],
 	);
 	return (
-		<div
-			className={clsx("markdown-body", compact && "markdown-compact")}
-			onMouseUp={(event) => {
-				if (!onTextSelection || compact) return;
-				const selected = window.getSelection();
-				if (!selected || selected.isCollapsed || !selected.toString().trim()) return;
-				const range = selected.getRangeAt(0);
-				if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
-				onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
-			}}
-		>
-			<ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
-				{normalizedContent}
-			</ReactMarkdown>
-		</div>
+		<MarkdownRenderContext.Provider value={renderContext}>
+			<div
+				className={clsx("markdown-body", compact && "markdown-compact")}
+				onMouseUp={(event) => {
+					if (!onTextSelection || compact) return;
+					const selected = window.getSelection();
+					if (!selected || selected.isCollapsed || !selected.toString().trim()) return;
+					const range = selected.getRangeAt(0);
+					if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
+					onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
+				}}
+			>
+				<ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+					{normalizedContent}
+				</ReactMarkdown>
+			</div>
+		</MarkdownRenderContext.Provider>
 	);
 }
 

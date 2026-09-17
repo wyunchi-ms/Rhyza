@@ -13,6 +13,8 @@ export interface ArchifyRenderResponse {
 }
 import { archifyToMermaid, parseArchifySource } from "./spec.js";
 import { isRecord } from "./value.js";
+import { prepareArchifyViewerHtml } from "./viewer.js";
+import { patchArchifyExportHtml } from "./export.js";
 
 const renderTimeoutMs = 120_000;
 const maxArtifactBytes = 5_000_000;
@@ -102,6 +104,7 @@ export class ArchifyService {
 				const outputPath = path.join(workDirectory, "diagram.html");
 				const spec = prepareArchifySpec(parsed.spec);
 				applyEstimatedComponentWidths(spec);
+				applyAdaptiveGridSpacing(spec);
 				await writeFile(inputPath, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
 				const cliPath = path.join(this.skillRoot, "bin", "archify.mjs");
 				const showcase = await this.deliverWithLayoutRepairs({
@@ -148,7 +151,9 @@ export class ArchifyService {
 						};
 					}
 				}
-				const html = await readFile(outputPath, "utf8");
+				const html = prepareArchifyViewerHtml(
+					patchArchifyExportHtml(await readFile(outputPath, "utf8")),
+				);
 				const htmlBytes = Buffer.byteLength(html, "utf8");
 				if (htmlBytes > maxArtifactBytes) {
 					throw new Error("Rendered Archify artifact exceeds the 5 MB safety limit.");
@@ -234,6 +239,7 @@ export class ArchifyService {
 				applySuggestedLabelPositions(options.spec, error) +
 				applySuggestedComponentWidths(options.spec, error);
 			if (repairCount === 0) break;
+			applyAdaptiveGridSpacing(options.spec);
 			await writeFile(options.inputPath, `${JSON.stringify(options.spec, null, 2)}\n`, "utf8");
 			await this.trace({
 				timestamp: new Date().toISOString(),
@@ -279,6 +285,29 @@ export function prepareArchifySpec(source: Record<string, unknown>): Record<stri
 	delete spec.meta.viewBox;
 	spec.meta.visual_preset = "classic";
 	return spec;
+}
+
+export function applyAdaptiveGridSpacing(spec: Record<string, unknown>): void {
+	if (
+		spec.diagram_type !== "architecture" ||
+		!isRecord(spec.layout) ||
+		spec.layout.mode !== "grid" ||
+		!Array.isArray(spec.components)
+	) {
+		return;
+	}
+	const widths = spec.components.flatMap((component) =>
+		isRecord(component) &&
+		!Array.isArray(component.pos) &&
+		Array.isArray(component.size) &&
+		typeof component.size[0] === "number" &&
+		Number.isFinite(component.size[0])
+			? [component.size[0]]
+			: [],
+	);
+	if (widths.length === 0) return;
+	const cellWidth = typeof spec.layout.cellW === "number" ? spec.layout.cellW : 130;
+	spec.layout.cellW = Math.max(cellWidth, ...widths);
 }
 
 function cacheEntryBytes(response: ArchifyRenderResponse): number {

@@ -48,6 +48,7 @@ test("reserved directories and paths outside the repo are rejected before readin
 		"dist-electron/app.js",
 		"resources/skills/vendor/index.js",
 		"archify-extension/skills/archify/renderers/index.mjs",
+		"extensions/pi-archify/skills/archify/renderers/index.mjs",
 		"dist-extensions/archify/index.js",
 		"../outside.ts",
 		"package-lock.json",
@@ -56,6 +57,7 @@ test("reserved directories and paths outside the repo are rejected before readin
 		assert.equal(isSourcePath(root, file), false, file);
 	}
 	assert.equal(isSourcePath(root, "src/file with spaces.tsx"), true);
+	assert.equal(isSourcePath(root, "extensions/pi-archify/src/viewer.ts"), true);
 });
 
 test("honors ignore files and does not rewrite invalid source", async (context) => {

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Expand, X } from "lucide-react";
 import {
+	htmlPreviewReferenceKey,
 	parseHtmlPreviewReference,
+	readHtmlPreviewHeight,
 	sandboxHtmlDocument,
 	type HtmlPreviewDocument,
 } from "../shared/html-preview";
@@ -18,9 +20,17 @@ export function HtmlPreviewReference({
 }) {
 	try {
 		const reference = parseHtmlPreviewReference(source);
-		const document = documents.find((item) => item.path === reference.path);
+		const key = htmlPreviewReferenceKey(reference);
+		const document = documents.find((item) => htmlPreviewReferenceKey(item) === key);
 		if (document?.html !== undefined)
-			return <HtmlPreview html={document.html} title={reference.title ?? "HTML preview"} />;
+			return (
+				<HtmlPreview
+					html={document.html}
+					previewHtml={document.previewHtml}
+					previewError={document.previewError}
+					title={reference.title ?? "HTML preview"}
+				/>
+			);
 		return (
 			<div className="html-preview-state">
 				<strong>{reference.title ?? "HTML preview"}</strong>
@@ -41,9 +51,71 @@ export function HtmlPreviewReference({
 	}
 }
 
-export function HtmlPreview({ html, title = "HTML preview" }: { html: string; title?: string }) {
+function HtmlPreviewFrame({
+	html,
+	title,
+	autoSize = false,
+}: {
+	html: string;
+	title: string;
+	autoSize?: boolean;
+}) {
+	const frameRef = useRef<HTMLIFrameElement>(null);
+	const source = useMemo(() => {
+		const id = autoSize ? crypto.randomUUID() : undefined;
+		return { id, html: sandboxHtmlDocument(html, id) };
+	}, [html, autoSize]);
+	const [measurement, setMeasurement] = useState<{ id: string; height: number } | null>(null);
+	const requestMeasure = () => {
+		if (!source.id) return;
+		frameRef.current?.contentWindow?.postMessage(
+			{ type: "rhyza:html-preview-measure", id: source.id },
+			"*",
+		);
+	};
+	useEffect(() => {
+		const id = source.id;
+		if (!id) return;
+		const resize = (event: MessageEvent<unknown>) => {
+			if (event.source !== frameRef.current?.contentWindow) return;
+			const height = readHtmlPreviewHeight(event.data, id);
+			if (height !== null) {
+				setMeasurement((previous) =>
+					previous?.id === id && previous.height === height ? previous : { id, height },
+				);
+			}
+		};
+		window.addEventListener("message", resize);
+		frameRef.current?.contentWindow?.postMessage({ type: "rhyza:html-preview-measure", id }, "*");
+		return () => window.removeEventListener("message", resize);
+	}, [source]);
+	return (
+		<iframe
+			ref={frameRef}
+			title={title}
+			srcDoc={source.html}
+			style={
+				autoSize ? { height: measurement?.id === source.id ? measurement?.height : 150 } : undefined
+			}
+			onLoad={requestMeasure}
+			sandbox="allow-scripts allow-downloads"
+			referrerPolicy="no-referrer"
+		/>
+	);
+}
+
+export function HtmlPreview({
+	html,
+	previewHtml,
+	previewError,
+	title = "HTML preview",
+}: {
+	html: string;
+	previewHtml?: string;
+	previewError?: string;
+	title?: string;
+}) {
 	const [expanded, setExpanded] = useState(false);
-	const source = useMemo(() => sandboxHtmlDocument(html), [html]);
 	useEffect(() => {
 		if (!expanded) return;
 		const close = (event: KeyboardEvent) => {
@@ -60,14 +132,6 @@ export function HtmlPreview({ html, title = "HTML preview" }: { html: string; ti
 		anchor.click();
 		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	};
-	const frame = (
-		<iframe
-			title={title}
-			srcDoc={source}
-			sandbox="allow-scripts allow-downloads"
-			referrerPolicy="no-referrer"
-		/>
-	);
 	return (
 		<>
 			<section className="html-preview">
@@ -90,7 +154,16 @@ export function HtmlPreview({ html, title = "HTML preview" }: { html: string; ti
 						<Expand size={16} />
 					</button>
 				</header>
-				{frame}
+				{previewError !== undefined && (
+					<div className="html-preview-state" role="status">
+						Compact preview unavailable. Showing the full HTML document. {previewError}
+					</div>
+				)}
+				<HtmlPreviewFrame
+					html={previewError === undefined ? (previewHtml ?? html) : html}
+					title={title}
+					autoSize
+				/>
 			</section>
 			{expanded &&
 				createPortal(
@@ -118,7 +191,7 @@ export function HtmlPreview({ html, title = "HTML preview" }: { html: string; ti
 									<X size={18} />
 								</button>
 							</header>
-							{frame}
+							<HtmlPreviewFrame html={html} title={title} />
 						</section>
 					</div>,
 					document.body,

@@ -463,13 +463,7 @@ export const validateProviderLoginRequest = validateProviderStatusRequest;
 export const validateProviderLogoutRequest = validateProviderStatusRequest;
 
 export function validatePiPluginSource(value: unknown): { source: string } {
-	if (!isRecord(value) || typeof value.source !== "string") {
-		throw new Error("A Pi package source is required.");
-	}
-	const source = value.source.trim();
-	if (!source || source.length > 2_048 || /[\u0000-\u001f\u007f]/.test(source)) {
-		throw new Error("Invalid Pi package source.");
-	}
+	const source = requirePiPluginSource(value);
 	const supported =
 		/^(npm:|git:|https?:\/\/|ssh:\/\/|git:\/\/)/i.test(source) ||
 		/^[a-zA-Z]:[\\/]/.test(source) ||
@@ -479,6 +473,21 @@ export function validatePiPluginSource(value: unknown): { source: string } {
 		throw new Error("Use an npm:, git:, HTTPS, SSH, or absolute local path source.");
 	}
 	return { source };
+}
+
+export function validatePiPluginRemoveRequest(value: unknown): PiPluginRemoveRequest {
+	return { source: requirePiPluginSource(value) };
+}
+
+function requirePiPluginSource(value: unknown): string {
+	if (!isRecord(value) || typeof value.source !== "string") {
+		throw new Error("A Pi package source is required.");
+	}
+	const source = value.source.trim();
+	if (!source || source.length > 2_048 || /[\u0000-\u001f\u007f]/.test(source)) {
+		throw new Error("Invalid Pi package source.");
+	}
+	return source;
 }
 
 export function validateModelCatalogRequest(value: unknown): ModelCatalogRequest {

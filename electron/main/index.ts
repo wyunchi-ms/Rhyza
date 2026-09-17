@@ -20,6 +20,7 @@ import {
 	validateProviderLogoutRequest,
 	validateProviderStatusRequest,
 	validatePiPluginSource,
+	validatePiPluginRemoveRequest,
 	validateIdRequest,
 	validateSourceSearchRequest,
 	validateWorkspaceDiffRequest,
@@ -262,7 +263,7 @@ function registerIpcHandlers(): void {
 	);
 	ipcMain.handle(ipcChannels.pluginRemove, async (event, payload) =>
 		withValidSender(event, async () => {
-			const { source } = validatePiPluginSource(payload);
+			const { source } = validatePiPluginRemoveRequest(payload);
 			const plugins = await piPluginService.remove(source);
 
 			piService.reloadInstalledPlugins();

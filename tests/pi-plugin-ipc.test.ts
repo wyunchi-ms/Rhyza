@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validatePiPluginSource } from "../src/shared/ipc.ts";
+import { validatePiPluginRemoveRequest, validatePiPluginSource } from "../src/shared/ipc.ts";
 
 test("accepts supported Pi package sources", () => {
 	for (const source of [
@@ -20,5 +20,35 @@ test("accepts supported Pi package sources", () => {
 test("rejects ambiguous or malformed Pi package sources", () => {
 	for (const source of ["", "plain-package-name", "./relative-package", "npm:bad\nsource"]) {
 		assert.throws(() => validatePiPluginSource({ source }));
+	}
+});
+
+test("removal accepts configured identifiers, including Pi-normalized relative paths", () => {
+	for (const source of [
+		"..\\..\\personal-projects\\Rhyza\\extensions\\pi-archify",
+		"../../extensions/pi-archify",
+		"./extensions/pi-archify",
+		"extensions/pi-archify",
+		".",
+		"npm:pi-mcp-adapter",
+		"C:\\extensions\\pi-archify",
+	]) {
+		assert.equal(validatePiPluginRemoveRequest({ source }).source, source);
+	}
+});
+
+test("removal still rejects malformed requests", () => {
+	for (const value of [
+		undefined,
+		null,
+		{},
+		{ source: 12 },
+		{ source: "" },
+		{ source: " \t " },
+		{ source: "bad\u0000path" },
+		{ source: "bad\npath" },
+		{ source: "x".repeat(2049) },
+	]) {
+		assert.throws(() => validatePiPluginRemoveRequest(value));
 	}
 });
