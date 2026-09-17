@@ -2,11 +2,7 @@ import clsx from "clsx";
 import { ListChecks, LoaderCircle } from "lucide-react";
 import appIcon from "../../resources/branding/icon.png";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import {
-	githubCopilotProviderId,
-	getKnowbranchBridge,
-	isElectronRuntime,
-} from "../hooks/useKnowbranchBridge";
+import { getKnowbranchBridge, isElectronRuntime } from "../hooks/useKnowbranchBridge";
 import { useAppStore } from "../store";
 import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
 import type { Turn } from "../types";
@@ -36,6 +32,7 @@ import {
 import { isSessionRunning } from "../utils/sessionRuntime";
 import { branchSwitchEndEvent, branchSwitchStartEvent } from "../utils/branchSwitch";
 import { errorToMessage } from "../shared/value";
+import { getProviderInfo, providerModelSelection } from "../shared/providers";
 import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionAskPopover";
 import { ChatComposer, type ComposerImage } from "./chat/ChatComposer";
 import { ConversationFind } from "./chat/ConversationFind";
@@ -171,9 +168,8 @@ export const ChatPane: React.FC = () => {
 						"Retrieving workspace context",
 					),
 				});
-				const selectedModel = store.settings.defaultModel
-					? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
-					: undefined;
+				const selectedModel = providerModelSelection(store.settings);
+				const provider = getProviderInfo(selectedModel.providerId);
 				const summaryPromise = withTimeout(
 					bridge.generateSummary({ text: prompt, model: selectedModel }),
 					auxiliaryRequestTimeoutMs,
@@ -208,7 +204,10 @@ export const ChatPane: React.FC = () => {
 					useAppStore.getState().diagrams,
 					sourceHits,
 				);
-				store.updateTurn(assistantTurnId, { status: "running", summary: "Pi agent is running" });
+				store.updateTurn(assistantTurnId, {
+					status: "running",
+					summary: `${provider.label} is running`,
+				});
 				const targetSession = useAppStore
 					.getState()
 					.sessions.find((session) => session.id === targetSessionId);
@@ -236,8 +235,8 @@ export const ChatPane: React.FC = () => {
 					),
 				});
 				if (result.usage) store.updateTurn(assistantTurnId, { usage: result.usage });
-				if (!result.ok) throw new Error(result.error || "Pi SDK request failed.");
-				const response = result.assistantText || "Pi SDK completed without text output.";
+				if (!result.ok) throw new Error(result.error || `${provider.label} request failed.`);
+				const response = result.assistantText || `${provider.label} completed without text output.`;
 				const streamedReasoning = useAppStore
 					.getState()
 					.turns.find((turn) => turn.id === assistantTurnId)?.reasoning;
@@ -360,9 +359,7 @@ export const ChatPane: React.FC = () => {
 		if (!result) return;
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
-		const model = store.settings.defaultModel
-			? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
-			: undefined;
+		const model = providerModelSelection(store.settings);
 		const originalText =
 			sessionTurns
 				.slice(index + 1)
@@ -623,7 +620,7 @@ export const ChatPane: React.FC = () => {
 				error={sendError}
 				runtimeCaption={
 					isElectronRuntime()
-						? "Pi SDK / GitHub Copilot"
+						? getProviderInfo(store.settings.provider).runtimeLabel
 						: "Electron runtime required for agent execution"
 				}
 				onInputChange={setInput}

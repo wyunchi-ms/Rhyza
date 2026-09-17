@@ -55,6 +55,7 @@ interface ActiveSession {
 	frontendSessionId: string;
 	frontendTurnId?: string;
 	modelKey?: string;
+	sessionGeneration?: string;
 
 	unsubscribe: () => void;
 	sourceRefs: Map<string, SourceReference>;
@@ -62,19 +63,23 @@ interface ActiveSession {
 
 type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
 
+export interface PiPromptRequest extends AgentPromptRequest {
+	sessionGeneration?: string;
+}
+
 export class PiService {
 	private readonly agentDir: string;
-	private readonly requestDumpDir: string;
+	protected readonly requestDumpDir: string;
 	private modelRuntimePromise: Promise<ModelRuntime> | undefined;
 	private readonly activeSessions = new Map<string, ActiveSession>();
-	private readonly worktreeService: WorktreeService;
+	protected readonly worktreeService: WorktreeService;
 
 	constructor(
 		userDataPath: string,
 		private readonly emitAuthEvent: (event: AuthBridgeEvent) => void = () => {},
-		private readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
+		protected readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
 		agentDir: string = getAgentDir(),
-		private readonly sourceService?: SourceService,
+		protected readonly sourceService?: SourceService,
 	) {
 		this.agentDir = agentDir;
 		this.requestDumpDir = path.join(userDataPath, "model-request-dumps");
@@ -224,19 +229,19 @@ export class PiService {
 		}
 	}
 
-	async promptAgent(
-		request: AgentPromptRequest,
-		workspacePath: string,
-	): Promise<AgentPromptResponse> {
+	async promptAgent(request: PiPromptRequest, workspacePath: string): Promise<AgentPromptResponse> {
 		const promptUsage = emptyAgentUsage();
 		try {
 			const runtime = await this.getModelRuntime();
 			let model: PiModel | undefined;
-			if (request.model) {
+			if (request.model?.modelId) {
 				model = runtime.getModel(request.model.providerId, request.model.modelId);
 				if (!model) {
 					throw new Error(`Unknown model: ${request.model.providerId}/${request.model.modelId}`);
 				}
+			} else {
+				model = (await runtime.getAvailable(defaultProviderId))[0];
+				if (!model) throw new Error("No configured GitHub Copilot model is available.");
 			}
 			const active = await this.getSession(workspacePath, request, model);
 			active.sourceRefs.clear();
@@ -299,7 +304,7 @@ export class PiService {
 	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
-			const model = request.model
+			const model = request.model?.modelId
 				? runtime.getModel(request.model.providerId, request.model.modelId)
 				: (await runtime.getAvailable(defaultProviderId))[0];
 			if (!model) throw new Error("No configured model is available for summary generation.");
@@ -338,7 +343,7 @@ export class PiService {
 	): Promise<KnowledgeExtractionResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
-			const model = request.model
+			const model = request.model?.modelId
 				? runtime.getModel(request.model.providerId, request.model.modelId)
 				: (await runtime.getAvailable(defaultProviderId))[0];
 			if (!model) throw new Error("No configured model is available for knowledge extraction.");
@@ -388,12 +393,15 @@ export class PiService {
 
 	private async getSession(
 		workspacePath: string,
-		request: AgentPromptRequest,
+		request: PiPromptRequest,
 		model: PiModel | undefined,
 	): Promise<ActiveSession> {
 		const modelKey = model ? `${model.provider}/${model.id}` : undefined;
 		const activeSession = this.activeSessions.get(request.frontendSessionId);
-		if (activeSession?.sourceWorkspacePath === workspacePath) {
+		if (
+			activeSession?.sourceWorkspacePath === workspacePath &&
+			activeSession.sessionGeneration === request.sessionGeneration
+		) {
 			activeSession.frontendTurnId = request.frontendTurnId;
 			if (model && activeSession.modelKey !== modelKey) {
 				await activeSession.session.setModel(model);
@@ -427,7 +435,9 @@ export class PiService {
 		const { sessionManager } = await openOrCreatePiSession({
 			workspacePath: sessionWorkspace.path,
 			sessionDir: path.join(this.agentDir, "knowbranch-sessions"),
-			frontendSessionId: request.frontendSessionId,
+			frontendSessionId: request.sessionGeneration
+				? `${request.frontendSessionId}-${request.sessionGeneration}`
+				: request.frontendSessionId,
 			parentFrontendSessionId: request.parentFrontendSessionId,
 			forkedFromTurnId: request.forkedFromTurnId,
 			transcript: request.transcript,
@@ -547,6 +557,7 @@ export class PiService {
 			frontendSessionId: request.frontendSessionId,
 			frontendTurnId: request.frontendTurnId,
 			modelKey,
+			sessionGeneration: request.sessionGeneration,
 			unsubscribe,
 			sourceRefs,
 		};
@@ -663,6 +674,10 @@ export class PiService {
 	reloadInstalledPlugins(): void {
 		this.disposeAllSessions();
 	}
+
+	dispose(): void {
+		this.disposeAllSessions();
+	}
 }
 
 function toModelInfo(model: PiModel): ModelInfo {
@@ -758,7 +773,7 @@ function hasUsage(usage: AgentUsage): boolean {
 	return usage.input + usage.output + usage.cacheRead + usage.cacheWrite > 0 || usage.cost > 0;
 }
 
-const workspaceExplorationGuidance = `## Workspace exploration
+export const workspaceExplorationGuidance = `## Workspace exploration
 - The current working directory is the workspace selected by the user.
 - For questions about code in the workspace, inspect it autonomously with ls, find, grep, and read before answering.
 - Prioritize implementation source files, symbol definitions and call sites, nearby tests, runtime configuration, and project documentation that directly explain the code in question.
@@ -766,7 +781,7 @@ const workspaceExplorationGuidance = `## Workspace exploration
 - Start with directory discovery when the user does not provide exact file paths. Do not claim that file paths are required unless workspace discovery tools have actually failed.
 - Read-only tools may be used freely for analysis. Modify files only when edit, write, or bash tools are available and the user requested a change.`;
 
-const todoTrackingGuidance = `## Work tracking
+export const todoTrackingGuidance = `## Work tracking
 - For implementation or investigation with more than one meaningful step, treat the workspace TODO checklist as a high-priority working artifact.
 - Read an existing TODO.md before starting so its structure and user-authored items are preserved.
 - Create or update TODO.md near the start of multi-step work. Use nested Markdown checkboxes (- [ ] and - [x]) that reflect the real plan.
@@ -780,7 +795,7 @@ const sourceRetrievalGuidance = `## Attached sources
 - A search hit is only a candidate, not evidence. Read the relevant range and verify that it directly supports the claim before relying on or citing it.
 - Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
 
-const responsePresentationGuidance = `## Response presentation
+export const responsePresentationGuidance = `## Response presentation
 - Installed extensions may supply other visualization tools and formats; follow their presentation instructions when available. The Mermaid rules below are the default when no extension overrides them.
 - To embed an existing self-contained HTML file, return a fenced html-preview JSON block: {"version":1,"path":"relative/path.html","title":"Preview title"}. The file must be inside the current session workspace. Do not return its full HTML as prose. HTML previews are sandboxed and cannot fetch network resources.
 - When visualizing a process, call chain, sequence, architecture, state transition, decision path, or relationship graph, use a concise Mermaid diagram. Never use an ASCII-art tree, arrow-filled plain-text diagram, or a \`\`\`text block as a substitute for a diagram.
@@ -890,7 +905,7 @@ function getLastAssistantContent(
 	return undefined;
 }
 
-function buildKnowledgeExtractionPrompt(request: KnowledgeExtractionRequest): string {
+export function buildKnowledgeExtractionPrompt(request: KnowledgeExtractionRequest): string {
 	const mermaidBlocks = [...request.answer.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gi)].map(
 		(match, sourceIndex) => ({
 			sourceIndex,
@@ -941,7 +956,7 @@ ASSISTANT_ANSWER (diagram code removed; evidence only, not a source to copy):
 ${stripDiagramCode(request.answer)}`;
 }
 
-function parseKnowledgeExtraction(
+export function parseKnowledgeExtraction(
 	output: string,
 	request: KnowledgeExtractionRequest,
 ): KnowledgeExtractionResponse {
@@ -1312,7 +1327,7 @@ function isModelRequestSnapshot(
 	);
 }
 
-async function writeRequestDump(
+export async function writeRequestDump(
 	dumpPath: string,
 	snapshot: AgentModelRequestSnapshot,
 ): Promise<void> {
@@ -1324,6 +1339,7 @@ async function writeRequestDump(
 	}
 }
 
-function safeDumpPart(value: string): string {
-	return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "session";
+export function safeDumpPart(value: string): string {
+	const part = value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+	return !part || part === "." || part === ".." ? "session" : part;
 }

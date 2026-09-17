@@ -3,6 +3,7 @@ import {
 	Brain,
 	Check,
 	ChevronDown,
+	Cloud,
 	Database,
 	Gauge,
 	ImagePlus,
@@ -10,12 +11,18 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AgentModelRequestSnapshot, AgentPromptImage, ModelInfo } from "../../shared/ipc";
+import type {
+	AgentModelRequestSnapshot,
+	AgentPromptImage,
+	ModelInfo,
+	ProviderId,
+} from "../../shared/ipc";
 import type { Diagram, Entity } from "../../types";
 import { composeInput, stripReferences } from "../../utils/composerInput";
 import { analyzeContextComposition, residentInputTokens } from "../../utils/contextRot";
 import { DiagramTypeIcon } from "../DiagramTypeIcon";
-import { getKnowbranchBridge, githubCopilotProviderId } from "../../hooks/useKnowbranchBridge";
+import { useProviderModels } from "../../hooks/useProviderModels";
+import { getProviderInfo, providers } from "../../shared/providers";
 import { useAppStore } from "../../store";
 import { CacheStatus } from "./CacheStatus";
 import { refreshCacheClock } from "../../hooks/useCacheClock";
@@ -74,7 +81,12 @@ export function ChatComposer({
 		lastCacheRequest(state.turns.filter((turn) => turn.sessionId === state.activeSessionId)),
 	);
 	const updateSettings = useAppStore((state) => state.updateSettings);
-	const [models, setModels] = useState<ModelInfo[]>([]);
+	const provider = getProviderInfo(settings.provider);
+	const { models, loading: modelsLoading, error: modelError } = useProviderModels(provider.id);
+	// Persisted cache evidence without a request snapshot predates provider selection.
+	const cacheMatchesProvider = contextRequest
+		? contextRequest.provider === provider.id
+		: provider.id === "github-copilot";
 	const [mention, setMention] = useState<MentionState | null>(null);
 	const [multiline, setMultiline] = useState(false);
 	const references = useMemo(() => parseReferences(input), [input]);
@@ -114,21 +126,6 @@ export function ChatComposer({
 			.filter((item) => `${item.name} ${item.detail}`.toLocaleLowerCase().includes(query))
 			.slice(0, 8);
 	}, [knowledgeItems, mention]);
-	useEffect(() => {
-		const bridge = getKnowbranchBridge();
-		if (!bridge) return;
-		let cancelled = false;
-		void bridge
-			.modelCatalog({ providerId: githubCopilotProviderId })
-			.then((catalog) => {
-				if (!cancelled) setModels(catalog.models);
-			})
-			.catch((catalogError) => console.warn("Could not load composer model catalog", catalogError));
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
 	useLayoutEffect(() => {
 		const textarea = textareaRef.current;
 		if (!textarea) return;
@@ -339,10 +336,17 @@ export function ChatComposer({
 								rows={1}
 							/>
 							<ComposerRuntimeControls
+								key={provider.id}
+								providerId={provider.id}
 								models={models}
+								modelsLoading={modelsLoading}
+								modelError={modelError}
 								selectedModel={settings.defaultModel}
 								thinking={settings.thinkingLevel}
-								contextRequest={contextRequest}
+								contextRequest={
+									contextRequest?.provider === provider.id ? contextRequest : undefined
+								}
+								onProviderChange={(provider) => updateSettings({ provider })}
 								onModelChange={(defaultModel) => updateSettings({ defaultModel })}
 								onThinkingChange={(thinkingLevel) => updateSettings({ thinkingLevel })}
 							/>
@@ -380,7 +384,10 @@ export function ChatComposer({
 					</div>
 				</div>
 			</div>
-			<CacheStatus request={cacheRequest} selectedModel={settings.defaultModel} />
+			<CacheStatus
+				request={cacheMatchesProvider ? cacheRequest : undefined}
+				selectedModel={settings.defaultModel}
+			/>
 			<div className="composer-caption">{runtimeCaption}</div>
 			{error && <div className="text-center mt-1 text-xs text-red-600">{error}</div>}
 		</div>
@@ -388,22 +395,33 @@ export function ChatComposer({
 }
 
 function ComposerRuntimeControls({
+	providerId,
 	models,
+	modelsLoading,
+	modelError,
 	selectedModel,
 	thinking,
 	contextRequest,
+	onProviderChange,
 	onModelChange,
 	onThinkingChange,
 }: {
+	providerId: ProviderId;
 	models: ModelInfo[];
+	modelsLoading: boolean;
+	modelError: string | null;
 	selectedModel: string;
 	thinking: "off" | "low" | "medium" | "high";
 	contextRequest?: AgentModelRequestSnapshot;
+	onProviderChange: (provider: ProviderId) => void;
 	onModelChange: (model: string) => void;
 	onThinkingChange: (thinking: "off" | "low" | "medium" | "high") => void;
 }) {
-	const [openMenu, setOpenMenu] = useState<"model" | "thinking" | "context" | null>(null);
+	const [openMenu, setOpenMenu] = useState<"provider" | "model" | "thinking" | "context" | null>(
+		null,
+	);
 	const controlsRef = useRef<HTMLDivElement | null>(null);
+	const provider = getProviderInfo(providerId);
 	const model = models.find((item) => item.id === selectedModel);
 	const selectedModelLabel = (model?.name ?? selectedModel) || "Provider default";
 	const estimated = contextRequest ? analyzeContextComposition(contextRequest).total : 0;
@@ -431,7 +449,59 @@ function ComposerRuntimeControls({
 		{ value: "high" as const, label: "High", detail: "Deeper reasoning for hard tasks" },
 	];
 	return (
-		<div className="composer-runtime-controls" ref={controlsRef}>
+		<div className="composer-runtime-controls flex-wrap" ref={controlsRef}>
+			<div className="composer-runtime-control">
+				<button
+					type="button"
+					className="composer-runtime-trigger"
+					title="Choose provider"
+					aria-label={`Provider: ${provider.label}`}
+					aria-haspopup="listbox"
+					aria-expanded={openMenu === "provider"}
+					onClick={() => setOpenMenu((current) => (current === "provider" ? null : "provider"))}
+				>
+					<Cloud size={13} aria-hidden="true" />
+					<span>{provider.label}</span>
+					<ChevronDown size={12} aria-hidden="true" />
+				</button>
+				{openMenu === "provider" && (
+					<div
+						className="composer-runtime-menu"
+						role="listbox"
+						aria-label="Provider used for new messages"
+					>
+						<header>
+							<div>
+								<strong>Provider</strong>
+								<span>Changing provider resets the model</span>
+							</div>
+						</header>
+						<div className="composer-runtime-menu-scroll">
+							{providers.map((item) => (
+								<button
+									type="button"
+									role="option"
+									aria-selected={item.id === providerId}
+									className={item.id === providerId ? "is-selected" : ""}
+									key={item.id}
+									onClick={() => {
+										onProviderChange(item.id);
+										setOpenMenu(null);
+									}}
+								>
+									<span className="composer-menu-check">
+										{item.id === providerId && <Check size={13} />}
+									</span>
+									<span>
+										<strong>{item.label}</strong>
+										<small>{item.externalAuth ? "Uses local CLI sign-in" : "Uses Pi"}</small>
+									</span>
+								</button>
+							))}
+						</div>
+					</div>
+				)}
+			</div>
 			<div className="composer-runtime-control">
 				<button
 					type="button"
@@ -453,11 +523,16 @@ function ComposerRuntimeControls({
 					>
 						<header>
 							<div>
-								<strong>Model</strong>
+								<strong>{provider.label} model</strong>
 								<span>Used for new messages</span>
 							</div>
-							<small>{models.length || 1} available</small>
+							<small>{modelsLoading ? "Loading…" : `${models.length + 1} available`}</small>
 						</header>
+						{modelError && (
+							<p role="status" className="px-3 py-2 text-xs text-red-600">
+								{modelError}
+							</p>
+						)}
 						<div className="composer-runtime-menu-scroll">
 							<button
 								type="button"
@@ -472,7 +547,7 @@ function ComposerRuntimeControls({
 								<span className="composer-menu-check">{!selectedModel && <Check size={13} />}</span>
 								<span>
 									<strong>Provider default</strong>
-									<small>Let GitHub Copilot choose</small>
+									<small>Let {provider.label} choose</small>
 								</span>
 							</button>
 							{selectedModel && !model && (

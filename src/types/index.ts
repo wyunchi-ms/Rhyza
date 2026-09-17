@@ -1,4 +1,4 @@
-import type { AgentCacheRequest, AgentModelRequestSnapshot } from "../shared/ipc";
+import type { AgentCacheRequest, AgentModelRequestSnapshot, ProviderId } from "../shared/ipc";
 
 export type Confidence = "confirmed" | "inferred" | "disputed";
 
@@ -223,7 +223,7 @@ export interface ChangeSet {
 
 export interface Settings {
 	theme: "light" | "dark";
-	provider: string;
+	provider: ProviderId;
 	defaultModel: string;
 	autoExtract: boolean;
 	strictConflict: boolean;

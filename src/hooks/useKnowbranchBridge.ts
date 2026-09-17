@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
-import type {
-	AuthBridgeEvent,
-	ModelInfo,
-	ProviderStatusResponse,
-	WorkspaceInfo,
-} from "../shared/ipc";
+import { useEffect, useRef, useState } from "react";
+import type { ProviderId, WorkspaceInfo } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
-
-export const githubCopilotProviderId = "github-copilot" as const;
+import {
+	createProviderConnection,
+	initialProviderConnectionState,
+	type ProviderConnectionState,
+} from "../utils/providerConnection";
 
 export function getKnowbranchBridge() {
 	return window.knowbranch;
@@ -17,72 +15,57 @@ export function isElectronRuntime(): boolean {
 	return window.knowbranch?.isElectron === true;
 }
 
-export function useElectronProviderState() {
-	const [providerStatus, setProviderStatus] =
-		useState<ProviderStatusResponse | null>(null);
-	const [models, setModels] = useState<ModelInfo[]>([]);
+export function useElectronProviderState(providerId: ProviderId) {
+	const [state, setState] = useState<ProviderConnectionState | null>(null);
+	const connectionRef = useRef<ReturnType<typeof createProviderConnection> | null>(null);
 	const [workspace, setWorkspace] = useState<WorkspaceInfo>({ path: null });
-	const [authEvents, setAuthEvents] = useState<AuthBridgeEvent[]>([]);
-	const [loading, setLoading] = useState(isElectronRuntime());
-	const [error, setError] = useState<string | null>(null);
+	const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const bridge = getKnowbranchBridge();
-		if (!bridge) {
-			setLoading(false);
-			return;
-		}
+		if (!bridge) return;
+		const connection = createProviderConnection(bridge, providerId, setState);
+		connectionRef.current = connection;
+		void connection.refresh(false);
+		return () => {
+			connection.dispose();
+			connectionRef.current = null;
+		};
+	}, [providerId]);
 
+	useEffect(() => {
+		const bridge = getKnowbranchBridge();
+		if (!bridge) return;
 		let cancelled = false;
-		const activeBridge = bridge;
-		const unsubscribe = activeBridge.onAuthEvent((event) => {
-			setAuthEvents((events) => [event, ...events].slice(0, 5));
-		});
-
-		async function load() {
-			try {
-				setLoading(true);
-				const [status, catalog, workspaceInfo] = await Promise.all([
-					activeBridge.providerStatus({ providerId: githubCopilotProviderId }),
-					activeBridge.modelCatalog({ providerId: githubCopilotProviderId }),
-					activeBridge.getWorkspace(),
-				]);
-				if (!cancelled) {
-					setProviderStatus(status);
-					setModels(catalog.models);
-					setWorkspace(workspaceInfo);
-					setError(status.error ?? catalog.error ?? null);
-				}
-			} catch (loadError) {
-				if (!cancelled) {
-					setError(errorToMessage(loadError));
-				}
-			} finally {
-				if (!cancelled) {
-					setLoading(false);
-				}
-			}
-		}
-
-		void load();
+		void bridge.getWorkspace().then(
+			(info) => {
+				if (!cancelled) setWorkspace(info);
+			},
+			(error: unknown) => {
+				if (!cancelled) setWorkspaceError(errorToMessage(error));
+			},
+		);
 		return () => {
 			cancelled = true;
-			unsubscribe();
 		};
 	}, []);
 
+	const connection =
+		connectionRef.current?.providerId === providerId ? connectionRef.current : null;
+	const current =
+		connection && state?.providerId === providerId
+			? state
+			: initialProviderConnectionState(providerId, isElectronRuntime());
+
 	return {
+		...current,
 		isElectron: isElectronRuntime(),
-		providerStatus,
-		models,
 		workspace,
-		authEvents,
-		loading,
-		error,
-		setProviderStatus,
-		setModels,
+		workspaceError,
 		setWorkspace,
-		setAuthEvents,
-		setError,
+		setWorkspaceError,
+		refresh: () => connection?.refresh(),
+		login: () => connection?.login(),
+		logout: () => connection?.logout(),
 	};
 }

@@ -30,6 +30,7 @@ import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { errorToMessage } from "../shared/value";
+import { normalizeProviderSettings, updateProviderSettings } from "../shared/providers";
 import {
 	prioritizeKnowledgeSourceRefs,
 	sourceRefsForKnowledgeScope,
@@ -108,7 +109,7 @@ interface AppState {
 
 const defaultSettings: Settings = {
 	theme: "light",
-	provider: "GitHub Copilot",
+	provider: "github-copilot",
 	defaultModel: "",
 	autoExtract: true,
 	strictConflict: true,
@@ -1007,6 +1008,7 @@ export const useAppStore = create<AppState>()(
 					settings: {
 						...state.settings,
 						...newSettings,
+						...updateProviderSettings(state.settings, newSettings),
 						maxConcurrentRequests: Math.min(
 							10,
 							Math.max(
@@ -1077,7 +1079,7 @@ export const useAppStore = create<AppState>()(
 					...saved,
 					sessions: recoverInterruptedSessions(saved.sessions ?? [], saved.turns ?? []),
 					turns: recoverInterruptedTurns(saved.turns ?? []),
-					settings: { ...defaultSettings, ...saved.settings },
+					settings: normalizeSettings(saved.settings),
 					relations: saved.relations ?? [],
 					diagrams: migrateMermaidDiagrams(saved.diagrams ?? []),
 				};
@@ -1124,7 +1126,7 @@ export function loadWorkspaceState(serialized: string | null): void {
 function normalizeSettings(settings: Partial<Settings> | undefined): Settings {
 	const current = settings ?? {};
 	const theme = current.theme === "dark" ? "dark" : "light";
-	return { ...defaultSettings, ...current, theme };
+	return { ...defaultSettings, ...current, ...normalizeProviderSettings(current), theme };
 }
 
 function recoverInterruptedTurns(turns: Turn[]): Turn[] {

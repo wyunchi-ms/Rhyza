@@ -9,6 +9,7 @@ import { isRecord } from "../shared/value";
 import { getKnowbranchBridge } from "./useKnowbranchBridge";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { extractToolOutput, toolResultHasWarning } from "../utils/toolExecution";
+import { providerStatusActivityPatch } from "../utils/turnActivity";
 
 /** Owns the bridge-to-turn projection so chat surfaces do not duplicate stream semantics. */
 export function useAgentEventStream() {
@@ -69,6 +70,9 @@ export function useAgentEventStream() {
 							isTurnActive(turn),
 					)?.id;
 			if (!turnId) return;
+			const current = state.turns.find((turn) => turn.id === turnId);
+			const statusPatch = current ? providerStatusActivityPatch(current, event) : undefined;
+			if (statusPatch) state.updateTurn(turnId, statusPatch);
 			if (event.message && event.type === "message_update") {
 				queueText(
 					turnId,

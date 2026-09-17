@@ -9,7 +9,7 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 
 ## 当前能力
 
-- 基于 Pi SDK 运行 Agent，通过 GitHub Copilot OAuth/Device Flow 登录。
+- 支持 GitHub Copilot（Pi SDK）、Codex（官方 TypeScript SDK）和 Claude Code（本机 CLI）。
 - 从历史中间 Turn 继续，保留原路径和新分支，并生成分支标题。
 - 为会话节点标记待处理、进行中、已完成或暂不处理。
 - 将本地代码、文档和其他文本目录添加为 Sources，供 Agent 搜索和读取。
@@ -24,7 +24,7 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 
 长期产品记忆、交互约束和 Diagram/UI 设计原则见 [Product memory and design principles](docs/product-memory-and-design-principles.md)。
 
-## 是否需要提前安装 Pi 或 Copilot
+## Provider 与安装要求
 
 | 项目 | 是否需要 | 说明 |
 | --- | --- | --- |
@@ -32,6 +32,8 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 | GitHub Copilot CLI | 不需要 | Rhyza 直接通过 Pi SDK 的 `github-copilot` Provider 登录。 |
 | VS Code Copilot 扩展 | 不需要 | VS Code 的登录状态不保证能被 Rhyza 复用。 |
 | GitHub Copilot 权限 | 需要 | 登录的 GitHub 账号必须具有可用的 Copilot 订阅或组织授权。 |
+| Codex CLI | 本地登录时需要 | Agent 使用随应用依赖安装的官方 `@openai/codex-sdk`；通过 `codex login` 登录，也支持启动环境中的 `CODEX_API_KEY`。 |
+| Claude Code CLI | 选择 Claude Code 时需要 | 用户自行安装并完成 `claude auth login`；Rhyza 调用本机 `claude --print`，不读取或复制 Claude 凭据。 |
 | Git | 建议安装 | 克隆仓库需要 Git；Worktree 隔离、Diff 和 patch 功能也依赖 Git。 |
 
 Rhyza 默认使用 Pi 的凭据目录 `~/.pi/agent`：
@@ -42,13 +44,16 @@ Rhyza 默认使用 Pi 的凭据目录 `~/.pi/agent`：
 - 不需要在 `.env` 中填写 Copilot Token 或 API Key。
 - 当前 UI 默认使用 `github.com`。GitHub Enterprise 自定义域名的输入界面尚未开放。
 
+Codex 与 Claude Code 的账户、订阅/API 计费和使用限制由各自服务提供方管理。Rhyza 不自动安装全局 CLI、不执行全局退出登录，也不会将凭据传给 Renderer。
+
 ## 环境要求
 
 - Windows 10/11。macOS 和 Linux 尚未完成验证。
 - Node.js `22.12+`，推荐使用当前 Node.js 22 LTS；也支持 `20.19+`。
 - npm，随 Node.js 安装。
 - Git 2.x，Git Workspace 和 Worktree 功能需要。
-- 能访问 GitHub、GitHub Copilot 和 npm registry 的网络环境。
+- 能访问所选 Provider（GitHub Copilot、OpenAI 或 Anthropic）及 npm registry 的网络环境。
+- 本适配器使用 Claude Code 的 Bash 命令工具；Windows 上的可写工作流需要 Git for Windows 提供的 Git Bash，必要时设置 `CLAUDE_CODE_GIT_BASH_PATH`。
 
 检查版本：
 
@@ -66,7 +71,7 @@ cd Rhyza
 npm ci
 ```
 
-`npm ci` 会安装 React、Electron、Pi SDK、Mermaid 等全部依赖。Archify 是可选扩展，不再随主程序自动加载或打包；本地构建和安装方式见下方 Diagram 模式。首次安装 Electron 时需要下载 Electron binary，耗时取决于网络环境。
+`npm ci` 会安装 React、Electron、Pi SDK、Codex SDK 及其对应平台 binary、Mermaid 等依赖。Claude Code 需单独安装。Archify 是可选扩展，不再随主程序自动加载或打包；本地构建和安装方式见下方 Diagram 模式。首次安装 Electron 时需要下载 Electron binary，耗时取决于网络环境。
 
 如果使用 HTTPS：
 
@@ -137,11 +142,13 @@ Workspace 有两个作用：
 
 对于 Git Workspace，可写 Session 会自动尝试使用独立 Worktree。非 Git 目录仍可聊天和读取文件，但不会获得 Git Worktree 隔离，Changes 页也无法提供正常的 Git Diff。
 
-### 2. 登录 GitHub Copilot
+### 2. 选择并配置 AI Provider
 
-进入 **Settings → AI Provider**：
+进入 **Settings → AI Provider**，选择 Provider。切换 Provider 会清空旧模型选择，避免将一个 Provider 的模型 ID 发给另一个 Provider。聊天、分支标题、知识提取和关系重建均使用所选 Provider。
 
-1. 点击 **Sign In**。
+**GitHub Copilot**
+
+1. 选择 **GitHub Copilot**，点击 **Sign In**。
 2. 根据提示复制 Device Code。
 3. 点击 **Open sign-in**，在系统浏览器中完成 GitHub 授权。
 4. 返回 Rhyza，等待状态变为已配置。
@@ -149,9 +156,42 @@ Workspace 有两个作用：
 
 凭据由 Pi SDK 保存到 `~/.pi/agent/auth.json`，不会发送给 Renderer，也不应提交到 Git。
 
+**Codex**
+
+在本地终端安装登录用 CLI，并完成登录：
+
+```powershell
+npm install -g @openai/codex
+codex login
+```
+
+返回 Rhyza，选择 **Codex** 并点击 **Check connection**。应用使用官方 [Codex TypeScript SDK](https://developers.openai.com/codex/sdk/) 自带的 Codex runtime，共享本机 Codex 登录状态；自定义 `CODEX_HOME` 需要在启动 Rhyza 前设置。也可在启动环境中提供 `CODEX_API_KEY`，不要把密钥写入仓库文件。默认模型由 Codex 配置决定，也可以输入该账户支持的模型 ID。
+
+**Claude Code**
+
+按照 [Claude Code 安装文档](https://code.claude.com/docs/en/setup) 安装当前版本，然后运行：
+
+```powershell
+claude auth login
+claude auth status
+```
+
+重启 Rhyza，选择 **Claude Code** 并点击 **Check connection**。应用直接运行本机 `claude --print` 的结构化流式接口，登录仍由该 CLI 管理；不导出订阅 OAuth 凭据供其他 SDK 使用。这与官方 Agent SDK 的第三方应用登录限制不同，遵循 [未修改 Claude Code binary 的使用条款](https://code.claude.com/docs/en/legal-and-compliance)。默认模型由 Claude Code 决定，也可输入 CLI 支持的别名或完整模型 ID，例如 `sonnet`、`opus`。
+
+如果安装目录不在 `PATH`，可在启动应用前将 `RHYZA_CLAUDE_PATH` 设置为可执行文件的绝对路径。Windows 原生安装的 `~\.local\bin\claude.exe` 和 npm 全局安装的 CLI 都可识别。安装版本必须支持 `auth status --json`、`--input-format stream-json`、`--include-partial-messages`、`--permission-mode dontAsk` 和 `--effort`。
+
+**Provider 行为差异**
+
+- Codex / Claude Code 的每次请求从当前分支的可见文本与图片历史构建独立运行；切换 Provider、分叉和重启不会复用其他分支的隐藏会话。返回 Copilot 时会重建相应的 Pi 上下文。原生 CLI 的工具历史不跨请求重放。
+- 两者支持流式回复、工具状态、知识上下文、标题和知识提取、HTML Preview、TODO、Worktree Diff 与 patch。Sources 会在请求前搜索并读取相关片段；Pi 的 `search_sources` / `read_source` 自定义工具和 Pi 插件不会加载到这两个 Provider，用户配置的 MCP 工具也不加载。
+- 只有成功建立隔离 Git Worktree 的可写会话才开放修改/命令工具；其他目录保持只读。Codex 使用 `read-only` / `workspace-write` sandbox 和 `never` approval。Claude Code 使用明确的工具白名单和 `dontAsk`，不使用 bypass-permissions；只读会话不开放 Bash。**Claude Code 的 Worktree 隔离不是操作系统沙箱，可写会话中的 Bash 仍以当前用户权限执行，只应在可信项目中使用。**
+- 默认模型和自定义模型交给所选 Provider 校验；不伪造固定模型目录。Thinking level 使用原生支持的 effort，`off` 在 Codex 映射为 `minimal`，在 Claude Code 映射为 `low`，不保证关闭原生推理。Claude Code 不接受 BMP 图片，请改用 PNG、JPEG、GIF 或 WebP。
+- Codex / Claude Code 的请求面板保存的是 **Agent 输入快照与整轮用量**，不是 SDK/CLI 内部每次模型调用的原始 HTTP payload。不可用的缓存 TTL 和上下文窗口不会被估算；Codex 未报告的费用记为 0，不代表服务免费。
+- Check connection 仅检查本地登录配置，实际模型权限、额度和网络错误会在请求中显示。要退出账号，请自行运行对应 CLI 的 logout 命令；Rhyza 不修改其他应用共享的登录状态。
+
 ### 3. 管理 Pi 插件
 
-进入 **Settings → Pi Plugins** 可以查看、安装和移除 Pi packages。支持 `npm:`、`git:`、HTTPS/SSH Git URL 和本地绝对路径；操作直接使用内置 Pi SDK，不要求预先安装 Pi CLI。npm 或 Git 来源仍需要本机具备相应的 Node.js/npm 或 Git 环境。
+进入 **Settings → Pi Plugins** 可以查看、安装和移除 Pi packages。这些插件仅作用于 GitHub Copilot / Pi Provider，不会加载到 Codex 或 Claude Code。支持 `npm:`、`git:`、HTTPS/SSH Git URL 和本地绝对路径；操作直接使用内置 Pi SDK，不要求预先安装 Pi CLI。npm 或 Git 来源仍需要本机具备相应的 Node.js/npm 或 Git 环境。
 
 Pi 会将本地插件来源保存为相对于 Agent 配置目录的路径，例如 `..\extensions\pi-archify`。这些已配置的来源可以直接点击 **Remove** 移除，即使目录已经不存在；移除本地插件只取消配置，不删除源文件。
 
@@ -211,9 +251,12 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `~/.pi-graph/workspaces/<hash>.json` | Session、Turn、Entity、Relation、Diagram、ChangeSet、设置和布局。 |
 | `~/.pi-graph/sources/<hash>.json` | 对应 Workspace 的 Source Catalog 和文件清单。 |
 | `~/.pi-graph/worktrees/` | Rhyza 创建的 Git Worktree。 |
+| `~/.pi-graph/provider-sessions/` | Provider 切换和 Copilot 上下文代次，不包含登录凭据。 |
+| `~/.pi-graph/model-request-dumps/` | 本地请求快照，可能包含对话和检索到的代码；不要公开分享。 |
 | `~/.pi-graph/diagnostics/performance-YYYY-MM-DD.jsonl` | UI、主进程操作和 Archify 分阶段结构化诊断日志。 |
 | `~/.pi/agent/auth.json` | Pi Provider 凭据，包括 GitHub Copilot OAuth Token。 |
 | `~/.pi/agent/models-store.json` | Pi 动态模型目录缓存。 |
+| `$CODEX_HOME/sessions/`（默认 `~/.codex/sessions/`） | Codex runtime 自己保存的原生运行记录；Rhyza 不将其作为分支历史重放。 |
 
 `.pi-graph`、`PiGraph` 用户数据目录和代码中的 `knowbranch` 是当前为了兼容旧数据而保留的内部名称。应用及 npm 包名称已改为 Rhyza；不要仅为改名手工移动这些兼容目录，否则可能造成 Workspace 映射和状态文件不一致。
 
