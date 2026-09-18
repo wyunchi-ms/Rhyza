@@ -32,7 +32,7 @@ Rhyza 是一个本地优先的 Electron 桌面应用。它用树状会话保存�
 | GitHub Copilot CLI | 不需要 | Rhyza 直接通过 Pi SDK 的 `github-copilot` Provider 登录。 |
 | VS Code Copilot 扩展 | 不需要 | VS Code 的登录状态不保证能被 Rhyza 复用。 |
 | GitHub Copilot 权限 | 需要 | 登录的 GitHub 账号必须具有可用的 Copilot 订阅或组织授权。 |
-| Codex CLI | 本地登录时需要 | Agent 使用随应用依赖安装的官方 `@openai/codex-sdk`；通过 `codex login` 登录，也支持启动环境中的 `CODEX_API_KEY`。 |
+| Codex Desktop 或 Codex CLI | 选择 Codex 时需要 | Rhyza 通过官方 `codex app-server` 读取同一 Windows 用户的 Codex/ChatGPT 登录状态，并由 App Server 管理 Token 刷新。 |
 | Claude Code CLI | 选择 Claude Code 时需要 | 用户自行安装并完成 `claude auth login`；Rhyza 调用本机 `claude --print`，不读取或复制 Claude 凭据。 |
 | Git | 建议安装 | 克隆仓库需要 Git；Worktree 隔离、Diff 和 patch 功能也依赖 Git。 |
 
@@ -158,14 +158,7 @@ Workspace 有两个作用：
 
 **Codex**
 
-在本地终端安装登录用 CLI，并完成登录：
-
-```powershell
-npm install -g @openai/codex
-codex login
-```
-
-返回 Rhyza，选择 **Codex** 并点击 **Check connection**。应用使用官方 [Codex TypeScript SDK](https://developers.openai.com/codex/sdk/) 自带的 Codex runtime，共享本机 Codex 登录状态；自定义 `CODEX_HOME` 需要在启动 Rhyza 前设置。也可在启动环境中提供 `CODEX_API_KEY`，不要把密钥写入仓库文件。默认模型由 Codex 配置决定，也可以输入该账户支持的模型 ID。
+选择 **Codex** 并点击 **Sign In**。Rhyza 会先通过官方 [Codex App Server](https://developers.openai.com/codex/app-server/) 检查同一 Windows 用户下由 ChatGPT Desktop 或 Codex CLI 保存的 Codex 登录；检测到账号时直接复用，未检测到时才打开新的浏览器授权。Token 的存储和刷新由 Codex 负责，Rhyza 不读取 ChatGPT Cookie，也不复制原始 Token。登录完成后会加载该账号实际可用的模型目录。
 
 **Claude Code**
 

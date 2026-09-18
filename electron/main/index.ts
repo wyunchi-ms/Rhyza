@@ -47,7 +47,7 @@ const isDev = process.env.VITE_DEV_SERVER_URL !== undefined;
 const isSmoke = process.env.KNOWBRANCH_ELECTRON_SMOKE === "1";
 setDefaultResultOrder("ipv4first");
 
-const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5174";
+const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5175";
 const smokeTimeoutMs = 15_000;
 const legacyUserDataPath = app.getPath("userData");
 const dataRootPath = path.join(app.getPath("home"), ".pi-graph");
@@ -170,6 +170,10 @@ async function createWindow(): Promise<void> {
 		}
 	} else {
 		await mainWindow.loadFile(path.join(currentDirectory, "..", "..", "..", "dist", "index.html"));
+	}
+	if (!mainWindow.isDestroyed()) {
+		mainWindow.show();
+		mainWindow.focus();
 	}
 }
 
@@ -432,8 +436,10 @@ app.whenReady().then(async () => {
 		undefined,
 		sourceService,
 	);
+	app.once("before-quit", () => {
+		void piService.dispose();
+	});
 	registerIpcHandlers();
-	app.on("before-quit", () => piService.dispose());
 	mainLoopDelay.enable();
 	setInterval(() => {
 		void writeDiagnostic("main-sample", mainProcessSnapshot());

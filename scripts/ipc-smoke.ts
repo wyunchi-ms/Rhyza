@@ -4,8 +4,8 @@ import path from "node:path";
 import {
 	extractMermaidDiagramCandidates,
 	isDurableKnowledgeEntityCandidate,
-	PiService,
 } from "../electron/main/pi-service.js";
+import { AgentService } from "../electron/main/agent-service.js";
 import {
 	validateAgentPromptRequest,
 	validateModelCatalogRequest,
@@ -17,9 +17,10 @@ import {
 } from "../src/shared/ipc.js";
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "knowbranch-ipc-smoke-"));
+let service: AgentService | undefined;
 
 try {
-	const service = new PiService(tempRoot, undefined, undefined, path.join(tempRoot, "pi-agent"));
+	service = new AgentService(tempRoot, undefined, undefined, path.join(tempRoot, "pi-agent"));
 
 	assertThrows(() => validateProviderStatusRequest({ providerId: "openai" }));
 	assertThrows(() => validateAgentPromptRequest({ prompt: "missing workspace" }));
@@ -42,8 +43,21 @@ try {
 		"Transcript attachments must survive validation.",
 	);
 	validateProviderStatusRequest({ providerId: "github-copilot" });
+	validateProviderStatusRequest({ providerId: "codex" });
+	validateProviderStatusRequest({ providerId: "claude-code" });
 	validateModelCatalogRequest({ providerId: "github-copilot", refresh: false });
+	validateModelCatalogRequest({ providerId: "codex", refresh: false });
+	validateModelCatalogRequest({ providerId: "claude-code", refresh: false });
 	validateSummaryRequest({ text: "How does the session tree work?" });
+	const providerDefaultSummary = validateSummaryRequest({
+		text: "How does the session tree work?",
+		model: { providerId: "codex", modelId: "" },
+	});
+	assert(
+		providerDefaultSummary.model?.providerId === "codex" &&
+			providerDefaultSummary.model.modelId === "",
+		"A provider-default model selection must survive validation.",
+	);
 	assertThrows(() => validateSummaryRequest({ text: "" }));
 	validateKnowledgeExtractionRequest({
 		question: "What is a worktree?",
@@ -135,9 +149,16 @@ try {
 	if (!Array.isArray(catalog.models)) {
 		throw new Error("Model catalog did not return an array.");
 	}
+	for (const providerId of ["codex", "claude-code"] as const) {
+		const providerCatalog = await service.getModelCatalog({ providerId, refresh: false });
+		if (!Array.isArray(providerCatalog.models)) {
+			throw new Error(`${providerId} model catalog did not return an array.`);
+		}
+	}
 
 	console.log(`IPC smoke passed: configured=${status.configured}, models=${catalog.models.length}`);
 } finally {
+	await service?.dispose();
 	await rm(tempRoot, { recursive: true, force: true });
 }
 

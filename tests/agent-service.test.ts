@@ -29,7 +29,7 @@ function prompt(providerId: ProviderId, frontendSessionId = "session"): AgentPro
 	};
 }
 
-test("native providers route chat, titles and knowledge through their own default model", async () => {
+test("Claude Code routes chat, titles and knowledge through its native default model", async () => {
 	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-provider-test-"));
 	try {
 		const service = new FakeAgentService(
@@ -38,7 +38,7 @@ test("native providers route chat, titles and knowledge through their own defaul
 			undefined,
 			path.join(directory, "pi"),
 		);
-		for (const providerId of ["codex", "claude-code"] as const) {
+		for (const providerId of ["claude-code"] as const) {
 			const request = prompt(providerId, providerId);
 			const result = await service.promptAgent(request, directory);
 			assert.equal(result.ok, true);
@@ -68,9 +68,9 @@ test("native providers route chat, titles and knowledge through their own defaul
 			assert.equal(service.requests.at(-1)?.providerId, providerId);
 			service.reply = "Native answer";
 		}
-		const history = await service.getModelRequestHistory("codex");
-		assert.equal(history.turns["assistant-turn"][0].provider, "codex");
-		assert.equal(history.turns["assistant-turn"][0].api, "codex-sdk-agent-input");
+		const history = await service.getModelRequestHistory("claude-code");
+		assert.equal(history.turns["assistant-turn"][0].provider, "claude-code");
+		assert.equal(history.turns["assistant-turn"][0].api, "claude-code-cli-agent-input");
 		assert.equal(history.turns["assistant-turn"][0].wirePayload, undefined);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
@@ -91,7 +91,7 @@ test("native writable tools are disabled unless Git isolation succeeded", async 
 			path.join(directory, "pi"),
 		);
 		assert.equal(
-			(await service.promptAgent({ ...prompt("codex"), writable: true }, directory)).ok,
+			(await service.promptAgent({ ...prompt("claude-code"), writable: true }, directory)).ok,
 			true,
 		);
 		assert.equal(service.requests[0].writable, false);
@@ -119,9 +119,9 @@ test("returning to Copilot rebuilds its context from visible history, including 
 		);
 		await service.promptAgent(prompt("github-copilot"), directory);
 		assert.equal(piRequests[0].sessionGeneration, undefined);
-		await service.promptAgent(prompt("codex"), directory);
+		await service.promptAgent(prompt("claude-code"), directory);
 		const transcript = [
-			{ id: "codex-answer", role: "assistant" as const, content: "Native answer" },
+			{ id: "claude-answer", role: "assistant" as const, content: "Native answer" },
 		];
 		await service.promptAgent({ ...prompt("github-copilot"), transcript }, directory);
 		assert.ok(piRequests[1].sessionGeneration);

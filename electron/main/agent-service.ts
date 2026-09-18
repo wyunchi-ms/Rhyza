@@ -54,13 +54,13 @@ export class AgentService extends PiService {
 	override async getProviderStatus(
 		providerId: ProviderId = "github-copilot",
 	): Promise<ProviderStatusResponse> {
-		return providerId === "github-copilot"
-			? super.getProviderStatus(providerId)
-			: getNativeProviderStatus(providerId);
+		return providerId === "claude-code"
+			? getNativeProviderStatus(providerId)
+			: super.getProviderStatus(providerId);
 	}
 
 	override async loginProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
-		if (providerId === "github-copilot") return super.loginProvider(providerId);
+		if (providerId !== "claude-code") return super.loginProvider(providerId);
 		const status = await this.getProviderStatus(providerId);
 		return {
 			ok: status.configured,
@@ -70,7 +70,7 @@ export class AgentService extends PiService {
 	}
 
 	override async logoutProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
-		if (providerId === "github-copilot") return super.logoutProvider(providerId);
+		if (providerId !== "claude-code") return super.logoutProvider(providerId);
 		return {
 			ok: false,
 			status: await this.getProviderStatus(providerId),
@@ -80,7 +80,7 @@ export class AgentService extends PiService {
 	}
 
 	override async getModelCatalog(request: ModelCatalogRequest = {}): Promise<ModelCatalogResponse> {
-		if (!request.providerId || request.providerId === "github-copilot") {
+		if (!request.providerId || request.providerId !== "claude-code") {
 			return super.getModelCatalog(request);
 		}
 		const status = await this.getProviderStatus(request.providerId);
@@ -101,7 +101,7 @@ export class AgentService extends PiService {
 		const providerId = request.model?.providerId ?? "github-copilot";
 		try {
 			const state = await this.recordSessionProvider(key, providerId);
-			if (providerId === "github-copilot") {
+			if (providerId !== "claude-code") {
 				this.nativeWorkspaces.delete(request.frontendSessionId);
 				return await super.promptAgent(
 					{ ...request, sessionGeneration: state.copilotGeneration },
@@ -142,7 +142,7 @@ export class AgentService extends PiService {
 				timestamp: new Date().toISOString(),
 				provider: providerId,
 				model: request.model?.modelId || "provider default",
-				api: providerId === "codex" ? "codex-sdk-agent-input" : "claude-code-cli-agent-input",
+				api: "claude-code-cli-agent-input",
 				thinking: request.thinkingLevel ?? "medium",
 				frontendTurnId,
 				dumpPath,
@@ -197,7 +197,7 @@ export class AgentService extends PiService {
 		workspacePath: string,
 	): Promise<SummaryResponse> {
 		const providerId = request.model?.providerId;
-		if (!providerId || providerId === "github-copilot") {
+		if (!providerId || providerId !== "claude-code") {
 			return super.generateSummary(request, workspacePath);
 		}
 		try {
@@ -224,7 +224,7 @@ export class AgentService extends PiService {
 		workspacePath: string,
 	): Promise<KnowledgeExtractionResponse> {
 		const providerId = request.model?.providerId;
-		if (!providerId || providerId === "github-copilot") {
+		if (!providerId || providerId !== "claude-code") {
 			return super.extractKnowledge(request, workspacePath);
 		}
 		try {
@@ -329,7 +329,7 @@ export class AgentService extends PiService {
 		const state: ProviderSessionState = {
 			providerId,
 			copilotGeneration:
-				providerId === "github-copilot" && previous && previous.providerId !== providerId
+				providerId !== "claude-code" && previous && previous.providerId !== providerId
 					? randomUUID()
 					: previous?.copilotGeneration,
 		};

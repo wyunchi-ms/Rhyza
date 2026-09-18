@@ -84,6 +84,7 @@ test("provider metadata uses canonical IDs and migrates legacy labels safely", (
 	);
 	assert.equal(normalizeProviderId(" GitHub Copilot "), "github-copilot");
 	assert.equal(normalizeProviderId("Claude Code"), "claude-code");
+	assert.equal(getProviderInfo("codex").externalAuth, false);
 	assert.deepEqual(
 		normalizeProviderSettings({ provider: "GitHub Copilot", defaultModel: "gpt-4o" }),
 		{
@@ -206,14 +207,11 @@ test("workspace loading and hydration migrate and persist canonical provider set
 });
 
 test("external providers refresh local status with empty catalogs and never invoke login or logout", async () => {
-	for (const providerId of ["codex", "claude-code"] as const) {
+	for (const providerId of ["claude-code"] as const) {
 		const { bridge, calls, listeners, emitAuth } = mockBridge();
 		const states: ProviderConnectionState[] = [];
 		const connection = createProviderConnection(bridge, providerId, (state) => states.push(state));
-		assert.match(
-			getProviderInfo(providerId).setupInstructions ?? "",
-			providerId === "codex" ? /codex login/ : /claude auth login/,
-		);
+		assert.match(getProviderInfo(providerId).setupInstructions ?? "", /claude auth login/);
 		try {
 			await connection.refresh();
 			assert.deepEqual(calls, [`status:${providerId}`, `models:${providerId}:true`]);
@@ -231,6 +229,30 @@ test("external providers refresh local status with empty catalogs and never invo
 		} finally {
 			connection.dispose();
 		}
+	}
+});
+
+test("Codex clears shared sign-in progress after the account and model catalog are ready", async () => {
+	const { bridge, calls, emitAuth, listeners } = mockBridge();
+	bridge.providerLogin = async ({ providerId }) => {
+		calls.push(`login:${providerId}`);
+		emitAuth({
+			type: "progress",
+			message: "Checking the Codex sign-in shared with ChatGPT desktop…",
+		});
+		return { ok: true, status: { providerId, configured: true, label: "user@example.com · plus" } };
+	};
+	const states: ProviderConnectionState[] = [];
+	const connection = createProviderConnection(bridge, "codex", (state) => states.push(state));
+	try {
+		assert.equal(listeners.size, 1);
+		await connection.login();
+		assert.deepEqual(calls, ["login:codex", "models:codex:true"]);
+		assert.equal(states.at(-1)?.providerStatus?.label, "user@example.com · plus");
+		assert.deepEqual(states.at(-1)?.authEvents, []);
+		assert.equal(states.at(-1)?.loading, false);
+	} finally {
+		connection.dispose();
 	}
 });
 

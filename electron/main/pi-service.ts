@@ -43,6 +43,12 @@ import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
 import { responseCacheEvidence } from "../../src/shared/cacheEvidence.js";
+import {
+	CodexAppServer,
+	codexAppServerApi,
+	codexAppServerProviderId,
+	type CodexAccount,
+} from "./codex-app-server.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -73,6 +79,7 @@ export class PiService {
 	private modelRuntimePromise: Promise<ModelRuntime> | undefined;
 	private readonly activeSessions = new Map<string, ActiveSession>();
 	protected readonly worktreeService: WorktreeService;
+	private readonly codexAppServer = new CodexAppServer();
 
 	constructor(
 		userDataPath: string,
@@ -137,6 +144,15 @@ export class PiService {
 		providerId: ProviderId = defaultProviderId,
 	): Promise<ProviderStatusResponse> {
 		try {
+			if (providerId === codexAppServerProviderId) {
+				const account = await this.codexAppServer.account(false);
+				return {
+					providerId,
+					configured: account !== null,
+					source: account ? "ChatGPT desktop / Codex" : undefined,
+					label: account ? formatCodexAccountLabel(account) : undefined,
+				};
+			}
 			const runtime = await this.getModelRuntime();
 			const status = runtime.getProviderAuthStatus(providerId);
 			return {
@@ -156,15 +172,43 @@ export class PiService {
 
 	async loginProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
 		try {
+			if (providerId === codexAppServerProviderId) {
+				const existingAccount = await this.codexAppServer.account(false);
+				if (!existingAccount) {
+					this.emitAuthEvent({
+						type: "progress",
+						message: "Checking the Codex sign-in shared with ChatGPT desktop…",
+					});
+				}
+				await this.codexAppServer.login(
+					(url) =>
+						this.emitAuthEvent({
+							type: "auth_url",
+							url,
+							instructions: "Complete the Codex authorization in your browser.",
+						}),
+					(message) => this.emitAuthEvent({ type: "progress", message }),
+				);
+				await this.refreshCodexProvider(await this.getModelRuntime());
+				return { ok: true, status: await this.getProviderStatus(providerId) };
+			}
 			const runtime = await this.getModelRuntime();
 			await runtime.login(providerId, "oauth", {
 				prompt: async (prompt) => {
+					if (prompt.type === "select") {
+						const selected = prompt.options[0]?.id;
+						if (!selected) throw new Error("Authentication did not provide a login option.");
+						return selected;
+					}
 					if (/enterprise.*(?:url|domain)|(?:url|domain).*enterprise/i.test(prompt.message)) {
 						this.emitAuthEvent({
 							type: "progress",
 							message: "Using github.com for GitHub Copilot authentication.",
 						});
 						return "";
+					}
+					if (prompt.type === "manual_code" && prompt.signal) {
+						return waitForPromptAbort(prompt.signal);
 					}
 					this.emitAuthEvent({
 						type: "progress",
@@ -189,6 +233,11 @@ export class PiService {
 
 	async logoutProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
 		try {
+			if (providerId === codexAppServerProviderId) {
+				await this.codexAppServer.logout();
+				this.disposeAllSessions();
+				return { ok: true, status: await this.getProviderStatus(providerId) };
+			}
 			const runtime = await this.getModelRuntime();
 			await runtime.logout(providerId);
 			this.disposeAllSessions();
@@ -209,6 +258,14 @@ export class PiService {
 		const providerId = request.providerId ?? defaultProviderId;
 		try {
 			const runtime = await this.getModelRuntime();
+			if (providerId === codexAppServerProviderId) {
+				const account = await this.codexAppServer.account(false);
+				const models = await this.refreshCodexProvider(runtime);
+				return {
+					models: models.map(toModelInfo),
+					configured: account !== null,
+				};
+			}
 			const status = runtime.getProviderAuthStatus(providerId);
 			if (request.refresh && status.configured) {
 				await runtime.refresh({ allowNetwork: true, force: true });
@@ -233,16 +290,7 @@ export class PiService {
 		const promptUsage = emptyAgentUsage();
 		try {
 			const runtime = await this.getModelRuntime();
-			let model: PiModel | undefined;
-			if (request.model?.modelId) {
-				model = runtime.getModel(request.model.providerId, request.model.modelId);
-				if (!model) {
-					throw new Error(`Unknown model: ${request.model.providerId}/${request.model.modelId}`);
-				}
-			} else {
-				model = (await runtime.getAvailable(defaultProviderId))[0];
-				if (!model) throw new Error("No configured GitHub Copilot model is available.");
-			}
+			const model = await resolveRequestedModel(runtime, request.model);
 			const active = await this.getSession(workspacePath, request, model);
 			active.sourceRefs.clear();
 			const session = active.session;
@@ -304,9 +352,7 @@ export class PiService {
 	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
-			const model = request.model?.modelId
-				? runtime.getModel(request.model.providerId, request.model.modelId)
-				: (await runtime.getAvailable(defaultProviderId))[0];
+			const model = await resolveRequestedModel(runtime, request.model);
 			if (!model) throw new Error("No configured model is available for summary generation.");
 			const { session } = await createAgentSession({
 				cwd: workspacePath,
@@ -318,6 +364,12 @@ export class PiService {
 				}),
 				tools: [],
 			});
+			if (model.provider === codexAppServerProviderId) {
+				this.codexAppServer.registerSession(session.sessionId, {
+					cwd: workspacePath,
+					writable: false,
+				});
+			}
 			try {
 				await session.sendUserMessage(
 					`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
@@ -330,6 +382,7 @@ export class PiService {
 					? { summary: summary.slice(0, 80), usage }
 					: { error: "The model returned an empty title.", usage };
 			} finally {
+				this.codexAppServer.unregisterSession(session.sessionId);
 				session.dispose();
 			}
 		} catch (error) {
@@ -343,9 +396,7 @@ export class PiService {
 	): Promise<KnowledgeExtractionResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
-			const model = request.model?.modelId
-				? runtime.getModel(request.model.providerId, request.model.modelId)
-				: (await runtime.getAvailable(defaultProviderId))[0];
+			const model = await resolveRequestedModel(runtime, request.model);
 			if (!model) throw new Error("No configured model is available for knowledge extraction.");
 			const { session } = await createAgentSession({
 				cwd: workspacePath,
@@ -358,12 +409,19 @@ export class PiService {
 				}),
 				tools: [],
 			});
+			if (model.provider === codexAppServerProviderId) {
+				this.codexAppServer.registerSession(session.sessionId, {
+					cwd: workspacePath,
+					writable: false,
+				});
+			}
 			try {
 				await session.sendUserMessage(buildKnowledgeExtractionPrompt(request));
 				const output = getLastAssistantText(session);
 				if (!output) throw new Error("The model returned an empty extraction result.");
 				return { ...parseKnowledgeExtraction(output, request), usage: getSessionUsage(session) };
 			} finally {
+				this.codexAppServer.unregisterSession(session.sessionId);
 				session.dispose();
 			}
 		} catch (error) {
@@ -383,12 +441,40 @@ export class PiService {
 
 	private async createModelRuntime(): Promise<ModelRuntime> {
 		await mkdir(this.agentDir, { recursive: true });
-		return ModelRuntime.create({
+		const runtime = await ModelRuntime.create({
 			authPath: path.join(this.agentDir, "auth.json"),
 			modelsPath: path.join(this.agentDir, "models.json"),
 			modelsStorePath: path.join(this.agentDir, "models-store.json"),
 			allowModelNetwork: false,
 		});
+		try {
+			if (await this.codexAppServer.account(false)) await this.refreshCodexProvider(runtime);
+		} catch {
+			// GitHub Copilot remains available when Codex or ChatGPT desktop is unavailable.
+		}
+		return runtime;
+	}
+
+	private async refreshCodexProvider(runtime: ModelRuntime): Promise<PiModel[]> {
+		const catalog = await this.codexAppServer.models();
+		const fallback = runtime.getModels(codexAppServerProviderId);
+		const models = this.codexAppServer.toProviderModels(
+			catalog,
+			fallback as readonly Model<string>[],
+		);
+		runtime.registerProvider(codexAppServerProviderId, {
+			name: "Codex (ChatGPT desktop)",
+			api: codexAppServerApi,
+			baseUrl: "codex-app-server://local",
+			apiKey: "managed-by-codex-app-server",
+			authHeader: false,
+			streamSimple: (model, context, options) =>
+				this.codexAppServer.streamSimple(model as Model<string>, context, options),
+			models,
+		});
+		return catalog
+			.map((entry) => runtime.getModel(codexAppServerProviderId, entry.id))
+			.filter((model): model is PiModel => model !== undefined);
 	}
 
 	private async getSession(
@@ -561,6 +647,12 @@ export class PiService {
 			unsubscribe,
 			sourceRefs,
 		};
+		if (model?.provider === codexAppServerProviderId) {
+			this.codexAppServer.registerSession(session.sessionId, {
+				cwd: sessionWorkspace.path,
+				writable: request.writable === true,
+			});
+		}
 		this.activeSessions.set(request.frontendSessionId, created);
 		return created;
 	}
@@ -661,6 +753,7 @@ export class PiService {
 			return;
 		}
 		activeSession.unsubscribe();
+		this.codexAppServer.unregisterSession(activeSession.session.sessionId);
 		activeSession.session.dispose();
 		this.activeSessions.delete(frontendSessionId);
 	}
@@ -677,7 +770,45 @@ export class PiService {
 
 	dispose(): void {
 		this.disposeAllSessions();
+		void this.codexAppServer.dispose();
 	}
+}
+
+async function resolveRequestedModel(
+	runtime: ModelRuntime,
+	selection: AgentPromptRequest["model"],
+): Promise<PiModel | undefined> {
+	if (!selection) return undefined;
+	if (selection.modelId) {
+		const model = runtime.getModel(selection.providerId, selection.modelId);
+		if (!model) {
+			throw new Error(`Unknown model: ${selection.providerId}/${selection.modelId}`);
+		}
+		return model;
+	}
+	const model = (await runtime.getAvailable(selection.providerId))[0];
+	if (!model) {
+		throw new Error(
+			`No available models for ${selection.providerId}. Sign in to this provider first.`,
+		);
+	}
+	return model;
+}
+
+function waitForPromptAbort(signal: AbortSignal): Promise<string> {
+	return new Promise((_resolve, reject) => {
+		const abort = () => reject(new Error("Authentication prompt completed in the browser."));
+		if (signal.aborted) abort();
+		else signal.addEventListener("abort", abort, { once: true });
+	});
+}
+
+function formatCodexAccountLabel(account: CodexAccount): string {
+	if (account.type === "chatgpt") {
+		return [account.email, account.planType].filter(Boolean).join(" · ") || "ChatGPT account";
+	}
+	if (account.type === "apiKey") return "OpenAI API key";
+	return "Amazon Bedrock";
 }
 
 function toModelInfo(model: PiModel): ModelInfo {

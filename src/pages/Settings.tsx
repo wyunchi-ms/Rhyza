@@ -149,7 +149,8 @@ const Settings: React.FC = () => {
 										? electron.loading
 											? "Checking connection…"
 											: electron.providerStatus?.configured
-												? `Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`
+												? (electron.providerStatus.label ??
+													`Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`)
 												: externalAuth
 													? "Local CLI sign-in is required. Follow the setup instructions below."
 													: "Not signed in. OAuth/device flow progress appears below."
@@ -215,18 +216,16 @@ const Settings: React.FC = () => {
 							</div>
 						)}
 
-						{provider.id === "github-copilot" &&
-							!externalAuth &&
-							electron.authEvents.length > 0 && (
-								<div
-									role="status"
-									className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1"
-								>
-									{electron.authEvents.map((event, index) => (
-										<AuthEventItem key={`${event.type}-${index}`} event={event} />
-									))}
-								</div>
-							)}
+						{!externalAuth && electron.authEvents.length > 0 && (
+							<div
+								role="status"
+								className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1"
+							>
+								{electron.authEvents.map((event, index) => (
+									<AuthEventItem key={`${event.type}-${index}`} event={event} />
+								))}
+							</div>
+						)}
 
 						<div>
 							<label htmlFor="model-select" className="block text-sm font-bold text-primary mb-2">

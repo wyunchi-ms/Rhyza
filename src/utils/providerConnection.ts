@@ -53,15 +53,14 @@ export function createProviderConnection(
 		state = { ...state, ...patch };
 		publish(state);
 	};
-	// Auth events are untagged and only Copilot has an in-app login flow.
-	const unsubscribe =
-		providerId === "github-copilot"
-			? bridge.onAuthEvent((event) => {
-					if (state.action === "login") {
-						update({ authEvents: [event, ...state.authEvents].slice(0, 5) });
-					}
-				})
-			: undefined;
+	// Auth events are untagged, so only the active provider with an in-app login listens.
+	const unsubscribe = !provider.externalAuth
+		? bridge.onAuthEvent((event) => {
+				if (state.action === "login") {
+					update({ authEvents: [event, ...state.authEvents].slice(0, 5) });
+				}
+			})
+		: undefined;
 
 	const run = async (action: ProviderAction, refreshCatalog = true) => {
 		if (disposed || pending) return;
@@ -107,7 +106,11 @@ export function createProviderConnection(
 				});
 				if (action === "login" && result.ok) {
 					const catalog = await bridge.modelCatalog({ providerId, refresh: true });
-					update({ models: catalog.models, error: actionError ?? catalog.error ?? null });
+					update({
+						models: catalog.models,
+						error: actionError ?? catalog.error ?? null,
+						authEvents: [],
+					});
 				}
 			}
 		} catch (error) {

@@ -18,10 +18,8 @@ export const providers: readonly ProviderInfo[] = [
 	{
 		id: "codex",
 		label: "Codex",
-		runtimeLabel: "Codex",
-		externalAuth: true,
-		setupInstructions:
-			"Install the Codex CLI and sign in with codex login in a terminal, then check the connection. Rhyza uses your local CLI credentials.",
+		runtimeLabel: "ChatGPT desktop / Codex",
+		externalAuth: false,
 	},
 	{
 		id: "claude-code",

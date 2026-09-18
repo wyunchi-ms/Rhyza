@@ -40,21 +40,21 @@ Rhyza 是一个本地优先的 AI knowledge workspace：用户通过树状会话
 
 ## 3. Diagram 记忆与渲染契约
 
-### 3.1 双渲染器
+### 3.1 Mermaid 与通用 HTML Preview
 
-- Settings 中有两个明确选项：Archify 和 Mermaid。
-- Archify 是默认模式：模型生成 `archify` fenced JSON，Electron 主进程负责规范化、严格校验和交付，Renderer 只接收沙箱化的 HTML artifact。
-- Mermaid 是快速模式：保留原始 Mermaid 流程。
-- Archify 失败时必须自动从同一拓扑生成 Mermaid fallback；无论是通用 `nodes/edges`、`lanes/events` 还是严格校验失败，都不能出现空白图或 “No valid diagram fallback is available”。
-- fallback 转换器是 Rhyza 自己的确定性代码，不是 Archify 提供的库。转换应优先保留节点、边和标签，无法表达的高级布局可以降级为普通 `flowchart`。
+- Mermaid 是 Workspace Diagram 的基础持久化格式。Diagram state 必须保留合法的 Mermaid source，避免扩展卸载后知识对象不可读取。
+- Rhyza 同时支持扩展无关的 `html-preview` 协议：任何 Pi tool 或 extension 都可以返回经过声明的自包含 HTML artifact。
+- Electron Main 负责校验真实文件路径、Workspace 边界、文件类型和大小，并保存 full/compact 快照；Renderer 不解释扩展私有 schema。
+- Renderer 只在 opaque-origin sandbox iframe 中展示 HTML，不向文档暴露 Electron bridge、同源权限或外部网络能力。
+- 完整声明、快照和安全边界以 [HTML preview protocol](html-previews.md) 为准。
 
 ### 3.2 Archify 集成边界
 
-- Archify 以 vendored skill/runtime 的形式位于 `resources/skills/archify`，不是前端 npm library，也不是 Git submodule。
-- 生成链路是：Harness 约束模型输出 → Main 标准化/校验 → Archify CLI 生成自包含 HTML/SVG → 沙箱 iframe 展示。
-- Rhyza 的主题、预览密度、隐藏重复控件和 iframe 高度属于宿主层定制，集中放在 `src/shared/archify-viewer.ts` 等集成代码中。
-- 不要直接修改 vendor 的模板、schema、renderer 或 CLI 来实现 Rhyza 专属 UI。升级 Archify 时只需重新核对稳定 selector、height handshake 和 schema；若 selector 改变，应改宿主 overlay 和测试。
-- 每次 vendor 升级都要记录版本、tag、commit 和 schema 版本，并运行 Archify smoke test。升级流程见 [Archify integration and upgrades](archify-integration.md)。
+- Archify 位于 `extensions/pi-archify`，是可选 Pi package，不是前端 npm library、宿主内置渲染器或 Git submodule。
+- Archify 自己负责 tool、skill、校验、compact/full HTML 生成和 Mermaid fallback；宿主只实现通用 HTML Preview 协议。
+- 不要为了某个 extension 在 Renderer 中恢复专用 registry、schema parser 或 renderer。新的图表扩展应复用同一个 artifact 协议。
+- 安装或移除 Pi package 后，宿主重建 Agent Session；已经保存的 HTML snapshot 不依赖扩展继续存在。
+- Archify 的安装、开发和验证命令见 [Archify Pi extension](../extensions/pi-archify/README.md)。
 
 ### 3.3 预览和演示是两种密度
 
@@ -62,10 +62,10 @@ Rhyza 是一个本地优先的 AI knowledge workspace：用户通过树状会话
 
 - 左上角不显示 `Interactive Diagram Archive` 等重复品牌前缀；标题尽量单行显示。
 - 状态点必须保持正圆，不能因缩放或宽高规则变成椭圆。
-- Archify 的明暗色、背景、边框和文字必须跟随 App 主题；App 提供浅色/深色切换，不能只改宿主页面而遗漏 iframe。
+- HTML artifact 的明暗色、背景、边框和文字应跟随 App 主题；不能只改宿主页面而遗漏 iframe。
 - 默认使用经典 preset；预览不放路径、地图、透镜、演示专用信息卡或重复的接入层/核心基础设施卡片。
 - 展开后进入演示/大屏模式，再显示完整导航、地图、透镜和补充卡片。
-- 导出保留 PNG、JPEG、WebP、SVG 等图像/矢量格式；分享卡、复制分享卡、复制图表等重复动作不放在默认导出菜单中。导出入口应与展开按钮协调放置，不能遮住图表。
+- artifact 自己提供的导出入口不能遮住图表；宿主始终提供原始 full HTML 下载。
 - iframe 高度必须由完整 artifact 的 intrinsic height 决定，外层 frame、column 和内容高度一致，禁止嵌套滚动；标题不能被内部滚动条卷走。
 
 ## 4. 视觉和交互原则
@@ -121,20 +121,20 @@ Rhyza 是一个本地优先的 AI knowledge workspace：用户通过树状会话
 - [ ] Entity/Relation/Diagram 是否避免重复创建，并保留来源和可恢复操作？
 - [ ] 只有满足前置条件时按钮才可用，禁用原因是否可见？
 
-### Diagram 改动
+### Diagram/HTML Preview 改动
 
-- [ ] Archify 严格失败是否仍能从拓扑生成 Mermaid？
-- [ ] 是否同时检查 Archify 和 Mermaid 两种设置？
+- [ ] Mermaid Diagram 是否仍有合法、可持久化的 source？
+- [ ] 是否同时检查无 `previewPath`、compact/full 和 fallback/error 路径？
 - [ ] 是否在浅色/深色、预览/大屏、375px/桌面宽度下检查 iframe 高度和滚动？
-- [ ] 是否只改宿主 overlay，而不是把 Rhyza 定制写进 vendor runtime？
-- [ ] 导出是否只保留用户真正需要的格式，且入口不遮挡图表？
+- [ ] 是否保持通用协议，避免在宿主加入 extension 私有 schema 或 renderer？
+- [ ] 展开、下载和父组件更新是否保留未变化 iframe 的交互状态？
 
 ### 发布前验证
 
 ```powershell
 npm run typecheck
 npm test
-npm run smoke:archify
+npm run test:html-preview
 npm run diagnostics:analyze
 npm run build
 ```
@@ -146,4 +146,3 @@ npm run build
 1. 先确认是否改变了产品语义（例如分支归属、引用来源、fallback 保证）。这类变化需要更新数据/状态设计，而不是只改 CSS。
 2. 再确认是否只是宿主呈现偏好（例如标题、卡片、导出入口）。优先使用组件参数或宿主 overlay，避免修改第三方 runtime。
 3. 最后补充回归检查，尤其是主题、窄屏、异常退出和 Archify fallback；没有验证的视觉修复不算完成。
-
