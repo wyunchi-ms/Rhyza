@@ -17,54 +17,34 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import {
-	githubCopilotProviderId,
-	getKnowbranchBridge,
-	useElectronProviderState,
-} from "../hooks/useKnowbranchBridge";
+import { getKnowbranchBridge, useElectronProviderState } from "../hooks/useKnowbranchBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
+import { getProviderInfo, normalizeProviderId, providers } from "../shared/providers";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
-	const electron = useElectronProviderState();
-	const providerLabel = electron.isElectron ? "GitHub Copilot" : settings.provider;
+	const provider = getProviderInfo(settings.provider);
+	const electron = useElectronProviderState(provider.id);
+	const externalAuth = provider.externalAuth || electron.providerStatus?.externalAuth === true;
+	const setupInstructions =
+		electron.providerStatus?.setupInstructions ?? provider.setupInstructions;
 	const selectedModel = settings.defaultModel;
-
-	const handleLogin = async () => {
-		const bridge = getKnowbranchBridge();
-		if (!bridge) return;
-		electron.setError(null);
-		const result = await bridge.providerLogin({
-			providerId: githubCopilotProviderId,
-		});
-		electron.setProviderStatus(result.status);
-		if (result.error) electron.setError(result.error);
-		const catalog = await bridge.modelCatalog({
-			providerId: githubCopilotProviderId,
-			refresh: result.ok,
-		});
-		electron.setModels(catalog.models);
-	};
-
-	const handleLogout = async () => {
-		const bridge = getKnowbranchBridge();
-		if (!bridge) return;
-		const result = await bridge.providerLogout({
-			providerId: githubCopilotProviderId,
-		});
-		electron.setProviderStatus(result.status);
-		if (result.error) electron.setError(result.error);
-	};
+	const customModel = selectedModel && !electron.models.some((model) => model.id === selectedModel);
 
 	const handleSelectWorkspace = async () => {
 		const bridge = getKnowbranchBridge();
 		if (!bridge) return;
-		const workspace = await bridge.selectWorkspace();
-		setWorkspacePersistencePath(workspace.path);
-		electron.setWorkspace(workspace);
-		loadWorkspaceState(bridge.appStateLoad());
+		electron.setWorkspaceError(null);
+		try {
+			const workspace = await bridge.selectWorkspace();
+			setWorkspacePersistencePath(workspace.path);
+			electron.setWorkspace(workspace);
+			loadWorkspaceState(bridge.appStateLoad());
+		} catch (error) {
+			electron.setWorkspaceError(errorToMessage(error));
+		}
 	};
 
 	return (
@@ -77,8 +57,11 @@ const Settings: React.FC = () => {
 			<div className="settings-sections">
 				<section>
 					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-						<Package size={16} /> Pi Plugins
+						<Package size={16} /> Pi Plugins (GitHub Copilot only)
 					</h2>
+					<p className="text-sm text-secondary mb-4">
+						These plugins run only with GitHub Copilot through Pi, not with Codex or Claude Code.
+					</p>
 					<PluginSettings />
 				</section>
 
@@ -129,39 +112,121 @@ const Settings: React.FC = () => {
 						<Cloud size={16} /> AI Provider
 					</h2>
 					<div className="border border-gray-200 rounded-2xl p-6 bg-white shadow-sm">
-						<div className="flex justify-between items-center mb-6">
+						<div className="mb-6">
+							<label
+								htmlFor="provider-select"
+								className="block text-sm font-bold text-primary mb-2"
+							>
+								Provider
+							</label>
+							<select
+								id="provider-select"
+								value={provider.id}
+								onChange={(event) =>
+									updateSettings({ provider: normalizeProviderId(event.target.value) })
+								}
+								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
+							>
+								{providers.map((item) => (
+									<option key={item.id} value={item.id}>
+										{item.label}
+									</option>
+								))}
+							</select>
+							<p className="text-xs text-secondary mt-2">
+								Used for new messages, titles, and knowledge extraction. Changing provider resets
+								the model to its default.
+							</p>
+						</div>
+						<div
+							className="flex flex-wrap justify-between items-center gap-4 mb-6"
+							aria-busy={electron.loading}
+						>
 							<div>
-								<h3 className="font-bold text-primary text-lg">{providerLabel}</h3>
+								<h3 className="font-bold text-primary text-lg">{provider.label}</h3>
 								<p className="text-sm text-secondary">
 									{electron.isElectron
-										? electron.providerStatus?.configured
-											? `Configured via ${electron.providerStatus.source ?? "Pi SDK"}.`
-											: "Not signed in. OAuth/device flow progress appears below."
+										? electron.loading
+											? "Checking connection…"
+											: electron.providerStatus?.configured
+												? `Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`
+												: externalAuth
+													? "Local CLI sign-in is required. Follow the setup instructions below."
+													: "Not signed in. OAuth/device flow progress appears below."
 										: "Provider controls require the Electron desktop runtime."}
 								</p>
-								{electron.error && <p className="text-xs text-red-500 mt-1">{electron.error}</p>}
+								{electron.error && (
+									<p role="alert" className="text-xs text-red-500 mt-1">
+										{electron.error}
+									</p>
+								)}
 							</div>
-							<button
-								type="button"
-								onClick={electron.providerStatus?.configured ? handleLogout : handleLogin}
-								disabled={!electron.isElectron || electron.loading}
-								className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors"
-							>
-								{electron.isElectron
-									? electron.providerStatus?.configured
-										? "Sign Out"
-										: "Sign In"
-									: "Desktop required"}
-							</button>
+							<div className="flex items-center gap-2 shrink-0">
+								{!externalAuth && (
+									<button
+										type="button"
+										onClick={() =>
+											void (electron.providerStatus?.configured
+												? electron.logout()
+												: electron.login())
+										}
+										disabled={!electron.isElectron || electron.loading}
+										className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
+									>
+										{electron.action === "login"
+											? "Signing In…"
+											: electron.action === "logout"
+												? "Signing Out…"
+												: electron.providerStatus?.configured
+													? "Sign Out"
+													: "Sign In"}
+									</button>
+								)}
+								<button
+									type="button"
+									onClick={() => void electron.refresh()}
+									disabled={!electron.isElectron || electron.loading}
+									className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
+								>
+									{electron.loading && (
+										<LoaderCircle
+											size={14}
+											className="inline mr-2 animate-spin"
+											aria-hidden="true"
+										/>
+									)}
+									{electron.action === "refresh"
+										? "Checking…"
+										: electron.providerStatus?.configured
+											? "Refresh status"
+											: "Check connection"}
+								</button>
+							</div>
 						</div>
 
-						{electron.authEvents.length > 0 && (
-							<div className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1">
-								{electron.authEvents.map((event, index) => (
-									<AuthEventItem key={`${event.type}-${index}`} event={event} />
-								))}
+						{setupInstructions && (
+							<div className="mb-6 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm text-secondary">
+								<p className="whitespace-pre-line">{setupInstructions}</p>
+								{externalAuth && (
+									<p className="mt-2">
+										Sign-in and sign-out are managed by the local CLI, not Rhyza.
+									</p>
+								)}
 							</div>
 						)}
+
+						{provider.id === "github-copilot" &&
+							!externalAuth &&
+							electron.authEvents.length > 0 && (
+								<div
+									role="status"
+									className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1"
+								>
+									{electron.authEvents.map((event, index) => (
+										<AuthEventItem key={`${event.type}-${index}`} event={event} />
+									))}
+								</div>
+							)}
 
 						<div>
 							<label htmlFor="model-select" className="block text-sm font-bold text-primary mb-2">
@@ -174,20 +239,36 @@ const Settings: React.FC = () => {
 								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
 							>
 								<option value="">Use provider default</option>
-								{electron.isElectron ? (
-									electron.models.map((model) => (
-										<option key={model.id} value={model.id}>
-											{model.name}
-										</option>
-									))
-								) : (
-									<>
-										<option>GPT-4o (Default)</option>
-										<option>Claude 3.5 Sonnet</option>
-										<option>GPT-4o mini</option>
-									</>
-								)}
+								{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
+								{electron.models.map((model) => (
+									<option key={model.id} value={model.id}>
+										{model.name}
+									</option>
+								))}
 							</select>
+							{externalAuth && (
+								<div className="mt-4">
+									<label
+										htmlFor="custom-model-id"
+										className="block text-sm font-bold text-primary mb-2"
+									>
+										Custom model ID or CLI alias
+									</label>
+									<input
+										id="custom-model-id"
+										type="text"
+										value={selectedModel}
+										onChange={(event) => updateSettings({ defaultModel: event.target.value })}
+										placeholder="Leave blank for provider default"
+										aria-describedby="custom-model-help"
+										className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
+									/>
+									<p id="custom-model-help" className="text-xs text-secondary mt-2">
+										{provider.label} may not publish a model catalog. The provider default works
+										without one; you can also enter a supported SDK/CLI model ID or alias.
+									</p>
+								</div>
+							)}
 						</div>
 					</div>
 				</section>
@@ -205,6 +286,11 @@ const Settings: React.FC = () => {
 										? (electron.workspace.path ?? "No workspace selected.")
 										: "Workspace selection requires the Electron desktop runtime."}
 								</p>
+								{electron.workspaceError && (
+									<p role="alert" className="text-xs text-red-500 mt-1">
+										{electron.workspaceError}
+									</p>
+								)}
 							</div>
 							<button
 								type="button"

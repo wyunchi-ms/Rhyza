@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { appendFile, mkdir } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { PiService } from "./pi-service.js";
+import { AgentService } from "./agent-service.js";
 import { PiPluginService } from "./pi-plugin-service.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
@@ -81,7 +81,7 @@ interface ElectronSmokeEvidence {
 
 let mainWindow: BrowserWindow | undefined;
 let settingsStore: SettingsStore;
-let piService: PiService;
+let piService: AgentService;
 let piPluginService: PiPluginService;
 let sourceService: SourceService;
 let appStateStore: AppStateStore;
@@ -425,7 +425,7 @@ app.whenReady().then(async () => {
 	);
 	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
 	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
-	piService = new PiService(
+	piService = new AgentService(
 		dataRootPath,
 		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
@@ -433,6 +433,7 @@ app.whenReady().then(async () => {
 		sourceService,
 	);
 	registerIpcHandlers();
+	app.on("before-quit", () => piService.dispose());
 	mainLoopDelay.enable();
 	setInterval(() => {
 		void writeDiagnostic("main-sample", mainProcessSnapshot());

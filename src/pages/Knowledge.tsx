@@ -18,7 +18,8 @@ import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHisto
 import { DiagramViewer } from "../components/DiagramViewer";
 import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
 import { MermaidDiagram } from "../components/MermaidDiagram";
-import { getKnowbranchBridge, githubCopilotProviderId } from "../hooks/useKnowbranchBridge";
+import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
+import { providerModelSelection } from "../shared/providers";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
@@ -92,9 +93,7 @@ const Knowledge = () => {
 			message: `Scanning ${activeEntities.length} entities and ${activeDiagrams.length} diagrams…`,
 		});
 		try {
-			const model = store.settings.defaultModel
-				? { providerId: githubCopilotProviderId, modelId: store.settings.defaultModel }
-				: undefined;
+			const model = providerModelSelection(store.settings);
 			const response = await withTimeout(
 				bridge.extractKnowledge({
 					question:

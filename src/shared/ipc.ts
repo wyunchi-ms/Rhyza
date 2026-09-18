@@ -38,7 +38,7 @@ export const ipcChannels = {
 
 export type KnowbranchIpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
 
-export type ProviderId = "github-copilot";
+export type ProviderId = "github-copilot" | "codex" | "claude-code";
 
 export interface ProviderStatusRequest {
 	providerId: ProviderId;
@@ -50,6 +50,8 @@ export interface ProviderStatusResponse {
 	source?: string;
 	label?: string;
 	error?: string;
+	externalAuth?: boolean;
+	setupInstructions?: string;
 }
 
 export interface ProviderLoginRequest {
@@ -165,6 +167,7 @@ export interface AgentPromptRequest {
 	thinkingLevel?: "off" | "low" | "medium" | "high";
 	model?: {
 		providerId: ProviderId;
+		/** Empty selects this provider's default model. */
 		modelId: string;
 	};
 	writable?: boolean;
@@ -450,7 +453,20 @@ export interface KnowbranchBridge {
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;
 }
 
-const providerIds = new Set<ProviderId>(["github-copilot"]);
+const providerIds = new Set<ProviderId>(["github-copilot", "codex", "claude-code"]);
+
+function validateModelSelection(value: unknown): NonNullable<AgentPromptRequest["model"]> {
+	if (
+		!isRecord(value) ||
+		!providerIds.has(value.providerId as ProviderId) ||
+		typeof value.modelId !== "string" ||
+		value.modelId.length > 200 ||
+		/[\u0000-\u001f\u007f]/.test(value.modelId)
+	) {
+		throw new Error("Invalid model selection.");
+	}
+	return { providerId: value.providerId as ProviderId, modelId: value.modelId.trim() };
+}
 
 export function validateProviderStatusRequest(value: unknown): ProviderStatusRequest {
 	if (!isRecord(value) || !providerIds.has(value.providerId as ProviderId)) {
@@ -543,19 +559,7 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 		request.thinkingLevel = value.thinkingLevel as AgentPromptRequest["thinkingLevel"];
 	}
 	if (value.model !== undefined) {
-		if (!isRecord(value.model)) {
-			throw new Error("Invalid model selection.");
-		}
-		if (!providerIds.has(value.model.providerId as ProviderId)) {
-			throw new Error("Invalid model provider.");
-		}
-		if (typeof value.model.modelId !== "string" || value.model.modelId === "") {
-			throw new Error("Invalid model id.");
-		}
-		request.model = {
-			providerId: value.model.providerId as ProviderId,
-			modelId: value.model.modelId,
-		};
+		request.model = validateModelSelection(value.model);
 	}
 	request.writable = value.writable === true;
 	return request;
@@ -657,17 +661,7 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 		),
 	};
 	if (value.model !== undefined) {
-		if (
-			!isRecord(value.model) ||
-			!providerIds.has(value.model.providerId as ProviderId) ||
-			typeof value.model.modelId !== "string"
-		) {
-			throw new Error("Invalid model selection.");
-		}
-		request.model = {
-			providerId: value.model.providerId as ProviderId,
-			modelId: value.model.modelId,
-		};
+		request.model = validateModelSelection(value.model);
 	}
 	return request;
 }
@@ -724,17 +718,7 @@ export function validateSummaryRequest(value: unknown): SummaryRequest {
 	}
 	const request: SummaryRequest = { text: value.text.trim().slice(0, 4_000) };
 	if (value.model !== undefined) {
-		if (
-			!isRecord(value.model) ||
-			!providerIds.has(value.model.providerId as ProviderId) ||
-			typeof value.model.modelId !== "string"
-		) {
-			throw new Error("Invalid summary model.");
-		}
-		request.model = {
-			providerId: value.model.providerId as ProviderId,
-			modelId: value.model.modelId,
-		};
+		request.model = validateModelSelection(value.model);
 	}
 	return request;
 }
