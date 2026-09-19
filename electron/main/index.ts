@@ -13,6 +13,7 @@ import { SourceService } from "./source-service.js";
 import {
 	ipcChannels,
 	validateAgentPromptRequest,
+	validateAuxiliaryRequestCancelRequest,
 	validateModelRequestHistoryRequest,
 	validateWorkspaceTodosRequest,
 	validateModelCatalogRequest,
@@ -372,6 +373,13 @@ function registerIpcHandlers(): void {
 				piService.extractKnowledge(request, await settingsStore.requireWorkspacePath()),
 			);
 		}),
+	);
+	ipcMain.handle(ipcChannels.cancelAuxiliaryRequest, async (event, payload) =>
+		withValidSender(event, async () => ({
+			canceled: await piService.cancelAuxiliaryRequest(
+				validateAuxiliaryRequestCancelRequest(payload).requestId,
+			),
+		})),
 	);
 	ipcMain.handle(ipcChannels.openExternal, async (event, payload) =>
 		withValidSender(event, async () => {

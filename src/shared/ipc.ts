@@ -25,6 +25,7 @@ export const ipcChannels = {
 	workspaceTodos: "knowbranch:workspace-todos",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
+	cancelAuxiliaryRequest: "knowbranch:cancel-auxiliary-request",
 
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
@@ -206,6 +207,7 @@ export interface AgentPromptResponse {
 
 export interface SummaryRequest {
 	text: string;
+	requestId?: string;
 	model?: { providerId: ProviderId; modelId: string };
 }
 
@@ -267,6 +269,7 @@ export interface KnowledgeDiagramCandidate {
 export interface KnowledgeExtractionRequest {
 	question: string;
 	answer: string;
+	requestId?: string;
 	existingEntities: Array<{
 		id: string;
 		name: string;
@@ -287,6 +290,10 @@ export interface KnowledgeExtractionResponse {
 	diagrams: KnowledgeDiagramCandidate[];
 	error?: string;
 	usage?: AgentUsage;
+}
+
+export interface AuxiliaryRequestCancelRequest {
+	requestId: string;
 }
 
 export interface OpenExternalRequest {
@@ -442,6 +449,7 @@ export interface KnowbranchBridge {
 	workspaceTodos(request?: WorkspaceTodosRequest): Promise<WorkspaceTodosResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
 	extractKnowledge(request: KnowledgeExtractionRequest): Promise<KnowledgeExtractionResponse>;
+	cancelAuxiliaryRequest(request: AuxiliaryRequestCancelRequest): Promise<{ canceled: boolean }>;
 
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
@@ -663,6 +671,9 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 	if (value.model !== undefined) {
 		request.model = validateModelSelection(value.model);
 	}
+	if (typeof value.requestId === "string" && value.requestId.trim()) {
+		request.requestId = value.requestId.slice(0, 180);
+	}
 	return request;
 }
 
@@ -720,7 +731,19 @@ export function validateSummaryRequest(value: unknown): SummaryRequest {
 	if (value.model !== undefined) {
 		request.model = validateModelSelection(value.model);
 	}
+	if (typeof value.requestId === "string" && value.requestId.trim()) {
+		request.requestId = value.requestId.slice(0, 180);
+	}
 	return request;
+}
+
+export function validateAuxiliaryRequestCancelRequest(
+	value: unknown,
+): AuxiliaryRequestCancelRequest {
+	if (!isRecord(value) || typeof value.requestId !== "string" || !value.requestId.trim()) {
+		throw new Error("An auxiliary request id is required.");
+	}
+	return { requestId: value.requestId.slice(0, 180) };
 }
 
 export function validateOpenExternalRequest(value: unknown): OpenExternalRequest {

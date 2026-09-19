@@ -57,6 +57,11 @@ export interface CodexSessionContext {
 	writable: boolean;
 }
 
+interface RegisteredCodexSession extends CodexSessionContext {
+	client?: CodexAppServerClient;
+	threadId?: string;
+}
+
 export interface CodexProviderModel {
 	id: string;
 	name: string;
@@ -70,7 +75,7 @@ export interface CodexProviderModel {
 
 export class CodexAppServer {
 	private clientPromise: Promise<CodexAppServerClient> | undefined;
-	private readonly sessionContexts = new Map<string, CodexSessionContext>();
+	private readonly sessionContexts = new Map<string, RegisteredCodexSession>();
 
 	constructor(private readonly executable?: string) {}
 
@@ -162,7 +167,13 @@ export class CodexAppServer {
 	}
 
 	registerSession(sessionId: string, context: CodexSessionContext): void {
-		this.sessionContexts.set(sessionId, context);
+		const existing = this.sessionContexts.get(sessionId);
+		const canReuse = existing?.cwd === context.cwd && existing.writable === context.writable;
+		this.sessionContexts.set(sessionId, {
+			...context,
+			client: canReuse ? existing.client : undefined,
+			threadId: canReuse ? existing.threadId : undefined,
+		});
 	}
 
 	unregisterSession(sessionId: string): void {
@@ -214,25 +225,40 @@ export class CodexAppServer {
 		let unsubscribe = () => {};
 		let unsubscribeClose = () => {};
 		let latestUsage: UsageSnapshot | undefined;
+		const startedAt = Date.now();
+		let threadReadyAt: number | undefined;
+		let firstOutputAt: number | undefined;
+		let outcome = "error";
+		let reusedThread = false;
 		try {
 			if (options?.signal?.aborted) throw new Error("Request was aborted.");
 			const client = await this.client();
 			const sessionContext = options?.sessionId
 				? this.sessionContexts.get(options.sessionId)
 				: undefined;
-			const threadResult = asObject(
-				await client.request("thread/start", {
-					model: model.id,
-					cwd: sessionContext?.cwd ?? process.cwd(),
-					approvalPolicy: "never",
-					sandbox: sessionContext?.writable ? "workspace-write" : "read-only",
-					ephemeral: true,
-					serviceName: "rhyza",
-					developerInstructions: buildDeveloperInstructions(context.systemPrompt),
-				}),
-			);
-			threadId = asString(asObject(threadResult.thread).id);
-			if (!threadId) throw new Error("Codex App Server did not return a thread id.");
+			if (sessionContext?.client === client && sessionContext.threadId) {
+				threadId = sessionContext.threadId;
+				reusedThread = true;
+			} else {
+				const threadResult = asObject(
+					await client.request("thread/start", {
+						model: model.id,
+						cwd: sessionContext?.cwd ?? process.cwd(),
+						approvalPolicy: "never",
+						sandbox: sessionContext?.writable ? "workspace-write" : "read-only",
+						ephemeral: true,
+						serviceName: "rhyza",
+						developerInstructions: buildDeveloperInstructions(context.systemPrompt),
+					}),
+				);
+				threadId = asString(asObject(threadResult.thread).id);
+				if (!threadId) throw new Error("Codex App Server did not return a thread id.");
+				if (sessionContext) {
+					sessionContext.client = client;
+					sessionContext.threadId = threadId;
+				}
+			}
+			threadReadyAt = Date.now();
 
 			stream.push({ type: "start", partial: output });
 			const completion = deferred<void>();
@@ -241,6 +267,7 @@ export class CodexAppServer {
 				const params = asObject(message.params);
 				if (params.threadId !== threadId) return;
 				if (message.method === "item/agentMessage/delta" && typeof params.delta === "string") {
+					firstOutputAt ??= Date.now();
 					if (textIndex === undefined) {
 						textIndex = output.content.length;
 						output.content.push({ type: "text", text: "" });
@@ -259,6 +286,7 @@ export class CodexAppServer {
 					message.method === "item/reasoning/summaryTextDelta" &&
 					typeof params.delta === "string"
 				) {
+					firstOutputAt ??= Date.now();
 					if (thinkingIndex === undefined) {
 						thinkingIndex = output.content.length;
 						output.content.push({ type: "thinking", thinking: "" });
@@ -301,13 +329,14 @@ export class CodexAppServer {
 				const turnResult = asObject(
 					await client.request("turn/start", {
 						threadId,
-						input: contextToInput(context),
+						input: contextToInput(context, !reusedThread),
 						model: model.id,
 						...(options?.reasoning ? { effort: options.reasoning } : {}),
 					}),
 				);
 				turnId = asString(asObject(turnResult.turn).id);
 				if (!turnId) throw new Error("Codex App Server did not return a turn id.");
+				if (options?.signal?.aborted) abort();
 				await completion.promise;
 			} finally {
 				options?.signal?.removeEventListener("abort", abort);
@@ -334,7 +363,9 @@ export class CodexAppServer {
 			if (latestUsage) applyUsage(output, latestUsage);
 			stream.push({ type: "done", reason: "stop", message: output });
 			stream.end();
+			outcome = "completed";
 		} catch (error) {
+			outcome = options?.signal?.aborted ? "aborted" : "error";
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = errorToMessage(error);
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -342,6 +373,13 @@ export class CodexAppServer {
 		} finally {
 			unsubscribe();
 			unsubscribeClose();
+			console.info("CODEX_APP_SERVER_TIMING", {
+				outcome,
+				reusedThread,
+				threadStartMs: threadReadyAt ? threadReadyAt - startedAt : undefined,
+				firstOutputMs: firstOutputAt ? firstOutputAt - startedAt : undefined,
+				totalMs: Date.now() - startedAt,
+			});
 		}
 	}
 }
@@ -544,7 +582,7 @@ async function resolveCodexExecutable(): Promise<string> {
 	return process.platform === "win32" ? "codex.exe" : "codex";
 }
 
-function contextToInput(context: Context): JsonObject[] {
+export function contextToInput(context: Context, includeTranscript = true): JsonObject[] {
 	const latestUser = [...context.messages].reverse().find((message) => message.role === "user");
 	const transcript = context.messages
 		.slice(0, latestUser ? context.messages.lastIndexOf(latestUser) : context.messages.length)
@@ -552,9 +590,10 @@ function contextToInput(context: Context): JsonObject[] {
 		.filter(Boolean)
 		.join("\n\n");
 	const latestText = latestUser ? messageText(latestUser.content) : "Continue.";
-	const text = transcript
-		? `<conversation_history>\n${transcript}\n</conversation_history>\n\n<current_user_request>\n${latestText}\n</current_user_request>`
-		: latestText;
+	const text =
+		includeTranscript && transcript
+			? `<conversation_history>\n${transcript}\n</conversation_history>\n\n<current_user_request>\n${latestText}\n</current_user_request>`
+			: latestText;
 	const input: JsonObject[] = [{ type: "text", text, text_elements: [] }];
 	if (latestUser && Array.isArray(latestUser.content)) {
 		for (const content of latestUser.content) {

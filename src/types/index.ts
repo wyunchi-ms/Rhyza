@@ -75,7 +75,7 @@ export interface TokenUsage {
 export interface TurnActivity {
 	id: "queue" | "retrieval" | "agent" | "knowledge";
 	label: string;
-	status: "running" | "complete" | "error";
+	status: "running" | "complete" | "warning" | "error";
 	startedAt: string;
 	completedAt?: string;
 	durationMs?: number;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
 	validateAgentPromptRequest,
+	validateAuxiliaryRequestCancelRequest,
 	validateKnowledgeExtractionRequest,
 	validateModelCatalogRequest,
 	validateProviderLoginRequest,
@@ -41,6 +42,10 @@ for (const providerId of providers) {
 				model,
 			);
 			assert.deepEqual(validateSummaryRequest({ text: "hello", model }).model, model);
+			assert.equal(
+				validateSummaryRequest({ text: "hello", model, requestId: "summary-1" }).requestId,
+				"summary-1",
+			);
 			assert.deepEqual(
 				validateKnowledgeExtractionRequest({
 					question: "hello",
@@ -51,9 +56,26 @@ for (const providerId of providers) {
 				}).model,
 				model,
 			);
+			assert.equal(
+				validateKnowledgeExtractionRequest({
+					question: "hello",
+					answer: "world",
+					existingEntities: [],
+					existingDiagrams: [],
+					requestId: "knowledge-1",
+				}).requestId,
+				"knowledge-1",
+			);
 		}
 	});
 }
+
+test("auxiliary cancellation requires a request id", () => {
+	assert.deepEqual(validateAuxiliaryRequestCancelRequest({ requestId: "cancel-1" }), {
+		requestId: "cancel-1",
+	});
+	assert.throws(() => validateAuxiliaryRequestCancelRequest({}));
+});
 
 test("unknown providers and malformed model IDs fail instead of falling back to Copilot", () => {
 	assert.throws(() => validateProviderStatusRequest({ providerId: "unknown" }));

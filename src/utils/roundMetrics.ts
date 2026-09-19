@@ -19,27 +19,52 @@ export function roundMetrics(round: ConversationRound, now = Date.now()) {
 		calls = calls === undefined || !requests ? undefined : calls + requests.length;
 		const start = Date.parse(turn.createdAt);
 		const end = turn.completedAt ? Date.parse(turn.completedAt) : isTurnActive(turn) ? now : NaN;
-		durationMs = durationMs === undefined || !Number.isFinite(start) || !Number.isFinite(end)
-			? undefined : durationMs + Math.max(0, end - start);
+		durationMs =
+			durationMs === undefined || !Number.isFinite(start) || !Number.isFinite(end)
+				? undefined
+				: durationMs + Math.max(0, end - start);
 	}
 	if (!round.answers.length) usage = emptyUsage();
 	const active = round.answers.find(isTurnActive);
 	const last = round.answers[round.answers.length - 1];
-	const status = active?.status ?? (last?.status === "interrupted" ? "interrupted" : last?.activities?.some((activity) => activity.status === "error") ? "error" : last?.status)
-		?? (round.user ? "waiting" : "idle");
+	const hasAgentError = last?.activities?.some(
+		(activity) => activity.id === "agent" && activity.status === "error",
+	);
+	const hasAuxiliaryWarning = last?.activities?.some(
+		(activity) =>
+			activity.status === "warning" || (activity.id !== "agent" && activity.status === "error"),
+	);
+	const status =
+		active?.status ??
+		(last?.status === "interrupted"
+			? "interrupted"
+			: hasAgentError
+				? "error"
+				: hasAuxiliaryWarning
+					? "warning"
+					: last?.status) ??
+		(round.user ? "waiting" : "idle");
 	const requests = round.answers.flatMap((turn) => turn.modelRequests ?? []);
 	const models = [...new Set(requests.map((request) => request.model).filter(Boolean))];
 	const thinkingModes = [...new Set(requests.map((request) => request.thinking).filter(Boolean))];
 	return {
-		usage, ...usageMetrics(usage),
-		partialUsage: Boolean(usage && missingUsage), calls, durationMs, status, models, thinkingModes,
+		usage,
+		...usageMetrics(usage),
+		partialUsage: Boolean(usage && missingUsage),
+		calls,
+		durationMs,
+		status,
+		models,
+		thinkingModes,
 	};
 }
 
 export function executionAppearance(status: string) {
 	if (["queued", "retrieving", "running", "finalizing"].includes(status)) return "running";
 	if (status === "error") return "error";
-	if (status === "interrupted" || status === "complete_with_unsynced_knowledge") return "interrupted";
+	if (status === "warning") return "warning";
+	if (status === "interrupted" || status === "complete_with_unsynced_knowledge")
+		return "interrupted";
 	if (status === "complete") return "complete";
 	return "idle";
 }

@@ -54,7 +54,7 @@ export function startTurnActivity(
 export function finishTurnActivity(
 	activities: TurnActivity[] | undefined,
 	id: TurnActivity["id"],
-	status: "complete" | "error",
+	status: "complete" | "warning" | "error",
 	detail?: string,
 	completedAt = new Date().toISOString(),
 ): TurnActivity[] {

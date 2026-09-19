@@ -377,6 +377,9 @@ const SessionGroup = ({
 									aria-label="Interrupted; this session can be continued"
 								/>
 							)}
+							{!isBranchPoint && status === "warning" && (
+								<AlertCircle size={12} className="text-amber-500" aria-label="Warning" />
+							)}
 							{!isBranchPoint && status === "error" && (
 								<AlertCircle size={12} className="text-red-500" aria-label="Error" />
 							)}

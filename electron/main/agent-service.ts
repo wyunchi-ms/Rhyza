@@ -206,6 +206,7 @@ export class AgentService extends PiService {
 				workspacePath,
 				`Do not use tools. Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
 				request.model?.modelId,
+				request.requestId,
 			);
 			const summary = result.assistantText
 				.replace(/^["'“”]+|["'“”]+$/g, "")
@@ -233,6 +234,7 @@ export class AgentService extends PiService {
 				workspacePath,
 				`Do not use tools.\n\n${buildKnowledgeExtractionPrompt(request)}`,
 				request.model?.modelId,
+				request.requestId,
 			);
 			return { ...parseKnowledgeExtraction(result.assistantText, request), usage: result.usage };
 		} catch (error) {
@@ -268,6 +270,7 @@ export class AgentService extends PiService {
 		request: Omit<NativeAgentRequest, "signal">,
 		emit: (event: AgentBridgeEvent) => void,
 		timeoutMs?: number,
+		requestId?: string,
 	): Promise<NativeAgentResult> {
 		const controller = new AbortController();
 		this.controllers.add(controller);
@@ -275,7 +278,11 @@ export class AgentService extends PiService {
 			? setTimeout(() => controller.abort(new Error("Provider request timed out.")), timeoutMs)
 			: undefined;
 		try {
-			return await this.runNative({ ...request, signal: controller.signal }, emit);
+			return await this.runCancellableAuxiliary(
+				requestId,
+				() => controller.abort(new Error("Auxiliary request canceled.")),
+				() => this.runNative({ ...request, signal: controller.signal }, emit),
+			);
 		} finally {
 			if (timeout) clearTimeout(timeout);
 			this.controllers.delete(controller);
@@ -287,6 +294,7 @@ export class AgentService extends PiService {
 		workspacePath: string,
 		prompt: string,
 		modelId?: string,
+		requestId?: string,
 	): Promise<NativeAgentResult> {
 		return this.withNativeRequest(
 			{
@@ -300,6 +308,7 @@ export class AgentService extends PiService {
 			},
 			() => {},
 			25_000,
+			requestId,
 		);
 	}
 

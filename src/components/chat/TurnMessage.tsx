@@ -228,7 +228,7 @@ function TurnWorkDetails({ turn }: { turn: Turn }) {
 	return (
 		<details className="turn-work-details">
 			<summary>
-				<span>Worked for {formatDuration(elapsedMs)}</span>
+				<span>Completed in {formatDuration(elapsedMs)}</span>
 				<ChevronDown size={14} />
 			</summary>
 			<div className="turn-work-details-content">
@@ -280,7 +280,7 @@ function TurnActivityTimeline({ activities }: { activities: TurnActivity[] }) {
 					<span className="turn-activity-icon">
 						{activity.status === "running" ? (
 							<LoaderCircle size={13} className="animate-spin" />
-						) : activity.status === "error" ? (
+						) : activity.status === "error" || activity.status === "warning" ? (
 							<AlertCircle size={13} />
 						) : (
 							<CheckCircle2 size={13} />

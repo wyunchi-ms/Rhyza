@@ -403,5 +403,5 @@ test("all renderer prompt, title, and extraction call sites use explicit provide
 			);
 		}
 	}
-	assert.equal(calls, 7);
+	assert.equal(calls, 6);
 });

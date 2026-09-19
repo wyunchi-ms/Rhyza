@@ -25,6 +25,7 @@ const ipcChannels = {
 	workspaceTodos: "knowbranch:workspace-todos",
 	generateSummary: "knowbranch:generate-summary",
 	extractKnowledge: "knowbranch:extract-knowledge",
+	cancelAuxiliaryRequest: "knowbranch:cancel-auxiliary-request",
 
 	openExternal: "knowbranch:open-external",
 	appStateLoad: "knowbranch:app-state-load",
@@ -60,6 +61,8 @@ contextBridge.exposeInMainWorld("knowbranch", {
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
+	cancelAuxiliaryRequest: (request) =>
+		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),

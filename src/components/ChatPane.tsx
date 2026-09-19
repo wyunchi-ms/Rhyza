@@ -40,6 +40,7 @@ import { TurnMessage } from "./chat/TurnMessage";
 import { TurnContextMenu, type TurnContextMenuState } from "./chat/TurnContextMenu";
 import { TurnNavigator } from "./TurnNavigator";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
+import { isLightweightGreeting } from "../utils/promptWorkPolicy";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
@@ -113,6 +114,10 @@ export const ChatPane: React.FC = () => {
 		const targetSessionId = options?.sessionId ?? activeSessionId;
 		if ((!prompt && images.length === 0) || !targetSessionId) return;
 		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
+		const lightweightGreeting = isLightweightGreeting(prompt, {
+			hasImages: promptImages.length > 0,
+			hasSelection: Boolean(options?.selectedText),
+		});
 		const agentPrompt = options?.selectedText
 			? `Answer the user's question using the selected passage as the primary focus. The selected passage identifies what the user is asking about and is explicit evidence of a learning gap; extract any durable concept it names into the knowledge base. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
 			: prompt;
@@ -154,9 +159,12 @@ export const ChatPane: React.FC = () => {
 				const bridge = getKnowbranchBridge();
 				if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
 				const queuedTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
+				const retrievalLabel = lightweightGreeting
+					? "Skipping workspace retrieval for a greeting"
+					: "Retrieving workspace context";
 				store.updateTurn(assistantTurnId, {
 					status: "retrieving",
-					summary: "Retrieving workspace context",
+					summary: retrievalLabel,
 					activities: startTurnActivity(
 						finishTurnActivity(
 							queuedTurn?.activities,
@@ -165,17 +173,17 @@ export const ChatPane: React.FC = () => {
 							"Previous message completed",
 						),
 						"retrieval",
-						"Retrieving workspace context",
+						retrievalLabel,
 					),
 				});
 				const selectedModel = providerModelSelection(store.settings);
 				const provider = getProviderInfo(selectedModel.providerId);
-				const summaryPromise = withTimeout(
-					bridge.generateSummary({ text: prompt, model: selectedModel }),
-					auxiliaryRequestTimeoutMs,
-					"Title generation",
-				).catch((): SummaryResponse => ({ error: "Title generation timed out." }));
-				const sourceHits = await bridge.sourceSearch({ query: agentPrompt, limit: 8 });
+				// Automatic titles should never add a second model turn to the critical path.
+				// Users can still request semantic title regeneration from the session tree.
+				const summaryPromise = Promise.resolve<SummaryResponse>({ summary: summarize(prompt) });
+				const sourceHits = lightweightGreeting
+					? []
+					: await bridge.sourceSearch({ query: agentPrompt, limit: 8 });
 				const retrievedTurn = useAppStore
 					.getState()
 					.turns.find((turn) => turn.id === assistantTurnId);
@@ -185,7 +193,9 @@ export const ChatPane: React.FC = () => {
 							retrievedTurn?.activities,
 							"retrieval",
 							"complete",
-							`${sourceHits.length} source match${sourceHits.length === 1 ? "" : "es"}`,
+							lightweightGreeting
+								? "Skipped for a standalone greeting"
+								: `${sourceHits.length} source match${sourceHits.length === 1 ? "" : "es"}`,
 						),
 						"agent",
 						"Generating response",
@@ -197,13 +207,15 @@ export const ChatPane: React.FC = () => {
 					targetSessionId,
 					userTurnId,
 				);
-				const knowledgeContext = buildKnowledgeContext(
-					agentPrompt,
-					useAppStore.getState().entities,
-					useAppStore.getState().relations,
-					useAppStore.getState().diagrams,
-					sourceHits,
-				);
+				const knowledgeContext = lightweightGreeting
+					? undefined
+					: buildKnowledgeContext(
+							agentPrompt,
+							useAppStore.getState().entities,
+							useAppStore.getState().relations,
+							useAppStore.getState().diagrams,
+							sourceHits,
+						);
 				store.updateTurn(assistantTurnId, {
 					status: "running",
 					summary: `${provider.label} is running`,
@@ -221,7 +233,7 @@ export const ChatPane: React.FC = () => {
 					prompt: agentPrompt,
 					images: promptImages,
 					knowledgeContext,
-					thinkingLevel: store.settings.thinkingLevel,
+					thinkingLevel: lightweightGreeting ? "off" : store.settings.thinkingLevel,
 					model: selectedModel,
 					writable: true,
 				});
@@ -248,7 +260,9 @@ export const ChatPane: React.FC = () => {
 					summary: summarize(response),
 				});
 				const shouldExtractKnowledge =
-					store.settings.autoExtract && store.settings.knowledgeMode !== "read_only";
+					!lightweightGreeting &&
+					store.settings.autoExtract &&
+					store.settings.knowledgeMode !== "read_only";
 				if (shouldExtractKnowledge) {
 					const currentTurn = useAppStore
 						.getState()
@@ -261,11 +275,13 @@ export const ChatPane: React.FC = () => {
 						),
 					});
 				}
+				const extractionRequestId = createId("aux-knowledge");
 				const extraction = shouldExtractKnowledge
 					? await withTimeout(
 							bridge.extractKnowledge({
 								question: agentPrompt,
 								answer: response,
+								requestId: extractionRequestId,
 								...buildKnowledgeInventory(
 									useAppStore.getState().entities,
 									useAppStore.getState().diagrams,
@@ -274,6 +290,9 @@ export const ChatPane: React.FC = () => {
 							}),
 							auxiliaryRequestTimeoutMs,
 							"Knowledge extraction",
+							async () => {
+								await bridge.cancelAuxiliaryRequest({ requestId: extractionRequestId });
+							},
 						).catch((error: unknown): KnowledgeExtractionResponse => ({
 							entities: [],
 							relations: [],
@@ -291,7 +310,7 @@ export const ChatPane: React.FC = () => {
 						activities: finishTurnActivity(
 							currentTurn?.activities,
 							"knowledge",
-							extraction.error ? "error" : "complete",
+							extraction.error ? "warning" : "complete",
 							extraction.error ??
 								`${extractedCount} knowledge candidate${extractedCount === 1 ? "" : "s"}`,
 						),
@@ -327,7 +346,6 @@ export const ChatPane: React.FC = () => {
 						store.renameSession(targetSessionId, generatedSummary.summary);
 					}
 				}
-				store.updateTurn(assistantTurnId, { completedAt: new Date().toISOString() });
 			});
 		} catch (error) {
 			const message = errorToMessage(error);

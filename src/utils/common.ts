@@ -8,16 +8,30 @@ export function summarize(value: string): string {
 }
 
 export function formatDuration(durationMs: number): string {
-	return durationMs < 1_000 ? `${durationMs}ms` : `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
+	return durationMs < 1_000
+		? `${durationMs}ms`
+		: `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 }
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+export async function withTimeout<T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	label: string,
+	onTimeout?: () => void | Promise<void>,
+): Promise<T> {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		return await Promise.race([
 			promise,
 			new Promise<T>((_, reject) => {
-				timeout = setTimeout(() => reject(new Error(`${label} timed out after ${formatDuration(timeoutMs)}.`)), timeoutMs);
+				timeout = setTimeout(() => {
+					try {
+						void Promise.resolve(onTimeout?.()).catch(() => {});
+					} catch {
+						// Timeout remains authoritative even if best-effort cancellation fails.
+					}
+					reject(new Error(`${label} timed out after ${formatDuration(timeoutMs)}.`));
+				}, timeoutMs);
 			}),
 		]);
 	} finally {

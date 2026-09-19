@@ -5038,6 +5038,9 @@ a:focus-visible {
 .turn-activity-timeline .is-error .turn-activity-icon {
 	color: #b91c1c;
 }
+.turn-activity-timeline .is-warning .turn-activity-icon {
+	color: #d97706;
+}
 .turn-activity-copy {
 	min-width: 0;
 }
@@ -6610,6 +6613,9 @@ html[data-theme] .session-graph-node.execution-complete {
 }
 html[data-theme] .session-graph-node.execution-error {
 	border-color: #ef4444;
+}
+html[data-theme] .session-graph-node.execution-warning {
+	border-color: #d97706;
 }
 html[data-theme] .session-graph-node.execution-interrupted {
 	border-color: #d97706;

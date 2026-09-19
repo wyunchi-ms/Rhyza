@@ -41,6 +41,8 @@ const bridge: KnowbranchBridge = {
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
+	cancelAuxiliaryRequest: (request) =>
+		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),

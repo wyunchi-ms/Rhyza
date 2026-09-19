@@ -78,6 +78,8 @@ export class PiService {
 	protected readonly requestDumpDir: string;
 	private modelRuntimePromise: Promise<ModelRuntime> | undefined;
 	private readonly activeSessions = new Map<string, ActiveSession>();
+	private readonly auxiliaryAborters = new Map<string, () => void | Promise<void>>();
+	private readonly pendingAuxiliaryCancels = new Map<string, NodeJS.Timeout>();
 	protected readonly worktreeService: WorktreeService;
 	private readonly codexAppServer = new CodexAppServer();
 
@@ -349,6 +351,42 @@ export class PiService {
 		return this.worktreeService.diff(frontendSessionId);
 	}
 
+	async cancelAuxiliaryRequest(requestId: string): Promise<boolean> {
+		const abort = this.auxiliaryAborters.get(requestId);
+		if (abort) {
+			await abort();
+			return true;
+		}
+		const existing = this.pendingAuxiliaryCancels.get(requestId);
+		if (existing) clearTimeout(existing);
+		const expiry = setTimeout(() => this.pendingAuxiliaryCancels.delete(requestId), 60_000);
+		expiry.unref?.();
+		this.pendingAuxiliaryCancels.set(requestId, expiry);
+		return false;
+	}
+
+	protected async runCancellableAuxiliary<T>(
+		requestId: string | undefined,
+		abort: () => void | Promise<void>,
+		operation: () => Promise<T>,
+	): Promise<T> {
+		if (!requestId) return operation();
+		const pending = this.pendingAuxiliaryCancels.get(requestId);
+		if (pending) {
+			clearTimeout(pending);
+			this.pendingAuxiliaryCancels.delete(requestId);
+			throw new Error("Auxiliary request canceled.");
+		}
+		this.auxiliaryAborters.set(requestId, abort);
+		try {
+			return await operation();
+		} finally {
+			if (this.auxiliaryAborters.get(requestId) === abort) {
+				this.auxiliaryAborters.delete(requestId);
+			}
+		}
+	}
+
 	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
 		try {
 			const runtime = await this.getModelRuntime();
@@ -371,16 +409,22 @@ export class PiService {
 				});
 			}
 			try {
-				await session.sendUserMessage(
-					`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
+				return await this.runCancellableAuxiliary(
+					request.requestId,
+					() => session.abort(),
+					async () => {
+						await session.sendUserMessage(
+							`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
+						);
+						const summary = getLastAssistantText(session)
+							?.replace(/^["'“”]+|["'“”]+$/g, "")
+							.trim();
+						const usage = getSessionUsage(session);
+						return summary
+							? { summary: summary.slice(0, 80), usage }
+							: { error: "The model returned an empty title.", usage };
+					},
 				);
-				const summary = getLastAssistantText(session)
-					?.replace(/^["'“”]+|["'“”]+$/g, "")
-					.trim();
-				const usage = getSessionUsage(session);
-				return summary
-					? { summary: summary.slice(0, 80), usage }
-					: { error: "The model returned an empty title.", usage };
 			} finally {
 				this.codexAppServer.unregisterSession(session.sessionId);
 				session.dispose();
@@ -416,10 +460,19 @@ export class PiService {
 				});
 			}
 			try {
-				await session.sendUserMessage(buildKnowledgeExtractionPrompt(request));
-				const output = getLastAssistantText(session);
-				if (!output) throw new Error("The model returned an empty extraction result.");
-				return { ...parseKnowledgeExtraction(output, request), usage: getSessionUsage(session) };
+				return await this.runCancellableAuxiliary(
+					request.requestId,
+					() => session.abort(),
+					async () => {
+						await session.sendUserMessage(buildKnowledgeExtractionPrompt(request));
+						const output = getLastAssistantText(session);
+						if (!output) throw new Error("The model returned an empty extraction result.");
+						return {
+							...parseKnowledgeExtraction(output, request),
+							usage: getSessionUsage(session),
+						};
+					},
+				);
 			} finally {
 				this.codexAppServer.unregisterSession(session.sessionId);
 				session.dispose();
@@ -769,6 +822,10 @@ export class PiService {
 	}
 
 	dispose(): void {
+		for (const abort of this.auxiliaryAborters.values()) void abort();
+		this.auxiliaryAborters.clear();
+		for (const expiry of this.pendingAuxiliaryCancels.values()) clearTimeout(expiry);
+		this.pendingAuxiliaryCancels.clear();
 		this.disposeAllSessions();
 		void this.codexAppServer.dispose();
 	}
