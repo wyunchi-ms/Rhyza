@@ -226,6 +226,7 @@ export interface Settings {
 	provider: ProviderId;
 	defaultModel: string;
 	autoExtract: boolean;
+	knowledgeTools: boolean;
 	strictConflict: boolean;
 	knowledgeMode: "automatic" | "suggest" | "read_only" | "hybrid";
 	confidenceThreshold: number;

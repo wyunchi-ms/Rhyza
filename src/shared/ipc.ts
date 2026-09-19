@@ -1,43 +1,43 @@
 import { isRecord } from "./value.js";
 
-export const KNOWBRANCH_BRIDGE_NAME = "knowbranch" as const;
+export const RHYZA_BRIDGE_NAME = "rhyza" as const;
 
 export const ipcChannels = {
-	providerStatus: "knowbranch:provider-status",
-	providerLogin: "knowbranch:provider-login",
-	providerLogout: "knowbranch:provider-logout",
-	modelCatalog: "knowbranch:model-catalog",
-	pluginList: "knowbranch:plugin-list",
-	pluginInstall: "knowbranch:plugin-install",
-	pluginSelectLocal: "knowbranch:plugin-select-local",
-	pluginRemove: "knowbranch:plugin-remove",
-	getWorkspace: "knowbranch:get-workspace",
-	selectWorkspace: "knowbranch:select-workspace",
-	sourceList: "knowbranch:source-list",
-	sourceAdd: "knowbranch:source-add",
-	sourceRefresh: "knowbranch:source-refresh",
-	sourceArchive: "knowbranch:source-archive",
-	sourceSearch: "knowbranch:source-search",
-	workspaceDiff: "knowbranch:workspace-diff",
-	workspaceExportPatch: "knowbranch:workspace-export-patch",
-	agentPrompt: "knowbranch:agent-prompt",
-	modelRequestHistory: "knowbranch:model-request-history",
-	workspaceTodos: "knowbranch:workspace-todos",
-	generateSummary: "knowbranch:generate-summary",
-	extractKnowledge: "knowbranch:extract-knowledge",
-	cancelAuxiliaryRequest: "knowbranch:cancel-auxiliary-request",
+	providerStatus: "rhyza:provider-status",
+	providerLogin: "rhyza:provider-login",
+	providerLogout: "rhyza:provider-logout",
+	modelCatalog: "rhyza:model-catalog",
+	pluginList: "rhyza:plugin-list",
+	pluginInstall: "rhyza:plugin-install",
+	pluginSelectLocal: "rhyza:plugin-select-local",
+	pluginRemove: "rhyza:plugin-remove",
+	getWorkspace: "rhyza:get-workspace",
+	selectWorkspace: "rhyza:select-workspace",
+	sourceList: "rhyza:source-list",
+	sourceAdd: "rhyza:source-add",
+	sourceRefresh: "rhyza:source-refresh",
+	sourceArchive: "rhyza:source-archive",
+	sourceSearch: "rhyza:source-search",
+	workspaceDiff: "rhyza:workspace-diff",
+	workspaceExportPatch: "rhyza:workspace-export-patch",
+	agentPrompt: "rhyza:agent-prompt",
+	modelRequestHistory: "rhyza:model-request-history",
+	workspaceTodos: "rhyza:workspace-todos",
+	generateSummary: "rhyza:generate-summary",
+	extractKnowledge: "rhyza:extract-knowledge",
+	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
-	openExternal: "knowbranch:open-external",
-	appStateLoad: "knowbranch:app-state-load",
-	appStateSave: "knowbranch:app-state-save",
-	diagnosticReport: "knowbranch:diagnostic-report",
+	openExternal: "rhyza:open-external",
+	appStateLoad: "rhyza:app-state-load",
+	appStateSave: "rhyza:app-state-save",
+	diagnosticReport: "rhyza:diagnostic-report",
 
-	forkDebugDump: "knowbranch:fork-debug-dump",
-	agentEvent: "knowbranch:agent-event",
-	authEvent: "knowbranch:auth-event",
+	forkDebugDump: "rhyza:fork-debug-dump",
+	agentEvent: "rhyza:agent-event",
+	authEvent: "rhyza:auth-event",
 } as const;
 
-export type KnowbranchIpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
+export type RhyzaIpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
 
 export type ProviderId = "github-copilot" | "codex" | "claude-code";
 
@@ -165,6 +165,8 @@ export interface AgentPromptRequest {
 	prompt: string;
 	images?: AgentPromptImage[];
 	knowledgeContext?: string;
+	knowledgeTools?: boolean;
+	knowledgeInventory?: Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams">;
 	thinkingLevel?: "off" | "low" | "medium" | "high";
 	model?: {
 		providerId: ProviderId;
@@ -425,7 +427,7 @@ export interface AgentBridgeEvent {
 	wirePayload?: unknown;
 }
 
-export interface KnowbranchBridge {
+export interface RhyzaBridge {
 	isElectron: true;
 	providerStatus(request: ProviderStatusRequest): Promise<ProviderStatusResponse>;
 	providerLogin(request: ProviderLoginRequest): Promise<ProviderActionResponse>;
@@ -563,6 +565,11 @@ export function validateAgentPromptRequest(value: unknown): AgentPromptRequest {
 	if (typeof value.knowledgeContext === "string") {
 		request.knowledgeContext = value.knowledgeContext.slice(0, 20_000);
 	}
+	request.knowledgeTools = value.knowledgeTools === true;
+	if (value.knowledgeInventory !== undefined) {
+		const inventory = validateKnowledgeInventory(value.knowledgeInventory);
+		request.knowledgeInventory = inventory;
+	}
 	if (["off", "low", "medium", "high"].includes(String(value.thinkingLevel))) {
 		request.thinkingLevel = value.thinkingLevel as AgentPromptRequest["thinkingLevel"];
 	}
@@ -617,9 +624,31 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 	if (!Array.isArray(value.existingDiagrams)) {
 		throw new Error("Existing diagrams must be an array.");
 	}
+	const inventory = validateKnowledgeInventory(value);
 	const request: KnowledgeExtractionRequest = {
 		question: value.question.slice(0, 8_000),
 		answer: value.answer.slice(0, 100_000),
+		...inventory,
+	};
+	if (value.model !== undefined) {
+		request.model = validateModelSelection(value.model);
+	}
+	if (typeof value.requestId === "string" && value.requestId.trim()) {
+		request.requestId = value.requestId.slice(0, 180);
+	}
+	return request;
+}
+
+function validateKnowledgeInventory(
+	value: unknown,
+): Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams"> {
+	if (!isRecord(value) || !Array.isArray(value.existingEntities)) {
+		throw new Error("Existing entities must be an array.");
+	}
+	if (!Array.isArray(value.existingDiagrams)) {
+		throw new Error("Existing diagrams must be an array.");
+	}
+	return {
 		existingEntities: value.existingEntities.slice(0, 200).flatMap((entity) =>
 			isRecord(entity) &&
 			typeof entity.id === "string" &&
@@ -668,13 +697,6 @@ export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExt
 				: [],
 		),
 	};
-	if (value.model !== undefined) {
-		request.model = validateModelSelection(value.model);
-	}
-	if (typeof value.requestId === "string" && value.requestId.trim()) {
-		request.requestId = value.requestId.slice(0, 180);
-	}
-	return request;
 }
 
 export function validateIdRequest(value: unknown): { id: string } {

@@ -56,6 +56,24 @@ test("Claude permissions match read-only, isolated writable and auxiliary sessio
 	const auxiliary = claudeArguments({ ...request, tools: false });
 	assert.equal(auxiliary[auxiliary.indexOf("--tools") + 1], "");
 	assert.ok(!auxiliary.includes("--allowedTools"));
+	const knowledge = claudeArguments({
+		...request,
+		tools: false,
+		knowledgeTool: {
+			serverPath: "C:\\app\\knowledge-mcp-server.js",
+			inventoryPath: "C:\\temp\\inventory.json",
+		},
+	});
+	assert.equal(
+		knowledge[knowledge.indexOf("--tools") + 1],
+		"mcp__rhyza_knowledge__search_knowledge",
+	);
+	const mcpConfig = JSON.parse(knowledge[knowledge.indexOf("--mcp-config") + 1]);
+	assert.equal(mcpConfig.mcpServers.rhyza_knowledge.command, process.execPath);
+	assert.equal(
+		mcpConfig.mcpServers.rhyza_knowledge.env.RHYZA_KNOWLEDGE_INVENTORY,
+		"C:\\temp\\inventory.json",
+	);
 });
 
 test("Claude streaming text and thinking are not repeated by final assistant events", async () => {

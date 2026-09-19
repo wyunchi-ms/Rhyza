@@ -31,7 +31,7 @@ npm run electron:dev
 React Renderer
   pages/components/hooks/store
           │
-          │ window.knowbranch (contextBridge)
+          │ window.rhyza (contextBridge)
           ▼
 Electron preload
           │ validated IPC payloads

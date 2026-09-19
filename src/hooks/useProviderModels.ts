@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ModelInfo, ProviderId } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
-import { getKnowbranchBridge } from "./useKnowbranchBridge";
+import { getRhyzaBridge } from "./useRhyzaBridge";
 
 type ModelCatalogState = {
 	providerId: ProviderId;
@@ -13,7 +13,7 @@ type ModelCatalogState = {
 export function useProviderModels(providerId: ProviderId) {
 	const [catalog, setCatalog] = useState<ModelCatalogState | null>(null);
 	useEffect(() => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		let cancelled = false;
 		setCatalog({ providerId, models: [], loading: true, error: null });
@@ -42,5 +42,5 @@ export function useProviderModels(providerId: ProviderId) {
 	// Hide the old catalog during the render before the new provider's effect runs.
 	return catalog?.providerId === providerId
 		? catalog
-		: { providerId, models: [], loading: Boolean(getKnowbranchBridge()), error: null };
+		: { providerId, models: [], loading: Boolean(getRhyzaBridge()), error: null };
 }

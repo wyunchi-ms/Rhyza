@@ -1,8 +1,8 @@
-import type { KnowbranchBridge } from "../shared/ipc";
+import type { RhyzaBridge } from "../shared/ipc";
 
 declare global {
 	interface Window {
-		knowbranch?: KnowbranchBridge;
+		rhyza?: RhyzaBridge;
 	}
 }
 

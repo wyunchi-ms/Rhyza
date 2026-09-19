@@ -18,6 +18,10 @@ export interface NativeAgentRequest {
 	thinkingLevel?: AgentPromptRequest["thinkingLevel"];
 	writable: boolean;
 	tools: boolean;
+	knowledgeTool?: {
+		serverPath: string;
+		inventoryPath: string;
+	};
 	signal: AbortSignal;
 }
 

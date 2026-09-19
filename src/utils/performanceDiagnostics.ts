@@ -1,4 +1,4 @@
-import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
+import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { useAppStore } from "../store";
 import { isTurnActive } from "./sessionRuntime";
 import {
@@ -12,7 +12,7 @@ const sampleIntervalMs = 10_000;
 const heartbeatIntervalMs = 1_000;
 
 export function startPerformanceDiagnostics(): () => void {
-	const bridge = getKnowbranchBridge();
+	const bridge = getRhyzaBridge();
 	if (!bridge) return () => undefined;
 	let lastRegion = "unknown";
 	let lastRegionAt = 0;

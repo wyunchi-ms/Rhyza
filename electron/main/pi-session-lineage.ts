@@ -36,7 +36,8 @@ export async function openOrCreatePiSession(
 	try {
 		return await operation;
 	} finally {
-		if (pendingSessionResolutions.get(resolutionKey) === operation) pendingSessionResolutions.delete(resolutionKey);
+		if (pendingSessionResolutions.get(resolutionKey) === operation)
+			pendingSessionResolutions.delete(resolutionKey);
 	}
 }
 
@@ -66,13 +67,14 @@ async function openOrCreatePiSessionUnlocked(
 	});
 	for (const turn of options.transcript) appendTranscriptTurn(sessionManager, turn);
 	if (options.parentFrontendSessionId || options.forkedFromTurnId) {
-		sessionManager.appendCustomEntry("knowbranch.branch", {
+		sessionManager.appendCustomEntry("rhyza.branch", {
 			frontendSessionId: options.frontendSessionId,
 			parentFrontendSessionId: options.parentFrontendSessionId,
 			parentSessionFile: parentResolution.file,
 			parentResolution: parentResolution.missing ? "missing-parent-recovered" : "linked",
 			forkedFromTurnId: options.forkedFromTurnId,
-			replayStrategy: "distinct persisted Pi session seeded once from the frontend branch transcript",
+			replayStrategy:
+				"distinct persisted Pi session seeded once from the frontend branch transcript",
 		});
 	}
 	const sessionFile = sessionManager.getSessionFile();
@@ -103,14 +105,21 @@ function appendTranscriptTurn(sessionManager: SessionManager, turn: AgentTranscr
 		sessionManager.appendMessage({
 			role: "user",
 			content: turn.images?.length
-				? [{ type: "text", text: turn.content }, ...turn.images.map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }))]
+				? [
+						{ type: "text", text: turn.content },
+						...turn.images.map((image): ImageContent => ({
+							type: "image",
+							data: image.data,
+							mimeType: image.mimeType,
+						})),
+					]
 				: turn.content,
 			timestamp: Date.now(),
 		});
 		return;
 	}
 	sessionManager.appendCustomMessageEntry(
-		"knowbranch.replayed-assistant",
+		"rhyza.replayed-assistant",
 		`Assistant said earlier: ${turn.content}`,
 		false,
 		{ sourceTurnId: turn.id },

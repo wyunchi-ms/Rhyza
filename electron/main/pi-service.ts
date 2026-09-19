@@ -62,12 +62,17 @@ interface ActiveSession {
 	frontendTurnId?: string;
 	modelKey?: string;
 	sessionGeneration?: string;
+	knowledgeInventory: KnowledgeInventoryHolder;
 
 	unsubscribe: () => void;
 	sourceRefs: Map<string, SourceReference>;
 }
 
 type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
+type KnowledgeInventory = Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams">;
+interface KnowledgeInventoryHolder {
+	current: KnowledgeInventory;
+}
 
 export interface PiPromptRequest extends AgentPromptRequest {
 	sessionGeneration?: string;
@@ -294,6 +299,7 @@ export class PiService {
 			const runtime = await this.getModelRuntime();
 			const model = await resolveRequestedModel(runtime, request.model);
 			const active = await this.getSession(workspacePath, request, model);
+			active.knowledgeInventory.current = request.knowledgeInventory ?? emptyKnowledgeInventory();
 			active.sourceRefs.clear();
 			const session = active.session;
 			this.emitAgentEvent({
@@ -451,7 +457,13 @@ export class PiService {
 				sessionManager: SessionManager.inMemory(workspacePath, {
 					id: `kb-extract-${crypto.randomUUID()}`,
 				}),
-				tools: [],
+				tools: ["search_knowledge"],
+				customTools: this.createKnowledgeTools({
+					current: {
+						existingEntities: request.existingEntities,
+						existingDiagrams: request.existingDiagrams,
+					},
+				}),
 			});
 			if (model.provider === codexAppServerProviderId) {
 				this.codexAppServer.registerSession(session.sessionId, {
@@ -564,6 +576,7 @@ export class PiService {
 				workspaceExplorationGuidance,
 				todoTrackingGuidance,
 				...(this.sourceService ? [sourceRetrievalGuidance] : []),
+				...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
 				responsePresentationGuidance,
 			],
 		});
@@ -573,7 +586,7 @@ export class PiService {
 			.extensions.flatMap((extension) => [...extension.tools.keys()]);
 		const { sessionManager } = await openOrCreatePiSession({
 			workspacePath: sessionWorkspace.path,
-			sessionDir: path.join(this.agentDir, "knowbranch-sessions"),
+			sessionDir: path.join(this.agentDir, "rhyza-sessions"),
 			frontendSessionId: request.sessionGeneration
 				? `${request.frontendSessionId}-${request.sessionGeneration}`
 				: request.frontendSessionId,
@@ -582,7 +595,13 @@ export class PiService {
 			transcript: request.transcript,
 		});
 		const sourceRefs = new Map<string, SourceReference>();
-		const customTools = this.createSourceTools(sourceRefs, workspacePath);
+		const knowledgeInventory: KnowledgeInventoryHolder = {
+			current: request.knowledgeInventory ?? emptyKnowledgeInventory(),
+		};
+		const customTools = [
+			...this.createSourceTools(sourceRefs, workspacePath),
+			...(request.knowledgeTools ? this.createKnowledgeTools(knowledgeInventory) : []),
+		];
 		const builtInTools =
 			request.writable && sessionWorkspace.isolated
 				? ["read", "grep", "find", "ls", "edit", "write", "bash"]
@@ -697,6 +716,7 @@ export class PiService {
 			frontendTurnId: request.frontendTurnId,
 			modelKey,
 			sessionGeneration: request.sessionGeneration,
+			knowledgeInventory,
 			unsubscribe,
 			sourceRefs,
 		};
@@ -798,6 +818,63 @@ export class PiService {
 			},
 		});
 		return [searchSources, readSource];
+	}
+
+	private createKnowledgeTools(inventory: KnowledgeInventoryHolder) {
+		return [
+			defineTool({
+				name: "search_knowledge",
+				label: "Search knowledge",
+				description:
+					"Search the user's knowledge-base entities and diagrams. Omit query to inspect the complete inventory.",
+				parameters: Type.Object({
+					query: Type.Optional(
+						Type.String({ description: "Name, alias, type, summary, or content to match" }),
+					),
+					limit: Type.Optional(
+						Type.Integer({ minimum: 1, maximum: 200, description: "Maximum results" }),
+					),
+				}),
+				execute: async (_toolCallId, params) => {
+					const query = params.query?.trim().toLocaleLowerCase();
+					const limit = params.limit ?? (query ? 20 : 200);
+					const entities = inventory.current.existingEntities
+						.filter((entity) => {
+							if (!query) return true;
+							return [
+								entity.id,
+								entity.name,
+								...entity.aliases,
+								entity.type,
+								entity.summary,
+								entity.content,
+							]
+								.join(" ")
+								.toLocaleLowerCase()
+								.includes(query);
+						})
+						.slice(0, limit);
+					const diagrams = inventory.current.existingDiagrams
+						.filter((diagram) => {
+							if (!query) return true;
+							return [diagram.id, diagram.name, diagram.type, ...diagram.nodeLabels]
+								.join(" ")
+								.toLocaleLowerCase()
+								.includes(query);
+						})
+						.slice(0, limit);
+					return {
+						content: [
+							{
+								type: "text" as const,
+								text: JSON.stringify({ entities, diagrams }),
+							},
+						],
+						details: { entityCount: entities.length, diagramCount: diagrams.length },
+					};
+				},
+			}),
+		];
 	}
 
 	private disposeSession(frontendSessionId: string): void {
@@ -983,6 +1060,11 @@ const sourceRetrievalGuidance = `## Attached sources
 - A search hit is only a candidate, not evidence. Read the relevant range and verify that it directly supports the claim before relying on or citing it.
 - Read relevant ranges before making source-backed claims. Mention file paths and line ranges when they materially support a conclusion.`;
 
+export const knowledgeRetrievalGuidance = `## Knowledge base
+- search_knowledge queries the user's personal knowledge base on demand.
+- Use it when existing knowledge may help answer the request or when the user refers to a saved entity or diagram.
+- Do not call it for unrelated requests, and do not assume an absent result means the underlying concept does not exist.`;
+
 export const responsePresentationGuidance = `## Response presentation
 - Installed extensions may supply other visualization tools and formats; follow their presentation instructions when available. The Mermaid rules below are the default when no extension overrides them.
 - To embed an existing self-contained HTML file, return a fenced html-preview JSON block: {"version":1,"path":"relative/path.html","title":"Preview title"}. The file must be inside the current session workspace. Do not return its full HTML as prose. HTML previews are sandboxed and cannot fetch network resources.
@@ -1121,18 +1203,13 @@ Rules:
 - Classify each entity's sourceScope. Use "workspace" when its identity or stated behavior is defined by this repository (files, modules, project-specific components/configuration), "general" for stable common knowledge independent of this repository (products, protocols, languages, established patterns), and "mixed" only when both are essential. General entities must not acquire workspace file citations merely because the conversation happened in this project.
 - Extract only meaningful relations supported by the answer between returned or existing entities. Prefer stable existing IDs when available.
 - When the question explicitly asks to rebuild relationships, return zero entities and zero diagrams, scan all supplied existing entities and diagram topology, and return every high-confidence useful relation without duplicating the existing graph.
+- Call search_knowledge without a query before deciding whether to create, update, or link knowledge. It is the only source of the existing knowledge inventory.
 - Also extract every Mermaid block listed in MERMAID_BLOCKS as a structured diagram. Do not invent diagrams when MERMAID_BLOCKS is empty.
 - For each diagram, choose existingDiagramId only when it represents the same subject as an EXISTING_DIAGRAM. Never choose the reserved "workspace-knowledge-map". Otherwise omit existingDiagramId to create a new diagram.
 - Diagram node keys must be short stable identifiers. Every edge sourceKey and targetKey must reference a returned node key.
 - Map Mermaid types to architecture, structure, flowchart, sequence, swimlane, or dependency.
 - Return valid JSON only, with this exact shape:
 {"entities":[{"existingEntityId":"optional-id","name":"...","type":"Concept|Component|Pattern|Technology|File","summary":"...","content":"...","confidence":"explicit|inferred","sourceScope":"workspace|general|mixed"}],"relations":[{"sourceEntityId":"optional-id","targetEntityId":"optional-id","sourceName":"...","targetName":"...","type":"calls|depends_on|contains|implements|related_to","description":"...","confidence":"explicit|inferred"}],"diagrams":[{"sourceIndex":0,"name":"...","type":"sequence","existingDiagramId":"optional-id","nodes":[{"key":"user","label":"User","type":"actor"}],"edges":[{"sourceKey":"user","targetKey":"service","label":"request"}]}]}
-
-EXISTING_ENTITIES:
-${JSON.stringify(request.existingEntities)}
-
-EXISTING_DIAGRAMS:
-${JSON.stringify(request.existingDiagrams)}
 
 MERMAID_BLOCKS:
 ${JSON.stringify(mermaidBlocks)}
@@ -1142,6 +1219,10 @@ ${request.question}
 
 ASSISTANT_ANSWER (diagram code removed; evidence only, not a source to copy):
 ${stripDiagramCode(request.answer)}`;
+}
+
+function emptyKnowledgeInventory(): KnowledgeInventory {
+	return { existingEntities: [], existingDiagrams: [] };
 }
 
 export function parseKnowledgeExtraction(

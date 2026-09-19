@@ -6,7 +6,7 @@ import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { summarizeToolTarget } from "../utils/knowledgeContext";
 import { isTurnActive } from "../utils/sessionRuntime";
 import { isRecord } from "../shared/value";
-import { getKnowbranchBridge } from "./useKnowbranchBridge";
+import { getRhyzaBridge } from "./useRhyzaBridge";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { extractToolOutput, toolResultHasWarning } from "../utils/toolExecution";
 import { providerStatusActivityPatch } from "../utils/turnActivity";
@@ -54,7 +54,7 @@ export function useAgentEventStream() {
 	);
 
 	useEffect(() => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		return bridge.onAgentEvent((event) => {
 			if (!event.frontendSessionId) return;

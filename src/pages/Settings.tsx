@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { getKnowbranchBridge, useElectronProviderState } from "../hooks/useKnowbranchBridge";
+import { getRhyzaBridge, useElectronProviderState } from "../hooks/useRhyzaBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
@@ -34,7 +34,7 @@ const Settings: React.FC = () => {
 	const customModel = selectedModel && !electron.models.some((model) => model.id === selectedModel);
 
 	const handleSelectWorkspace = async () => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		electron.setWorkspaceError(null);
 		try {
@@ -359,6 +359,33 @@ const Settings: React.FC = () => {
 								<option value="read_only">Read only</option>
 							</select>
 						</label>
+						<div className="flex justify-between items-center gap-4">
+							<div>
+								<h3 className="font-bold text-primary">Knowledge tools in chat</h3>
+								<p className="text-sm text-secondary">
+									Let the main agent query the knowledge base when needed. The end-of-turn organizer
+									always has access.
+								</p>
+							</div>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={settings.knowledgeTools}
+								aria-label="Knowledge tools in chat"
+								onClick={() => updateSettings({ knowledgeTools: !settings.knowledgeTools })}
+								className={clsx(
+									"w-12 h-6 rounded-full relative shrink-0 cursor-pointer transition-colors",
+									settings.knowledgeTools ? "bg-accent" : "bg-gray-300",
+								)}
+							>
+								<div
+									className={clsx(
+										"absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+										settings.knowledgeTools ? "right-1" : "left-1",
+									)}
+								/>
+							</button>
+						</div>
 						<label className="form-label">
 							Thinking level
 							<select
@@ -450,7 +477,7 @@ const Settings: React.FC = () => {
 };
 
 function PluginSettings() {
-	const bridge = getKnowbranchBridge();
+	const bridge = getRhyzaBridge();
 	const [plugins, setPlugins] = useState<PiPluginInfo[]>([]);
 	const [source, setSource] = useState("");
 	const [busySource, setBusySource] = useState<string | null>(bridge ? "list" : null);
@@ -660,7 +687,7 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 					<button
 						type="button"
 						className="secondary-button"
-						onClick={() => void getKnowbranchBridge()?.openExternal({ url: event.verificationUri })}
+						onClick={() => void getRhyzaBridge()?.openExternal({ url: event.verificationUri })}
 					>
 						<ExternalLink size={13} /> Open sign-in
 					</button>
@@ -673,7 +700,7 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 			<button
 				type="button"
 				className="secondary-button"
-				onClick={() => void getKnowbranchBridge()?.openExternal({ url: event.url })}
+				onClick={() => void getRhyzaBridge()?.openExternal({ url: event.url })}
 			>
 				<ExternalLink size={13} /> Open authentication page
 			</button>
@@ -688,7 +715,7 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 						type="button"
 						key={link.url}
 						className="secondary-button mt-2"
-						onClick={() => void getKnowbranchBridge()?.openExternal({ url: link.url })}
+						onClick={() => void getRhyzaBridge()?.openExternal({ url: link.url })}
 					>
 						<ExternalLink size={13} /> {link.label ?? "Open link"}
 					</button>

@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
 	AgentBridgeEvent,
 	AgentModelRequestSnapshot,
@@ -22,6 +24,7 @@ import {
 	PiService,
 	buildKnowledgeExtractionPrompt,
 	extractMermaidDiagramCandidates,
+	knowledgeRetrievalGuidance,
 	parseKnowledgeExtraction,
 	responsePresentationGuidance,
 	safeDumpPart,
@@ -104,7 +107,12 @@ export class AgentService extends PiService {
 			if (providerId !== "claude-code") {
 				this.nativeWorkspaces.delete(request.frontendSessionId);
 				return await super.promptAgent(
-					{ ...request, sessionGeneration: state.copilotGeneration },
+					{
+						...request,
+						sessionGeneration: `${state.copilotGeneration ?? "default"}-knowledge-${
+							request.knowledgeTools ? "on" : "off"
+						}`,
+					},
 					workspacePath,
 				);
 			}
@@ -119,6 +127,7 @@ export class AgentService extends PiService {
 			const guidance = [
 				workspaceExplorationGuidance,
 				writable ? todoTrackingGuidance : "This is a read-only session. Do not modify files.",
+				...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
 				responsePresentationGuidance,
 			].join("\n\n");
 			const parts = buildNativePrompt(
@@ -163,18 +172,27 @@ export class AgentService extends PiService {
 			await writeRequestDump(dumpPath, snapshot);
 			emit({ type: "model_request", modelRequest: snapshot });
 			emit({ type: "prompt_start" });
-			const result = await this.withNativeRequest(
-				{
-					providerId,
-					workspacePath: workspace.path,
-					parts,
-					modelId: request.model?.modelId,
-					thinkingLevel: request.thinkingLevel,
-					writable,
-					tools: true,
-				},
-				emit,
-			);
+			const nativeKnowledgeTool = request.knowledgeTools
+				? await this.createNativeKnowledgeTool(request.knowledgeInventory)
+				: undefined;
+			let result: NativeAgentResult;
+			try {
+				result = await this.withNativeRequest(
+					{
+						providerId,
+						workspacePath: workspace.path,
+						parts,
+						modelId: request.model?.modelId,
+						thinkingLevel: request.thinkingLevel,
+						writable,
+						tools: true,
+						knowledgeTool: nativeKnowledgeTool?.tool,
+					},
+					emit,
+				);
+			} finally {
+				await nativeKnowledgeTool?.cleanup();
+			}
 			await writeRequestDump(dumpPath, { ...snapshot, usage: result.usage });
 			emit({ type: "message_end", sessionId: result.sessionId, usage: result.usage });
 			return {
@@ -232,9 +250,13 @@ export class AgentService extends PiService {
 			const result = await this.auxiliaryRequest(
 				providerId,
 				workspacePath,
-				`Do not use tools.\n\n${buildKnowledgeExtractionPrompt(request)}`,
+				buildKnowledgeExtractionPrompt(request),
 				request.model?.modelId,
 				request.requestId,
+				{
+					existingEntities: request.existingEntities,
+					existingDiagrams: request.existingDiagrams,
+				},
 			);
 			return { ...parseKnowledgeExtraction(result.assistantText, request), usage: result.usage };
 		} catch (error) {
@@ -295,21 +317,58 @@ export class AgentService extends PiService {
 		prompt: string,
 		modelId?: string,
 		requestId?: string,
+		knowledgeInventory?: Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams">,
 	): Promise<NativeAgentResult> {
-		return this.withNativeRequest(
-			{
-				providerId,
-				workspacePath,
-				parts: [{ type: "text", text: prompt }],
-				modelId,
-				thinkingLevel: "low",
-				writable: false,
-				tools: false,
-			},
-			() => {},
-			25_000,
-			requestId,
+		return this.withOptionalNativeKnowledgeTool(knowledgeInventory, (knowledgeTool) =>
+			this.withNativeRequest(
+				{
+					providerId,
+					workspacePath,
+					parts: [{ type: "text", text: prompt }],
+					modelId,
+					thinkingLevel: "low",
+					writable: false,
+					tools: false,
+					knowledgeTool,
+				},
+				() => {},
+				25_000,
+				requestId,
+			),
 		);
+	}
+
+	private async withOptionalNativeKnowledgeTool<T>(
+		inventory:
+			Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams"> | undefined,
+		operation: (tool: NativeAgentRequest["knowledgeTool"]) => Promise<T>,
+	): Promise<T> {
+		const knowledgeTool = inventory ? await this.createNativeKnowledgeTool(inventory) : undefined;
+		try {
+			return await operation(knowledgeTool?.tool);
+		} finally {
+			await knowledgeTool?.cleanup();
+		}
+	}
+
+	private async createNativeKnowledgeTool(
+		inventory:
+			Pick<KnowledgeExtractionRequest, "existingEntities" | "existingDiagrams"> | undefined,
+	) {
+		const directory = await mkdtemp(path.join(tmpdir(), "rhyza-knowledge-"));
+		const inventoryPath = path.join(directory, "inventory.json");
+		await writeFile(
+			inventoryPath,
+			JSON.stringify(inventory ?? { existingEntities: [], existingDiagrams: [] }),
+			{ encoding: "utf8", mode: 0o600 },
+		);
+		return {
+			tool: {
+				serverPath: fileURLToPath(new URL("./knowledge-mcp-server.js", import.meta.url)),
+				inventoryPath,
+			},
+			cleanup: () => rm(directory, { recursive: true, force: true }),
+		};
 	}
 
 	private async recordSessionProvider(

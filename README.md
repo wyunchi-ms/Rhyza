@@ -251,7 +251,7 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `~/.pi/agent/models-store.json` | Pi 动态模型目录缓存。 |
 | `$CODEX_HOME/sessions/`（默认 `~/.codex/sessions/`） | Codex runtime 自己保存的原生运行记录；Rhyza 不将其作为分支历史重放。 |
 
-`.pi-graph`、`PiGraph` 用户数据目录和代码中的 `knowbranch` 是当前为了兼容旧数据而保留的内部名称。应用及 npm 包名称已改为 Rhyza；不要仅为改名手工移动这些兼容目录，否则可能造成 Workspace 映射和状态文件不一致。
+`.pi-graph` 和 `PiGraph` 是历史兼容的数据目录；代码、Bridge、IPC 和环境变量统一使用 Rhyza 命名。不要手工移动兼容目录，否则可能造成 Workspace 映射和状态文件不一致。
 
 ## 开发命令
 

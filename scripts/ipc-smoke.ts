@@ -16,7 +16,7 @@ import {
 	validateAppStateSaveRequest,
 } from "../src/shared/ipc.js";
 
-const tempRoot = await mkdtemp(path.join(os.tmpdir(), "knowbranch-ipc-smoke-"));
+const tempRoot = await mkdtemp(path.join(os.tmpdir(), "rhyza-ipc-smoke-"));
 let service: AgentService | undefined;
 
 try {

@@ -2,8 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } f
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
-import { writeFile } from "node:fs/promises";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { AgentService } from "./agent-service.js";
@@ -45,15 +44,16 @@ const applicationIcon = path.join(
 	process.platform === "win32" ? "icon.ico" : "icon.png",
 );
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined;
-const isSmoke = process.env.KNOWBRANCH_ELECTRON_SMOKE === "1";
+const isSmoke = process.env.RHYZA_ELECTRON_SMOKE === "1";
 setDefaultResultOrder("ipv4first");
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5175";
 const smokeTimeoutMs = 15_000;
+const legacyProductSlug = ["know", "branch"].join("");
 const legacyUserDataPath = app.getPath("userData");
 const dataRootPath = path.join(app.getPath("home"), ".pi-graph");
 const smokeUserDataPath = isSmoke
-	? path.join(app.getPath("temp"), `knowbranch-electron-smoke-${process.pid}`)
+	? path.join(app.getPath("temp"), `rhyza-electron-smoke-${process.pid}`)
 	: undefined;
 app.setName("Rhyza");
 if (process.platform === "win32") {
@@ -188,7 +188,7 @@ function registerIpcHandlers(): void {
 		}
 		const workspacePath = settingsStore.getWorkspacePathSync();
 		const value = appStateStore.load(workspacePath);
-		if (process.env.KNOWBRANCH_STATE_DEBUG === "1") {
+		if (process.env.RHYZA_STATE_DEBUG === "1") {
 			console.log("APP_STATE_LOAD", { workspacePath, bytes: value?.length ?? 0 });
 		}
 		event.returnValue = value;
@@ -196,7 +196,7 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.appStateSave, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateAppStateSaveRequest(payload);
-			if (process.env.KNOWBRANCH_STATE_DEBUG === "1") {
+			if (process.env.RHYZA_STATE_DEBUG === "1") {
 				console.log("APP_STATE_SAVE", {
 					workspacePath: request.workspacePath,
 					bytes: request.value.length,
@@ -325,7 +325,7 @@ function registerIpcHandlers(): void {
 			);
 			const selection = await dialog.showSaveDialog(mainWindow!, {
 				title: "Export session patch",
-				defaultPath: "knowbranch-session.patch",
+				defaultPath: "rhyza-session.patch",
 				filters: [{ name: "Git patch", extensions: ["patch", "diff"] }],
 			});
 			if (selection.canceled || !selection.filePath) return { canceled: true };
@@ -430,10 +430,15 @@ app.whenReady().then(async () => {
 		}, smokeTimeoutMs).unref();
 	}
 	settingsStore = new SettingsStore(dataRootPath, legacyUserDataPath);
-	appStateStore = new AppStateStore(dataRootPath, path.join(getAgentDir(), "knowbranch-sessions"));
+	const sessionDirectory = path.join(getAgentDir(), "rhyza-sessions");
+	await migrateLegacyDirectory(
+		path.join(getAgentDir(), `${legacyProductSlug}-sessions`),
+		sessionDirectory,
+	);
+	appStateStore = new AppStateStore(dataRootPath, sessionDirectory);
 	await appStateStore.migrateLegacyState(
 		await settingsStore.getWorkspacePath(),
-		path.join(legacyUserDataPath, "knowbranch-workspace-state.json"),
+		path.join(legacyUserDataPath, `${legacyProductSlug}-workspace-state.json`),
 	);
 	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
 	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
@@ -447,6 +452,23 @@ app.whenReady().then(async () => {
 	app.once("before-quit", () => {
 		void piService.dispose();
 	});
+
+	async function migrateLegacyDirectory(source: string, destination: string): Promise<void> {
+		try {
+			await rename(source, destination);
+		} catch (error) {
+			if (
+				typeof error === "object" &&
+				error !== null &&
+				"code" in error &&
+				((error as NodeJS.ErrnoException).code === "ENOENT" ||
+					(error as NodeJS.ErrnoException).code === "EEXIST")
+			) {
+				return;
+			}
+			throw error;
+		}
+	}
 	registerIpcHandlers();
 	mainLoopDelay.enable();
 	setInterval(() => {
@@ -560,7 +582,7 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 				let evidence;
 				while (Date.now() < deadline) {
 					await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-					const serializedState = window.knowbranch?.appStateLoad?.() ?? null;
+					const serializedState = window.rhyza?.appStateLoad?.() ?? null;
 					let parsedState = {};
 					try { parsedState = serializedState ? (JSON.parse(serializedState).state ?? {}) : {}; } catch {}
 					const chat = document.querySelector('.chat-scroll');
@@ -568,8 +590,8 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 					evidence = {
 						title: document.title,
 						bodyText: document.body?.innerText?.slice(0, 200) ?? '',
-						isElectron: window.knowbranch?.isElectron === true,
-						bridgeKeys: Object.keys(window.knowbranch ?? {}).sort(),
+						isElectron: window.rhyza?.isElectron === true,
+						bridgeKeys: Object.keys(window.rhyza ?? {}).sort(),
 						stateBytes: serializedState?.length ?? 0,
 						stateSessions: Array.isArray(parsedState.sessions) ? parsedState.sessions.length : 0,
 						stateTurns: Array.isArray(parsedState.turns) ? parsedState.turns.length : 0,
@@ -613,9 +635,7 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 			throw new Error("Renderer body did not render text.");
 		}
 		if (!evidence.isElectron) {
-			throw new Error(
-				`window.knowbranch.isElectron was not true; evidence=${JSON.stringify(evidence)}`,
-			);
+			throw new Error(`window.rhyza.isElectron was not true; evidence=${JSON.stringify(evidence)}`);
 		}
 		if (!evidence.chatAtEnd) {
 			throw new Error(

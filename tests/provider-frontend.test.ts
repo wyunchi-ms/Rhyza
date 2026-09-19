@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import type {
 	AuthBridgeEvent,
-	KnowbranchBridge,
+	RhyzaBridge,
 	ModelCatalogResponse,
 	ProviderActionResponse,
 	ProviderId,
@@ -41,7 +41,7 @@ function mockBridge() {
 		externalAuth: getProviderInfo(providerId).externalAuth,
 	});
 	const bridge: Pick<
-		KnowbranchBridge,
+		RhyzaBridge,
 		"providerStatus" | "providerLogin" | "providerLogout" | "modelCatalog" | "onAuthEvent"
 	> = {
 		providerStatus: async ({ providerId }) => {
