@@ -25,7 +25,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import ReactMarkdown from "react-markdown";
 import { createPortal } from "react-dom";
 import remarkGfm from "remark-gfm";
-import { getKnowbranchBridge } from "../../hooks/useKnowbranchBridge";
+import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
 import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types";
 import { usageTokens } from "../../utils/branchUsage";
 import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTimestamp";
@@ -785,7 +785,7 @@ function KnowledgeAnchor({
 						onDiagramClick?.(decodeURIComponent(href.slice("#knowledge/diagram/".length)));
 					} else if (href?.startsWith("http")) {
 						event.preventDefault();
-						void getKnowbranchBridge()?.openExternal({ url: href });
+						void getRhyzaBridge()?.openExternal({ url: href });
 					}
 				}}
 			>

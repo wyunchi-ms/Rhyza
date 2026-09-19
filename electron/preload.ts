@@ -1,18 +1,18 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
-	KNOWBRANCH_BRIDGE_NAME,
+	RHYZA_BRIDGE_NAME,
 	ipcChannels,
 	type AgentBridgeEvent,
 	type AgentPromptRequest,
 	type AuthBridgeEvent,
-	type KnowbranchBridge,
+	type RhyzaBridge,
 	type ModelCatalogRequest,
 	type ProviderLoginRequest,
 	type ProviderLogoutRequest,
 	type ProviderStatusRequest,
 } from "../src/shared/ipc.js";
 
-const bridge: KnowbranchBridge = {
+const bridge: RhyzaBridge = {
 	isElectron: true,
 	providerStatus: (request: ProviderStatusRequest) =>
 		ipcRenderer.invoke(ipcChannels.providerStatus, request),
@@ -64,4 +64,4 @@ const bridge: KnowbranchBridge = {
 	},
 };
 
-contextBridge.exposeInMainWorld(KNOWBRANCH_BRIDGE_NAME, bridge);
+contextBridge.exposeInMainWorld(RHYZA_BRIDGE_NAME, bridge);

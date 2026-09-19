@@ -14,7 +14,7 @@ import {
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
+import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { providerModelSelection } from "../shared/providers";
 import { useAppStore } from "../store";
 import { useConversationFocus } from "../store/conversationFocus";
@@ -122,7 +122,7 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 		else renameSession(node.sessionId, title);
 	};
 	const regenerateBranchTitles = async (parentId: string) => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		const state = useAppStore.getState();
 		const nodes = [tree.byId.get(parentId), ...(tree.childrenById.get(parentId) ?? [])].filter(

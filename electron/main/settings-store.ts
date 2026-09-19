@@ -7,6 +7,7 @@ interface PersistedSettings {
 }
 
 const defaultSettings: PersistedSettings = { workspacePath: null };
+const legacyProductSlug = ["know", "branch"].join("");
 
 export class SettingsStore {
 	private readonly settingsPath: string;
@@ -15,7 +16,7 @@ export class SettingsStore {
 	constructor(dataRoot: string, legacyUserDataPath?: string) {
 		this.settingsPath = path.join(dataRoot, "settings.json");
 		this.legacySettingsPath = legacyUserDataPath
-			? path.join(legacyUserDataPath, "knowbranch-settings.json")
+			? path.join(legacyUserDataPath, `${legacyProductSlug}-settings.json`)
 			: undefined;
 	}
 

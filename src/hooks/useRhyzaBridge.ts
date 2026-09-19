@@ -7,12 +7,12 @@ import {
 	type ProviderConnectionState,
 } from "../utils/providerConnection";
 
-export function getKnowbranchBridge() {
-	return window.knowbranch;
+export function getRhyzaBridge() {
+	return window.rhyza;
 }
 
 export function isElectronRuntime(): boolean {
-	return window.knowbranch?.isElectron === true;
+	return window.rhyza?.isElectron === true;
 }
 
 export function useElectronProviderState(providerId: ProviderId) {
@@ -22,7 +22,7 @@ export function useElectronProviderState(providerId: ProviderId) {
 	const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
 	useEffect(() => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		const connection = createProviderConnection(bridge, providerId, setState);
 		connectionRef.current = connection;
@@ -34,7 +34,7 @@ export function useElectronProviderState(providerId: ProviderId) {
 	}, [providerId]);
 
 	useEffect(() => {
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		let cancelled = false;
 		void bridge.getWorkspace().then(

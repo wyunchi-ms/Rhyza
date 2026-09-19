@@ -4,14 +4,30 @@ import { localClaudeCommand, streamCliJson } from "./cli-process.js";
 import type { NativeAgentRequest, NativeAgentResult } from "./native-agent.js";
 
 export function claudeArguments(request: NativeAgentRequest): string[] {
-	const tools = !request.tools
+	const builtInTools = !request.tools
 		? []
 		: request.writable
 			? ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 			: ["Read", "Glob", "Grep"];
+	const knowledgeTool = request.knowledgeTool
+		? "mcp__rhyza_knowledge__search_knowledge"
+		: undefined;
+	const tools = [...builtInTools, ...(knowledgeTool ? [knowledgeTool] : [])];
 	const allowedTools = tools.map((tool) =>
 		tool === "Edit" || tool === "Write" ? `${tool}(./**)` : tool,
 	);
+	const mcpServers = request.knowledgeTool
+		? {
+				rhyza_knowledge: {
+					command: process.execPath,
+					args: [request.knowledgeTool.serverPath],
+					env: {
+						ELECTRON_RUN_AS_NODE: "1",
+						RHYZA_KNOWLEDGE_INVENTORY: request.knowledgeTool.inventoryPath,
+					},
+				},
+			}
+		: {};
 	const args = [
 		"--print",
 		"--verbose",
@@ -27,7 +43,7 @@ export function claudeArguments(request: NativeAgentRequest): string[] {
 		tools.join(","),
 		"--strict-mcp-config",
 		"--mcp-config",
-		JSON.stringify({ mcpServers: {} }),
+		JSON.stringify({ mcpServers }),
 		"--disable-slash-commands",
 		"--no-chrome",
 	];

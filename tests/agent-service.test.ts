@@ -66,6 +66,7 @@ test("Claude Code routes chat, titles and knowledge through its native default m
 			assert.deepEqual(extraction.entities, []);
 			assert.equal(extraction.error, undefined);
 			assert.equal(service.requests.at(-1)?.providerId, providerId);
+			assert.ok(service.requests.at(-1)?.knowledgeTool);
 			service.reply = "Native answer";
 		}
 		const history = await service.getModelRequestHistory("claude-code");
@@ -118,7 +119,7 @@ test("returning to Copilot rebuilds its context from visible history, including 
 			path.join(directory, "pi"),
 		);
 		await service.promptAgent(prompt("github-copilot"), directory);
-		assert.equal(piRequests[0].sessionGeneration, undefined);
+		assert.match(piRequests[0].sessionGeneration ?? "", /knowledge-off$/);
 		await service.promptAgent(prompt("claude-code"), directory);
 		const transcript = [
 			{ id: "claude-answer", role: "assistant" as const, content: "Native answer" },
@@ -134,6 +135,11 @@ test("returning to Copilot rebuilds its context from visible history, including 
 		);
 		await restarted.promptAgent({ ...prompt("github-copilot"), transcript }, directory);
 		assert.equal(piRequests[2].sessionGeneration, piRequests[1].sessionGeneration);
+		await restarted.promptAgent(
+			{ ...prompt("github-copilot", "knowledge-session"), knowledgeTools: true },
+			directory,
+		);
+		assert.match(piRequests[3].sessionGeneration ?? "", /knowledge-on$/);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

@@ -5,8 +5,8 @@ import "./index.css";
 import { setWorkspacePersistencePath, useAppStore } from "./store";
 
 async function bootstrap(): Promise<void> {
-	if (window.knowbranch) {
-		const workspace = await window.knowbranch.getWorkspace();
+	if (window.rhyza) {
+		const workspace = await window.rhyza.getWorkspace();
 		setWorkspacePersistencePath(workspace.path);
 	}
 	await useAppStore.persist.rehydrate();

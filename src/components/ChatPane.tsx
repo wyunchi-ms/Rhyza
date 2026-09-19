@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { ListChecks, LoaderCircle } from "lucide-react";
 import appIcon from "../../resources/branding/icon.png";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { getKnowbranchBridge, isElectronRuntime } from "../hooks/useKnowbranchBridge";
+import { getRhyzaBridge, isElectronRuntime } from "../hooks/useRhyzaBridge";
 import { useAppStore } from "../store";
 import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
 import type { Turn } from "../types";
@@ -11,7 +11,6 @@ import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
 import { useAgentEventStream } from "../hooks/useAgentEventStream";
 import { useConversationNavigation } from "../hooks/useConversationNavigation";
 import { createId, summarize, withTimeout } from "../utils/common";
-import { buildKnowledgeContext } from "../utils/knowledgeContext";
 import { buildAgentTranscriptBeforeTurn } from "../utils/agentTranscript";
 import { selectionContinuationTarget } from "../utils/sessionFork";
 import {
@@ -156,7 +155,7 @@ export const ChatPane: React.FC = () => {
 
 		try {
 			await requestScheduler.enqueue(targetSessionId, async () => {
-				const bridge = getKnowbranchBridge();
+				const bridge = getRhyzaBridge();
 				if (!bridge) throw new Error("Chat requires the Electron desktop runtime.");
 				const queuedTurn = useAppStore.getState().turns.find((turn) => turn.id === assistantTurnId);
 				const retrievalLabel = lightweightGreeting
@@ -207,15 +206,10 @@ export const ChatPane: React.FC = () => {
 					targetSessionId,
 					userTurnId,
 				);
-				const knowledgeContext = lightweightGreeting
-					? undefined
-					: buildKnowledgeContext(
-							agentPrompt,
-							useAppStore.getState().entities,
-							useAppStore.getState().relations,
-							useAppStore.getState().diagrams,
-							sourceHits,
-						);
+				const knowledgeInventory = buildKnowledgeInventory(
+					useAppStore.getState().entities,
+					useAppStore.getState().diagrams,
+				);
 				store.updateTurn(assistantTurnId, {
 					status: "running",
 					summary: `${provider.label} is running`,
@@ -232,7 +226,8 @@ export const ChatPane: React.FC = () => {
 					transcript,
 					prompt: agentPrompt,
 					images: promptImages,
-					knowledgeContext,
+					knowledgeTools: !lightweightGreeting && store.settings.knowledgeTools,
+					knowledgeInventory,
 					thinkingLevel: lightweightGreeting ? "off" : store.settings.thinkingLevel,
 					model: selectedModel,
 					writable: true,
@@ -375,7 +370,7 @@ export const ChatPane: React.FC = () => {
 	const handleFork = async (turn: Turn, index: number) => {
 		const result = store.forkSession(turn.id);
 		if (!result) return;
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) return;
 		const model = providerModelSelection(store.settings);
 		const originalText =
@@ -429,7 +424,7 @@ export const ChatPane: React.FC = () => {
 		}
 		if (target.mode === "append") {
 			const snapshot = createSelectionAppendDebugSnapshot(current, selected.turnId, target);
-			const dumpWriter = getKnowbranchBridge()?.forkDebugDump;
+			const dumpWriter = getRhyzaBridge()?.forkDebugDump;
 			if (typeof dumpWriter === "function") {
 				void dumpWriter({
 					kind: "selection-append",

@@ -18,7 +18,7 @@ import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHisto
 import { DiagramViewer } from "../components/DiagramViewer";
 import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
 import { MermaidDiagram } from "../components/MermaidDiagram";
-import { getKnowbranchBridge } from "../hooks/useKnowbranchBridge";
+import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { providerModelSelection } from "../shared/providers";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { useAppStore } from "../store";
@@ -80,7 +80,7 @@ const Knowledge = () => {
 	}, [selected]);
 	const rebuildRelations = async () => {
 		if (activeEntities.length < 2 || rebuildState.status === "running") return;
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge) {
 			setRebuildState({
 				status: "error",
@@ -546,7 +546,7 @@ function EntityMetaPanel({
 	}, [entity.id]);
 	const reindexSources = async () => {
 		if (sourceReindexState.status === "running") return;
-		const bridge = getKnowbranchBridge();
+		const bridge = getRhyzaBridge();
 		if (!bridge)
 			return setSourceReindexState({
 				status: "error",

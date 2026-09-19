@@ -1,6 +1,6 @@
 import type {
 	AuthBridgeEvent,
-	KnowbranchBridge,
+	RhyzaBridge,
 	ModelInfo,
 	ProviderId,
 	ProviderStatusResponse,
@@ -10,7 +10,7 @@ import { errorToMessage } from "../shared/value";
 
 type ProviderAction = "refresh" | "login" | "logout";
 type ProviderBridge = Pick<
-	KnowbranchBridge,
+	RhyzaBridge,
 	"providerStatus" | "providerLogin" | "providerLogout" | "modelCatalog" | "onAuthEvent"
 >;
 

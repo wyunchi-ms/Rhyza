@@ -26,7 +26,7 @@ const Layout: React.FC = () => {
 	const isCompactViewport = viewportWidth <= 900;
 	const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
-	const sidebarSize = usePanelSize("knowbranch-layout-sidebar-width", 260, 200, sidebarMax);
+	const sidebarSize = usePanelSize("rhyza-layout-sidebar-width", 260, 200, sidebarMax);
 	const [graphMode, setGraphModeState] = useState(false);
 	const [graphVisited, setGraphVisited] = useState(false);
 	const setGraphMode = (enabled: boolean) => {

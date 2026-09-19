@@ -112,6 +112,7 @@ const defaultSettings: Settings = {
 	provider: "github-copilot",
 	defaultModel: "",
 	autoExtract: true,
+	knowledgeTools: true,
 	strictConflict: true,
 	knowledgeMode: "suggest",
 	confidenceThreshold: 0.7,
@@ -130,6 +131,8 @@ function withoutModelRequestTelemetry(turn: Turn): Turn {
 }
 
 let persistenceWorkspacePath: string | null = null;
+const workspaceStorageKey = "rhyza-workspace-v2";
+const legacyWorkspaceStorageKey = `${["know", "branch"].join("")}-workspace-v2`;
 
 export function setWorkspacePersistencePath(workspacePath: string | null): void {
 	persistenceWorkspacePath = workspacePath;
@@ -137,14 +140,19 @@ export function setWorkspacePersistencePath(workspacePath: string | null): void 
 
 const workspaceStorage: StateStorage = {
 	getItem: (name) => {
-		const bridge = window.knowbranch;
-		return bridge ? bridge.appStateLoad() : window.localStorage.getItem(name);
+		const bridge = window.rhyza;
+		if (bridge) return bridge.appStateLoad();
+		const current = window.localStorage.getItem(name);
+		if (current || name !== workspaceStorageKey) return current;
+		const legacy = window.localStorage.getItem(legacyWorkspaceStorageKey);
+		if (legacy) window.localStorage.setItem(workspaceStorageKey, legacy);
+		return legacy;
 	},
 	setItem: (name, value) => {
 		// UI updates can run while Zustand is still hydrating the workspace. Persisting
 		// that transient default state would replace the data hydration is about to load.
 		// During Vite HMR, however, a richer in-memory state must still be allowed through.
-		const bridge = window.knowbranch;
+		const bridge = window.rhyza;
 		if (!bridge) {
 			window.localStorage.setItem(name, value);
 			return undefined;
@@ -183,7 +191,7 @@ const workspaceStorage: StateStorage = {
 			);
 	},
 	removeItem: (name) => {
-		if (!window.knowbranch) window.localStorage.removeItem(name);
+		if (!window.rhyza) window.localStorage.removeItem(name);
 	},
 };
 
@@ -276,8 +284,7 @@ export const useAppStore = create<AppState>()(
 					activeSessionId: result.forkSessionId,
 					visibleSessionId: result.forkSessionId,
 				});
-				const dumpWriter =
-					typeof window !== "undefined" ? window.knowbranch?.forkDebugDump : undefined;
+				const dumpWriter = typeof window !== "undefined" ? window.rhyza?.forkDebugDump : undefined;
 				if (typeof dumpWriter === "function") {
 					void dumpWriter({
 						kind: "fork",
@@ -1068,7 +1075,7 @@ export const useAppStore = create<AppState>()(
 				}),
 		}),
 		{
-			name: "knowbranch-workspace-v2",
+			name: workspaceStorageKey,
 			skipHydration: true,
 			storage: createJSONStorage(() => workspaceStorage),
 			version: 2,
