@@ -533,6 +533,7 @@ export const ChatPane: React.FC = () => {
 					onClick={store.toggleRightPane}
 					title="Show workspace TODOs"
 					aria-label="Show workspace TODOs"
+					aria-pressed={store.rightPaneOpen && store.rightPaneView === "todo"}
 				>
 					<ListChecks size={17} />
 				</button>
@@ -591,6 +592,11 @@ export const ChatPane: React.FC = () => {
 					<div className="chat-empty">
 						<img className="brand-mark large" src={appIcon} alt="" width={40} height={40} />
 						<h2>What do you want to understand?</h2>
+						<p>Start with a question. Follow a new thread when an idea deserves a closer look.</p>
+						<div className="chat-empty-hint">
+							<span>Use @ to reference knowledge</span>
+							<span>Use / for commands</span>
+						</div>
 					</div>
 				)}
 			</div>

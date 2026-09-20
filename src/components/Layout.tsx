@@ -3,6 +3,7 @@ import {
 	Library,
 	FolderOpen,
 	GitBranch,
+	History,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Search,
@@ -10,7 +11,8 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import appIcon from "../../resources/branding/icon.png";
 import { useAppStore } from "../store";
 import { GlobalSearch } from "./GlobalSearch";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
@@ -46,9 +48,22 @@ const Layout: React.FC = () => {
 	const sidebarWidth = Math.min(currentSize.value, currentMax);
 	const sidebarVisible = sidebarOpen && (!isCompactViewport || compactSidebarOpen);
 	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+	const { pathname } = useLocation();
 	useEffect(() => {
 		if (!isCompactViewport) setCompactSidebarOpen(false);
 	}, [isCompactViewport]);
+	useEffect(() => {
+		setCompactSidebarOpen(false);
+	}, [pathname]);
+	useEffect(() => {
+		if (!isCompactViewport || !compactSidebarOpen) return;
+		const dismissSidebar = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			setCompactSidebarOpen(false);
+		};
+		window.addEventListener("keydown", dismissSidebar);
+		return () => window.removeEventListener("keydown", dismissSidebar);
+	}, [isCompactViewport, compactSidebarOpen]);
 
 	const openSidebar = () => {
 		if (isCompactViewport) {
@@ -82,20 +97,38 @@ const Layout: React.FC = () => {
 		return () => window.removeEventListener("keydown", openSearch);
 	}, []);
 	return (
-		<div className="app-shell">
+		<div className={clsx("app-shell", !sidebarVisible && "has-collapsed-sidebar")}>
+			<a
+				className="skip-to-content"
+				href="#main-content"
+				onClick={(event) => {
+					event.preventDefault();
+					document.getElementById("main-content")?.focus();
+				}}
+			>
+				Skip to content
+			</a>
 			<aside
 				className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
+				aria-label="Workspace sidebar"
+				aria-hidden={!sidebarVisible}
+				inert={!sidebarVisible}
 				style={{
 					width: sidebarVisible ? sidebarWidth : 0,
 					flexBasis: sidebarVisible ? sidebarWidth : 0,
 				}}
 			>
 				<div className="app-sidebar-brand">
-					<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
-						<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
-						<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />
-						<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label="Settings" />
-					</nav>
+					<NavLink
+						to="/"
+						end
+						className="sidebar-brand-link"
+						aria-label="Rhyza workspace"
+						onClick={() => setCompactSidebarOpen(false)}
+					>
+						<img src={appIcon} alt="" width={26} height={26} />
+						<span>Rhyza</span>
+					</NavLink>
 					<button
 						type="button"
 						className="sidebar-icon-button"
@@ -115,6 +148,12 @@ const Layout: React.FC = () => {
 						<PanelLeftClose size={17} />
 					</button>
 				</div>
+				<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
+					<SidebarNavIcon to="/knowledge" icon={<Library size={15} />} label="Knowledge" />
+					<SidebarNavIcon to="/sources" icon={<FolderOpen size={15} />} label="Sources" />
+					<SidebarNavIcon to="/changes" icon={<History size={15} />} label="Changes" />
+					<SidebarNavIcon to="/settings" icon={<Settings size={15} />} label="Settings" />
+				</nav>
 				{/* Retain each view's local state and DOM scroll position across switches. */}
 				<div className="sidebar-view-content" hidden={graphMode}>
 					<SessionTree
@@ -178,7 +217,7 @@ const Layout: React.FC = () => {
 					<PanelLeftOpen size={18} />
 				</button>
 			)}
-			<main className="app-main">
+			<main className="app-main" id="main-content" tabIndex={-1}>
 				<Outlet />
 			</main>
 			<GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
@@ -195,6 +234,7 @@ function SidebarNavIcon({ to, icon, label }: { to: string; icon: React.ReactNode
 			aria-label={label}
 		>
 			{icon}
+			<span>{label}</span>
 		</NavLink>
 	);
 }

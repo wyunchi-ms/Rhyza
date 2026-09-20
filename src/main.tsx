@@ -2,6 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import "./interface.css";
+import "./pages/library-pages.css";
+import "./pages/settings-page.css";
 import { setWorkspacePersistencePath, useAppStore } from "./store";
 
 async function bootstrap(): Promise<void> {
