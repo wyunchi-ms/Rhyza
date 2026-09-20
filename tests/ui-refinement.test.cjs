@@ -278,6 +278,26 @@ if (!process.versions.electron) {
 		browser.setContentSize(1440, 960);
 		await navigate("/", ".chat-topbar h1");
 		assert.equal(
+			await host('document.querySelector(".app-sidebar-brand").textContent.trim()'),
+			"",
+			"sidebar titlebar only renders icon controls",
+		);
+		assert.deepEqual(
+			await host(`[...document.querySelector(".app-sidebar-brand").children]
+				.map(element => element.matches('[aria-label="Close sidebar"]')
+					? "toggle"
+					: element.className)`),
+			["toggle", "sidebar-header-actions"],
+			"sidebar toggle stays at the top-left before the navigation actions",
+		);
+		assert.equal(
+			await host(
+				'document.querySelectorAll(".sidebar-header-actions .sidebar-header-navigation a").length',
+			),
+			4,
+			"search and the four icon-only destinations share one titlebar row",
+		);
+		assert.equal(
 			await host('document.querySelectorAll(".assistant-body .markdown-body li").length'),
 			3,
 			"assistant Markdown keeps its list structure",

@@ -12,7 +12,6 @@ import {
 import type React from "react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import appIcon from "../../resources/branding/icon.png";
 import { useAppStore } from "../store";
 import { GlobalSearch } from "./GlobalSearch";
 import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResizeHandle";
@@ -119,25 +118,6 @@ const Layout: React.FC = () => {
 				}}
 			>
 				<div className="app-sidebar-brand">
-					<NavLink
-						to="/"
-						end
-						className="sidebar-brand-link"
-						aria-label="Rhyza workspace"
-						onClick={() => setCompactSidebarOpen(false)}
-					>
-						<img src={appIcon} alt="" width={26} height={26} />
-						<span>Rhyza</span>
-					</NavLink>
-					<button
-						type="button"
-						className="sidebar-icon-button"
-						onClick={() => setGlobalSearchOpen(true)}
-						title="Search chats (Ctrl+Shift+F)"
-						aria-label="Search all chats"
-					>
-						<Search size={16} />
-					</button>
 					<button
 						type="button"
 						className="sidebar-icon-button"
@@ -147,13 +127,24 @@ const Layout: React.FC = () => {
 					>
 						<PanelLeftClose size={17} />
 					</button>
+					<div className="sidebar-header-actions">
+						<button
+							type="button"
+							className="sidebar-icon-button"
+							onClick={() => setGlobalSearchOpen(true)}
+							title="Search chats (Ctrl+Shift+F)"
+							aria-label="Search all chats"
+						>
+							<Search size={16} />
+						</button>
+						<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
+							<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
+							<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />
+							<SidebarNavIcon to="/changes" icon={<History size={16} />} label="Changes" />
+							<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label="Settings" />
+						</nav>
+					</div>
 				</div>
-				<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
-					<SidebarNavIcon to="/knowledge" icon={<Library size={15} />} label="Knowledge" />
-					<SidebarNavIcon to="/sources" icon={<FolderOpen size={15} />} label="Sources" />
-					<SidebarNavIcon to="/changes" icon={<History size={15} />} label="Changes" />
-					<SidebarNavIcon to="/settings" icon={<Settings size={15} />} label="Settings" />
-				</nav>
 				{/* Retain each view's local state and DOM scroll position across switches. */}
 				<div className="sidebar-view-content" hidden={graphMode}>
 					<SessionTree
@@ -234,7 +225,6 @@ function SidebarNavIcon({ to, icon, label }: { to: string; icon: React.ReactNode
 			aria-label={label}
 		>
 			{icon}
-			<span>{label}</span>
 		</NavLink>
 	);
 }
