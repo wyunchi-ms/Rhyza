@@ -5,7 +5,6 @@ import {
 	AlertCircle,
 	ChevronRight,
 	LoaderCircle,
-	LocateFixed,
 	Pencil,
 	Plus,
 	Sparkles,
@@ -354,15 +353,6 @@ const SessionGroup = ({
 							{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
 							<ProgressMarker status={session?.progressStatus} active={isCurrent} />
 							<SessionNodeTitle title={node.title} />
-							{isInView && (
-								<span
-									className="session-viewport-indicator"
-									title="Currently in view"
-									aria-label="Currently in view"
-								>
-									<LocateFixed size={12} />
-								</span>
-							)}
 							{(session?.titlePending || running) && (
 								<LoaderCircle
 									size={12}

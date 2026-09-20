@@ -23,6 +23,7 @@ const bridge: RhyzaBridge = {
 	modelCatalog: (request?: ModelCatalogRequest) =>
 		ipcRenderer.invoke(ipcChannels.modelCatalog, request),
 	pluginList: () => ipcRenderer.invoke(ipcChannels.pluginList),
+	composerSkills: (request) => ipcRenderer.invoke(ipcChannels.composerSkills, request),
 	pluginInstall: (request) => ipcRenderer.invoke(ipcChannels.pluginInstall, request),
 	pluginSelectLocal: () => ipcRenderer.invoke(ipcChannels.pluginSelectLocal),
 	pluginRemove: (request) => ipcRenderer.invoke(ipcChannels.pluginRemove, request),

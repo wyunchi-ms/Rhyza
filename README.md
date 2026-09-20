@@ -73,6 +73,10 @@ npm ci
 
 `npm ci` 会安装 React、Electron、Pi SDK、Codex SDK 及其对应平台 binary、Mermaid 等依赖。Claude Code 需单独安装。Archify 是可选扩展，不再随主程序自动加载或打包；本地构建和安装方式见下方 Diagram 模式。首次安装 Electron 时需要下载 Electron binary，耗时取决于网络环境。
 
+微软 npm 代理源尚未提供部分间接依赖的新版包，因此 `overrides` 暂时将 `proxy-addr`、`fast-uri` 和 `hono` 固定到该源可用且满足上游版本范围的版本。更新时需确认代理源中的包可下载。若安装遇到 `E404`，先解决依赖下载失败再启动 Electron；随后出现的 SDK `TS2307` 错误通常是安装未完成导致的。
+
+项目的 `.npmrc` 保留所选 registry 返回的下载地址，避免全局 `replace-registry-host=always` 将 Azure feed 的路径拼接到代理地址后造成 404。锁文件保留版本与完整性校验，不固化 registry 下载地址，安装时通过当前配置的源解析。
+
 如果使用 HTTPS：
 
 ```powershell
@@ -103,7 +107,7 @@ npm run electron:dev
 PowerShell 中可以定位占用进程：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 5174 -State Listen |
+Get-NetTCPConnection -LocalPort 5175 -State Listen |
   Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
@@ -267,10 +271,32 @@ Windows 中的 `~` 指当前用户目录，例如 `C:\Users\<username>`。
 | `npm run smoke:mvp` | 验证核心知识与分支状态逻辑。 |
 | `npm run smoke:state-store` | 验证 Workspace 状态隔离、迁移和防串档逻辑。 |
 | `npm run smoke:archify` | 用官方示例验证 Archify showcase 交付和 Mermaid fallback。 |
-| `npm run diagnostics:analyze` | 汇总 UI 卡顿热力图、慢操作和最近的 Archify 渲染/降级阶段。 |
+| `npm run diagnostics:analyze` | 汇总 UI 卡顿区域、分阶段耗时、慢输入时间窗口和主进程慢操作。 |
 | `npm run electron:smoke` | 构建并运行 Electron 端到端烟雾检查。 |
 
+输入卡顿排查：重新构建并启动 Electron（`npm run build` 后 `npm run electron:start`，或 `npm run electron:dev`），分别尝试普通输入、中文输入法、粘贴长文本、`@` / `/` 菜单，以及 Agent 输出期间输入。复现后保持窗口打开至少 10 秒，再运行 `npm run diagnostics:analyze`。日志自动写入 `~/.pi-graph/diagnostics/performance-YYYY-MM-DD.jsonl`；也可以用 `npm run diagnostics:analyze -- <日志路径>` 分析指定文件。
+
+输入打点只保存固定类别、计数和耗时，不保存文字、按键或剪贴板内容。所有时间单位均为毫秒；汇总包含次数、平均值、最大值和超过 16 / 50 / 100ms 的次数（旧日志没有阈值计数）。
+
+| 打点 | 排查方向 |
+| --- | --- |
+| `composer-keydown-queue`、`composer-input-{text,ime,paste}-queue` | 浏览器事件创建到处理开始的等待时间，可能受主线程阻塞影响；不是硬件按键延迟。 |
+| `composer-input-*-handler`、`composer-update-draft` | 输入事件处理、文本组合和状态更新调用。 |
+| `composer-parse-references`、`composer-strip-references` | 引用解析和显示文本提取。 |
+| `composer-reference-items`、`composer-menu-filter`、`composer-menu-trigger` | 候选数据构建、搜索和触发匹配。 |
+| `composer-textarea-layout`、`composer-menu-scroll` | 输入框自适应高度及候选项滚动造成的同步布局。 |
+| `composer-input-*-to-commit` | 输入处理开始至输入框 layout effect（含 React 更新和上述布局）；不包含事件排队。 |
+| `composer-input-*-after-frame` | 事件创建至更新提交后的 rAF + timer 回调，近似一次绘制机会；不是精确绘制时间或 INP。隐藏窗口时取消待采样数据。 |
+| `composer-render-commit`、`chat-render-commit` | 组件函数开始到 layout effect 的墙钟时间，用于比较输入框与聊天面板的更新成本；不是 React Profiler 的纯渲染 CPU 时间。 |
+| `composer-skills-request` | 打开候选菜单时技能加载的异步等待时间，不等同于 UI 阻塞时间。 |
+| `chat-turn-render-commit`、`chat-markdown-render-commit` | 单条消息及 Markdown 的渲染提交耗时；纯输入不应触发历史消息渲染，单条回复更新应只更新相应消息。 |
+| `state-persist-serialize-dispatch` | 持久化数据序列化及同步派发耗时，不包含异步保存往返。纯界面状态变化会在序列化前跳过。 |
+
+分析脚本列出最慢的 10 个输入采样窗口，并展示同一窗口的聊天重渲染、流式更新、持久化耗时及长任务。各阶段会重叠，不能相加；同一 10 秒窗口出现的操作仅表示相关性，不能单凭它认定因果。输入类别来自浏览器 InputEvent；中文输入法的最终提交在部分系统上可能归入 text。`sample-dropped` 表示诊断队列达到上限后丢弃了样本。诊断只在内存聚合，沿用每 10 秒批量写入，避免每次按键发送 IPC 或写日志。
+
 提交前建议运行：
+
+`npm run test:chat-performance` 使用临时数据和隐藏 Electron 窗口验证输入隔离、增量消息渲染、草稿发送及保存去重，不访问真实会话。
 
 ```powershell
 npm run typecheck

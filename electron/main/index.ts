@@ -7,6 +7,7 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { AgentService } from "./agent-service.js";
 import { PiPluginService } from "./pi-plugin-service.js";
+import { listComposerSkills } from "./composer-skills.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
 import {
@@ -244,6 +245,21 @@ function registerIpcHandlers(): void {
 	);
 	ipcMain.handle(ipcChannels.pluginList, async (event) =>
 		withValidSender(event, () => piPluginService.list()),
+	);
+	ipcMain.handle(ipcChannels.composerSkills, async (event, payload) =>
+		withValidSender(event, async () => {
+			const { providerId } = validateProviderStatusRequest(payload);
+			const plugins = providerId !== "claude-code" ? await piPluginService.list() : [];
+			return listComposerSkills({
+				providerId,
+				home: app.getPath("home"),
+				workspace: await settingsStore.getWorkspacePath(),
+				agentDir: getAgentDir(),
+				pluginPaths: plugins.flatMap((plugin) =>
+					plugin.installedPath ? [plugin.installedPath] : [],
+				),
+			});
+		}),
 	);
 	ipcMain.handle(ipcChannels.pluginInstall, async (event, payload) =>
 		withValidSender(event, async () => {

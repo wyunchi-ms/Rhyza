@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { ListChecks, LoaderCircle } from "lucide-react";
 import appIcon from "../../resources/branding/icon.png";
-import React, { useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getRhyzaBridge, isElectronRuntime } from "../hooks/useRhyzaBridge";
 import { useAppStore } from "../store";
 import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
@@ -33,24 +33,24 @@ import { branchSwitchEndEvent, branchSwitchStartEvent } from "../utils/branchSwi
 import { errorToMessage } from "../shared/value";
 import { getProviderInfo, providerModelSelection } from "../shared/providers";
 import { SelectionAskPopover, type TextSelectionAnchor } from "./chat/SelectionAskPopover";
-import { ChatComposer, type ComposerImage } from "./chat/ChatComposer";
+import { ChatComposer, type ComposerDraftHandle } from "./chat/ChatComposer";
 import { ConversationFind } from "./chat/ConversationFind";
 import { TurnMessage } from "./chat/TurnMessage";
 import { TurnContextMenu, type TurnContextMenuState } from "./chat/TurnContextMenu";
 import { TurnNavigator } from "./TurnNavigator";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { isLightweightGreeting } from "../utils/promptWorkPolicy";
+import { buildComposerReferenceContext } from "../utils/composerInput";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
 export const ChatPane: React.FC = () => {
 	const renderStartedAt = performance.now();
 	const store = useAppStore();
-	const [input, setInput] = useState("");
+	const composerDraftRef = useRef<ComposerDraftHandle>(null);
 	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
 	const [forkDebugStatus, setForkDebugStatus] = useState<ForkDebugEventDetail | null>(null);
-	const [images, setImages] = useState<ComposerImage[]>([]);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
 	const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
 	const [turnContextMenu, setTurnContextMenu] = useState<TurnContextMenuState | null>(null);
@@ -109,10 +109,12 @@ export const ChatPane: React.FC = () => {
 		quotedTurnId?: string;
 		question?: string;
 	}) => {
+		const { input, images } = composerDraftRef.current?.getSnapshot() ?? { input: "", images: [] };
 		const prompt = (options?.question ?? input).trim();
 		const targetSessionId = options?.sessionId ?? activeSessionId;
 		if ((!prompt && images.length === 0) || !targetSessionId) return;
 		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
+		const referenceContext = buildComposerReferenceContext(prompt, store);
 		const lightweightGreeting = isLightweightGreeting(prompt, {
 			hasImages: promptImages.length > 0,
 			hasSelection: Boolean(options?.selectedText),
@@ -120,8 +122,7 @@ export const ChatPane: React.FC = () => {
 		const agentPrompt = options?.selectedText
 			? `Answer the user's question using the selected passage as the primary focus. The selected passage identifies what the user is asking about and is explicit evidence of a learning gap; extract any durable concept it names into the knowledge base. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
 			: prompt;
-		setInput("");
-		setImages([]);
+		composerDraftRef.current?.clear();
 		setSendError(null);
 		const now = new Date().toISOString();
 		const userTurnId = createId("turn");
@@ -225,6 +226,7 @@ export const ChatPane: React.FC = () => {
 					forkedFromTurnId: targetSession?.forkedFromTurnId,
 					transcript,
 					prompt: agentPrompt,
+					knowledgeContext: referenceContext || undefined,
 					images: promptImages,
 					knowledgeTools: !lightweightGreeting && store.settings.knowledgeTools,
 					knowledgeInventory,
@@ -367,7 +369,11 @@ export const ChatPane: React.FC = () => {
 		}
 	};
 
-	const handleFork = async (turn: Turn, index: number) => {
+	const handleFork = useCallback(async (turn: Turn) => {
+		const store = useAppStore.getState();
+		const sessionTurns = store.turns.filter((item) => item.sessionId === store.activeSessionId);
+		const index = sessionTurns.findIndex((item) => item.id === turn.id);
+		if (index < 0) return;
 		const result = store.forkSession(turn.id);
 		if (!result) return;
 		const bridge = getRhyzaBridge();
@@ -412,7 +418,17 @@ export const ChatPane: React.FC = () => {
 			forkTitle.summary ?? branchPoint?.title ?? "Conversation",
 		);
 		current.renameSession(result.forkSessionId, forkTitle.summary ?? "New branch", true);
-	};
+	}, []);
+
+	const handleTextSelection = useCallback((turnId: string, text: string, rect: DOMRect) => {
+		setSelection({ turnId, text, x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+	}, []);
+	const handleOpenContextMenu = useCallback(
+		(turnId: string, position: { x: number; y: number }) => {
+			setTurnContextMenu({ turnId, ...position });
+		},
+		[],
+	);
 
 	const sendSelectionQuestion = (question: string, selected = selection) => {
 		if (!selected || !question.trim()) return;
@@ -563,19 +579,12 @@ export const ChatPane: React.FC = () => {
 						entities={store.entities}
 						relations={store.relations}
 						diagrams={store.diagrams}
-						onFork={() => void handleFork(turn, index)}
+						onFork={handleFork}
 						canFork={turn.role === "assistant" && index < sessionTurns.length - 1}
 						onEntityClick={openEntityPreview}
 						onDiagramClick={openDiagramPreview}
-						onTextSelection={(text, rect) =>
-							setSelection({
-								turnId: turn.id,
-								text,
-								x: rect.left + rect.width / 2,
-								y: rect.bottom + 8,
-							})
-						}
-						onOpenContextMenu={({ x, y }) => setTurnContextMenu({ turnId: turn.id, x, y })}
+						onTextSelection={handleTextSelection}
+						onOpenContextMenu={handleOpenContextMenu}
 					/>
 				))}
 				{sessionTurns.length === 0 && (
@@ -624,8 +633,7 @@ export const ChatPane: React.FC = () => {
 				</div>
 			)}
 			<ChatComposer
-				input={input}
-				images={images}
+				draftRef={composerDraftRef}
 				entities={store.entities}
 				diagrams={store.diagrams}
 				contextRequest={sessionTurns.flatMap((turn) => turn.modelRequests ?? []).slice(-1)[0]}
@@ -636,8 +644,6 @@ export const ChatPane: React.FC = () => {
 						? getProviderInfo(store.settings.provider).runtimeLabel
 						: "Electron runtime required for agent execution"
 				}
-				onInputChange={setInput}
-				onImagesChange={setImages}
 				onError={setSendError}
 				onSend={() => void handleSend()}
 			/>

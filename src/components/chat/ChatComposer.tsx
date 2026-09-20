@@ -1,5 +1,10 @@
 import {
 	AtSign,
+	MessageCircle,
+	FolderOpen,
+	Package,
+	Settings,
+	Slash,
 	Brain,
 	Check,
 	ChevronDown,
@@ -10,15 +15,38 @@ import {
 	Send,
 	X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+	type Ref,
+	useEffect,
+	useId,
+	useImperativeHandle,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
 import type {
+	ComposerSkillInfo,
 	AgentModelRequestSnapshot,
 	AgentPromptImage,
 	ModelInfo,
 	ProviderId,
 } from "../../shared/ipc";
 import type { Diagram, Entity } from "../../types";
-import { composeInput, stripReferences } from "../../utils/composerInput";
+import {
+	composeInput,
+	stripReferences,
+	createReference,
+	parseReferences,
+	type ComposerReference,
+} from "../../utils/composerInput";
+import {
+	getComposerTrigger,
+	filterComposerItems,
+	type ComposerTrigger,
+} from "../../utils/composerMenu";
 import { analyzeContextComposition, residentInputTokens } from "../../utils/contextRot";
 import { DiagramTypeIcon } from "../DiagramTypeIcon";
 import { useProviderModels } from "../../hooks/useProviderModels";
@@ -27,49 +55,90 @@ import { useAppStore } from "../../store";
 import { CacheStatus } from "./CacheStatus";
 import { refreshCacheClock } from "../../hooks/useCacheClock";
 import { lastCacheRequest } from "../../utils/cacheStatus";
+import { measurePerformance, recordPerformanceTiming } from "../../utils/performanceMarks";
+import { createBrowserInputDiagnostics } from "../../utils/inputDiagnostics";
 
 const maxPromptImageBytes = 4_500_000;
 const composerMaxHeight = 136;
-const knowledgeReferencePattern = /\[@([^\]]+)\]\(#knowledge\/(entity|diagram)\/([^)]+)\)/g;
 export type ComposerImage = AgentPromptImage & { id: string; preview: string };
+export type ComposerDraftHandle = {
+	getSnapshot: () => { input: string; images: ComposerImage[] };
+	clear: () => void;
+};
 
-type KnowledgeMention = {
+type ComposerItem = {
 	id: string;
-	kind: "entity" | "diagram";
 	name: string;
 	detail: string;
+	group: string;
+	keywords?: string;
+	badge?: string;
+	kind?: ComposerReference["kind"];
 	diagramType?: Diagram["type"];
-	raw: string;
+	reference?: ComposerReference;
+	action?: () => void;
 };
-type MentionState = { start: number; end: number; query: string; activeIndex: number };
+type RuntimeMenu = "provider" | "model" | "thinking" | "context" | null;
+type MenuState = ComposerTrigger & {
+	activeIndex: number;
+	page?: "model" | "thinking" | "provider";
+};
 
 export function ChatComposer({
-	input,
-	images,
+	draftRef,
 	entities,
 	diagrams,
 	contextRequest,
 	isSending,
 	error,
 	runtimeCaption,
-	onInputChange,
-	onImagesChange,
 	onError,
 	onSend,
 }: {
-	input: string;
-	images: ComposerImage[];
+	draftRef: Ref<ComposerDraftHandle>;
 	entities: Entity[];
 	diagrams: Diagram[];
 	contextRequest?: AgentModelRequestSnapshot;
 	isSending: boolean;
 	error: string | null;
 	runtimeCaption: string;
-	onInputChange: (value: string) => void;
-	onImagesChange: (images: ComposerImage[]) => void;
 	onError: (error: string | null) => void;
 	onSend: () => void;
 }) {
+	const renderStartedAt = performance.now();
+	// Keystrokes stay in this subtree; sending reads a committed snapshot once.
+	const [input, onInputChange] = useState("");
+	const [images, onImagesChange] = useState<ComposerImage[]>([]);
+	useImperativeHandle(
+		draftRef,
+		() => ({
+			getSnapshot: () => ({ input, images }),
+			clear: () => {
+				onInputChange("");
+				onImagesChange([]);
+			},
+		}),
+		[input, images],
+	);
+	const [inputDiagnostics] = useState(createBrowserInputDiagnostics);
+	useEffect(() => {
+		const reset = () => inputDiagnostics.reset();
+		document.addEventListener("visibilitychange", reset);
+		return () => {
+			document.removeEventListener("visibilitychange", reset);
+			reset();
+		};
+	}, [inputDiagnostics]);
+	const navigate = useNavigate();
+	const menuId = useId();
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const sessions = useAppStore((state) => state.sessions);
+	const sources = useAppStore((state) => state.sources);
+	const activeSessionId = useAppStore((state) => state.activeSessionId);
+	const [skills, setSkills] = useState<ComposerSkillInfo[]>([]);
+	const [skillsError, setSkillsError] = useState<string | null>(null);
+	const [skillsLoading, setSkillsLoading] = useState(false);
+	const [runtimeMenu, setRuntimeMenu] = useState<RuntimeMenu>(null);
 	const imageInputRef = useRef<HTMLInputElement | null>(null);
 	const send = () => {
 		refreshCacheClock();
@@ -87,76 +156,279 @@ export function ChatComposer({
 	const cacheMatchesProvider = contextRequest
 		? contextRequest.provider === provider.id
 		: provider.id === "github-copilot";
-	const [mention, setMention] = useState<MentionState | null>(null);
+	const [mention, setMention] = useState<MenuState | null>(null);
 	const [multiline, setMultiline] = useState(false);
-	const references = useMemo(() => parseReferences(input), [input]);
+	const references = useMemo(
+		() => measurePerformance("composer-parse-references", () => parseReferences(input)),
+		[input],
+	);
 	const diagramTypes = useMemo(
 		() => new Map(diagrams.map((diagram) => [diagram.id, diagram.type])),
 		[diagrams],
 	);
-	const draft = useMemo(() => stripReferences(input), [input]);
-	const knowledgeItems = useMemo<KnowledgeMention[]>(
-		() => [
-			...entities
-				.filter((entity) => !entity.deletedAt)
-				.map((entity) => ({
-					id: entity.id,
-					kind: "entity" as const,
-					name: entity.name,
-					detail: entity.type,
-					raw: createReference(entity.name, "entity", entity.id),
-				})),
-			...diagrams
-				.filter((diagram) => !diagram.deletedAt)
-				.map((diagram) => ({
-					id: diagram.id,
-					kind: "diagram" as const,
-					name: diagram.name,
-					detail: diagram.type,
-					diagramType: diagram.type,
-					raw: createReference(diagram.name, "diagram", diagram.id),
-				})),
-		],
-		[entities, diagrams],
+	const draft = useMemo(
+		() => measurePerformance("composer-strip-references", () => stripReferences(input)),
+		[input],
 	);
-	const mentionItems = useMemo(() => {
-		if (!mention) return [];
-		const query = mention.query.toLocaleLowerCase();
-		return knowledgeItems
-			.filter((item) => `${item.name} ${item.detail}`.toLocaleLowerCase().includes(query))
-			.slice(0, 8);
-	}, [knowledgeItems, mention]);
+	const menuOpen = mention !== null;
+	useEffect(() => {
+		if (!menuOpen) return;
+		const bridge = getRhyzaBridge();
+		setSkills([]);
+		setSkillsError(null);
+		setSkillsLoading(false);
+		if (!bridge?.composerSkills) return;
+		let cancelled = false;
+		const skillsStartedAt = performance.now();
+		setSkillsLoading(true);
+		void bridge
+			.composerSkills({ providerId: provider.id })
+			.then(
+				(items) => {
+					if (!cancelled) setSkills(items);
+				},
+				(error: unknown) => {
+					if (!cancelled) setSkillsError(error instanceof Error ? error.message : String(error));
+				},
+			)
+			.finally(() => {
+				recordPerformanceTiming("composer-skills-request", performance.now() - skillsStartedAt);
+				if (!cancelled) setSkillsLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [menuOpen, provider.id]);
+	useEffect(() => {
+		setMention(null);
+		setRuntimeMenu(null);
+	}, [activeSessionId]);
+	const referenceItems = useMemo<ComposerItem[]>(() => {
+		return measurePerformance("composer-reference-items", () => {
+			const item = (
+				name: string,
+				kind: ComposerReference["kind"],
+				id: string,
+				detail: string,
+				group: string,
+			): ComposerItem => ({
+				id: `${kind}:${id}`,
+				name,
+				kind,
+				detail,
+				group,
+				reference: { name, kind, id, detail, raw: createReference(name, kind, id) },
+			});
+			return [
+				...entities
+					.filter((entry) => !entry.deletedAt)
+					.map((entry) => ({
+						...item(entry.name, "entity", entry.id, entry.type, "Knowledge"),
+						keywords: entry.aliases.join(" "),
+					})),
+				...diagrams
+					.filter((entry) => !entry.deletedAt)
+					.map((entry) => ({
+						...item(entry.name, "diagram", entry.id, entry.type, "Diagrams"),
+						diagramType: entry.type,
+					})),
+				...sessions.map((entry) =>
+					item(
+						entry.title,
+						"session",
+						entry.id,
+						entry.id === activeSessionId ? "Current conversation" : "Rhyza conversation",
+						"Conversations",
+					),
+				),
+				...sources
+					.filter((entry) => entry.status !== "archived")
+					.map((entry) => item(entry.name, "source", entry.id, entry.path, "Sources")),
+				...skills.map((entry) => ({
+					...item(entry.name, "skill", entry.path, entry.description, "Skills"),
+					badge: entry.scope,
+				})),
+			];
+		});
+	}, [entities, diagrams, sessions, sources, skills, activeSessionId]);
+	const openPage = (page: NonNullable<MenuState["page"]>) => {
+		if (!mention) return;
+		const token = `/${page === "thinking" ? "reasoning" : page} `;
+		updateDraft(`${draft.slice(0, mention.start)}${token}${draft.slice(mention.end)}`);
+		const end = mention.start + token.length;
+		setMention({ ...mention, page, end, query: "", activeIndex: 0 });
+		requestAnimationFrame(() => {
+			textareaRef.current?.focus();
+			textareaRef.current?.setSelectionRange(end, end);
+		});
+	};
+	const commands: ComposerItem[] = [
+		{
+			id: "image",
+			name: "Attach images",
+			detail: "Add images to your message",
+			keywords: "image photo 图片 附件",
+			group: "Add",
+			action: () => imageInputRef.current?.click(),
+		},
+		{
+			id: "model",
+			name: "Model",
+			detail: settings.defaultModel || "Provider default",
+			keywords: "模型",
+			group: "Commands",
+			action: () => openPage("model"),
+		},
+		{
+			id: "thinking",
+			name: "Reasoning",
+			detail: settings.thinkingLevel,
+			keywords: "thinking 推理",
+			group: "Commands",
+			action: () => openPage("thinking"),
+		},
+		{
+			id: "provider",
+			name: "Provider",
+			detail: provider.label,
+			keywords: "服务商",
+			group: "Commands",
+			action: () => openPage("provider"),
+		},
+		{
+			id: "status",
+			name: "Status",
+			detail: "View context window usage",
+			keywords: "context 状态 上下文",
+			group: "Commands",
+			action: () => setRuntimeMenu("context"),
+		},
+		{
+			id: "knowledge",
+			name: "Knowledge tools",
+			detail: settings.knowledgeTools
+				? "On · turn off for new messages"
+				: "Off · turn on for new messages",
+			keywords: "知识",
+			group: "Commands",
+			action: () => updateSettings({ knowledgeTools: !settings.knowledgeTools }),
+		},
+		{
+			id: "plugins",
+			name: "Plugins",
+			detail: "Manage installed Pi packages",
+			keywords: "extensions 插件",
+			group: "Commands",
+			action: () => navigate("/settings"),
+		},
+		{
+			id: "settings",
+			name: "Settings",
+			detail: "Open app settings",
+			keywords: "设置",
+			group: "Commands",
+			action: () => navigate("/settings"),
+		},
+		...referenceItems.filter((item) => item.kind === "skill"),
+	];
+	const pageItems: ComposerItem[] =
+		mention?.page === "model"
+			? [
+					{
+						id: "default-model",
+						name: "Provider default",
+						detail: `Let ${provider.label} choose`,
+						group: "Model",
+						action: () => updateSettings({ defaultModel: "" }),
+					},
+					...models.map((model) => ({
+						id: model.id,
+						name: model.name,
+						detail: `${formatCompactTokens(model.contextWindow)} context`,
+						group: "Model",
+						keywords: model.id,
+						action: () => updateSettings({ defaultModel: model.id }),
+					})),
+				]
+			: mention?.page === "thinking"
+				? (["off", "low", "medium", "high"] as const).map((thinkingLevel) => ({
+						id: thinkingLevel,
+						name: thinkingLevel[0].toUpperCase() + thinkingLevel.slice(1),
+						detail:
+							settings.thinkingLevel === thinkingLevel
+								? "Current reasoning effort"
+								: "Set reasoning effort for new messages",
+						group: "Reasoning",
+						action: () => updateSettings({ thinkingLevel }),
+					}))
+				: providers.map((entry) => ({
+						id: entry.id,
+						name: entry.label,
+						detail: entry.id === provider.id ? "Current provider" : entry.runtimeLabel,
+						group: "Provider",
+						action: () => updateSettings({ provider: entry.id }),
+					}));
+	const mentionItems = mention
+		? measurePerformance("composer-menu-filter", () =>
+				filterComposerItems(
+					mention.page ? pageItems : mention.kind === "mention" ? referenceItems : commands,
+					mention.query,
+				),
+			)
+		: [];
+	const activeIndex = Math.min(mention?.activeIndex ?? 0, Math.max(0, mentionItems.length - 1));
+	useLayoutEffect(() => {
+		measurePerformance("composer-menu-scroll", () => {
+			menuRef.current
+				?.querySelector('[aria-selected="true"]')
+				?.scrollIntoView({ block: "nearest" });
+		});
+	}, [activeIndex, mention?.query, mention?.page, mentionItems.length]);
 	useLayoutEffect(() => {
 		const textarea = textareaRef.current;
 		if (!textarea) return;
+		const startedAt = performance.now();
 		textarea.style.height = "auto";
-		setMultiline(textarea.scrollHeight > 58);
-		const nextHeight = Math.min(composerMaxHeight, Math.max(42, textarea.scrollHeight));
+		const scrollHeight = textarea.scrollHeight;
+		setMultiline(scrollHeight > 58);
+		const nextHeight = Math.min(composerMaxHeight, Math.max(42, scrollHeight));
 		textarea.style.height = `${nextHeight}px`;
-		textarea.style.overflowY = textarea.scrollHeight > composerMaxHeight ? "auto" : "hidden";
+		textarea.style.overflowY = scrollHeight > composerMaxHeight ? "auto" : "hidden";
+		recordPerformanceTiming("composer-textarea-layout", performance.now() - startedAt);
 	}, [draft]);
+	useLayoutEffect(() => {
+		recordPerformanceTiming("composer-render-commit", performance.now() - renderStartedAt);
+		inputDiagnostics.commit();
+	});
 
 	const updateMention = (value: string, caret: number) => {
-		const match = /(^|\s)@([^\s@]*)$/.exec(value.slice(0, caret));
-		setMention(
-			match
-				? { start: caret - match[2].length - 1, end: caret, query: match[2], activeIndex: 0 }
-				: null,
+		const trigger = measurePerformance("composer-menu-trigger", () =>
+			getComposerTrigger(value, caret),
 		);
+		setMention(trigger ? { ...trigger, activeIndex: 0 } : null);
+		if (trigger) setRuntimeMenu(null);
 	};
-	const updateDraft = (value: string) => onInputChange(composeInput(value, references));
-	const selectMention = (item: KnowledgeMention) => {
+	const updateDraft = (value: string) =>
+		measurePerformance("composer-update-draft", () => {
+			onInputChange(composeInput(value, references));
+		});
+	const selectMention = (item: ComposerItem) => {
 		if (!mention) return;
+		if (!mention.page && ["model", "thinking", "provider"].includes(item.id) && !item.reference) {
+			item.action?.();
+			return;
+		}
 		const nextDraft = `${draft.slice(0, mention.start)}${draft.slice(mention.end)}`;
-		const nextReferences = references.some((reference) => reference.raw === item.raw)
-			? references
-			: [...references, item];
+		const nextReferences =
+			item.reference && !references.some((reference) => reference.raw === item.reference?.raw)
+				? [...references, item.reference]
+				: references;
 		onInputChange(composeInput(nextDraft, nextReferences));
 		setMention(null);
+		item.action?.();
 		requestAnimationFrame(() => {
-			const textarea = textareaRef.current;
-			textarea?.focus();
-			textarea?.setSelectionRange(mention.start, mention.start);
+			textareaRef.current?.focus();
+			textareaRef.current?.setSelectionRange(mention.start, mention.start);
 		});
 	};
 	const removeReference = (raw: string) => {
@@ -181,48 +453,70 @@ export function ChatComposer({
 		<div className="composer-shell">
 			<div className="composer-frame">
 				{mention && (
-					<div className="composer-mention-menu" role="listbox" aria-label="Knowledge mentions">
-						<div className="composer-mention-heading">
-							<AtSign size={13} /> Reference workspace knowledge
+					<div className="composer-mention-menu" ref={menuRef}>
+						<div
+							className="composer-mention-scroll"
+							id={menuId}
+							role="listbox"
+							aria-label={mention.kind === "mention" ? "References" : "Commands"}
+						>
+							{mentionItems.map((item, index) => (
+								<div key={item.id} role="presentation">
+									{(index === 0 || mentionItems[index - 1].group !== item.group) && (
+										<div className="composer-mention-heading" role="presentation">
+											{item.group}
+										</div>
+									)}
+									<button
+										type="button"
+										role="option"
+										id={`${menuId}-${index}`}
+										aria-selected={index === activeIndex}
+										className={index === activeIndex ? "is-active" : ""}
+										onPointerDown={(event) => event.preventDefault()}
+										onClick={() => selectMention(item)}
+										onMouseEnter={() =>
+											setMention((current) =>
+												current ? { ...current, activeIndex: index } : current,
+											)
+										}
+									>
+										<span className="composer-mention-icon">
+											<ComposerItemIcon item={item} />
+										</span>
+										<span className="composer-mention-label">
+											<strong>{item.name}</strong>
+											<small>{item.detail}</small>
+										</span>
+										{item.badge && <span className="composer-mention-badge">{item.badge}</span>}
+									</button>
+								</div>
+							))}
+							{mentionItems.length === 0 && (
+								<div className="composer-mention-empty">
+									No results for “{mention.query}”. Try another name.
+								</div>
+							)}
+							{skillsLoading && !mention.page && (
+								<div className="composer-mention-empty" role="status">
+									Loading skills…
+								</div>
+							)}
+							{skillsError && !mention.page && (
+								<div className="composer-mention-empty" role="status">
+									Skills unavailable: {skillsError}
+								</div>
+							)}
+							{mention.page === "model" && (modelsLoading || modelError) && (
+								<div className="composer-mention-empty" role="status">
+									{modelError || "Loading models…"}
+								</div>
+							)}
 						</div>
-						{mentionItems.length > 0 ? (
-							mentionItems.map((item, index) => (
-								<button
-									key={`${item.kind}-${item.id}`}
-									type="button"
-									role="option"
-									aria-selected={index === mention.activeIndex}
-									className={index === mention.activeIndex ? "is-active" : ""}
-									onMouseDown={(event) => {
-										event.preventDefault();
-										selectMention(item);
-									}}
-									onMouseEnter={() =>
-										setMention((current) =>
-											current ? { ...current, activeIndex: index } : current,
-										)
-									}
-								>
-									<span className="composer-mention-icon">
-										{item.kind === "entity" ? (
-											<Database size={15} />
-										) : (
-											<DiagramTypeIcon type={item.diagramType ?? "structure"} size={15} />
-										)}
-									</span>
-									<span>
-										<strong>{item.name}</strong>
-										<small>
-											{item.kind === "entity" ? "Entity" : "Diagram"} · {item.detail}
-										</small>
-									</span>
-								</button>
-							))
-						) : (
-							<div className="composer-mention-empty">
-								No entities or diagrams match “{mention.query}”.
-							</div>
-						)}
+						<div className="composer-mention-footer">
+							<span>↑ ↓ Navigate · Enter / Tab Select</span>
+							<span>Esc {mention.page ? "Back" : "Close"}</span>
+						</div>
 					</div>
 				)}
 				<div
@@ -233,17 +527,19 @@ export function ChatComposer({
 							{references.map((reference) => (
 								<span key={reference.raw} className="composer-reference-chip">
 									<span className="composer-reference-icon">
-										{reference.kind === "entity" ? (
-											<Database size={13} />
-										) : (
-											<DiagramTypeIcon
-												type={diagramTypes.get(reference.id) ?? "structure"}
-												size={13}
-											/>
-										)}
+										<ComposerItemIcon
+											item={{
+												id: reference.id,
+												name: reference.name,
+												detail: "",
+												group: "",
+												kind: reference.kind,
+												diagramType: diagramTypes.get(reference.id),
+											}}
+										/>
 									</span>
 									<span>@{reference.name}</span>
-									<small>{reference.kind === "entity" ? "Entity" : "Diagram"}</small>
+									<small>{reference.kind}</small>
 									<button
 										type="button"
 										title={`Remove ${reference.name}`}
@@ -277,17 +573,35 @@ export function ChatComposer({
 								placeholder={
 									images.length
 										? "Add a question about the image"
-										: "Message Rhyza — type @ to reference knowledge"
+										: "Message Rhyza — @ to reference, / for commands"
+								}
+								aria-label="Message Rhyza"
+								aria-autocomplete="list"
+								aria-haspopup="listbox"
+								aria-expanded={mention !== null}
+								aria-controls={mention ? menuId : undefined}
+								aria-activedescendant={
+									mention && mentionItems.length ? `${menuId}-${activeIndex}` : undefined
 								}
 								value={draft}
 								onChange={(event) => {
-									updateDraft(event.target.value);
-									updateMention(event.target.value, event.target.selectionStart);
+									const finish = inputDiagnostics.begin(event.nativeEvent as InputEvent);
+									try {
+										updateDraft(event.target.value);
+										if (!(event.nativeEvent as InputEvent).isComposing)
+											updateMention(event.target.value, event.target.selectionStart);
+									} finally {
+										finish();
+									}
 								}}
 								onClick={(event) =>
 									updateMention(event.currentTarget.value, event.currentTarget.selectionStart)
 								}
-								onBlur={() => window.setTimeout(() => setMention(null), 120)}
+								onBlur={() => setMention(null)}
+								onCompositionStart={() => setMention(null)}
+								onCompositionEnd={(event) =>
+									updateMention(event.currentTarget.value, event.currentTarget.selectionStart)
+								}
 								onPaste={(event) => {
 									const imageFiles = [...event.clipboardData.items]
 										.filter((item) => item.kind === "file" && item.type.startsWith("image/"))
@@ -300,31 +614,40 @@ export function ChatComposer({
 									addFiles(files.files);
 								}}
 								onKeyDown={(event) => {
-									if (event.nativeEvent.isComposing) return;
-									if (mention && mentionItems.length > 0) {
+									if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+									if (mention) {
 										if (event.key === "Escape") {
 											event.preventDefault();
-											setMention(null);
+											event.stopPropagation();
+											if (mention.page) {
+												const end = mention.start + 1;
+												updateDraft(`${draft.slice(0, mention.start)}/${draft.slice(mention.end)}`);
+												setMention({ ...mention, page: undefined, query: "", end, activeIndex: 0 });
+												requestAnimationFrame(() =>
+													textareaRef.current?.setSelectionRange(end, end),
+												);
+											} else setMention(null);
 											return;
 										}
-										if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+										if (
+											(event.key === "ArrowDown" || event.key === "ArrowUp") &&
+											mentionItems.length
+										) {
 											event.preventDefault();
 											const delta = event.key === "ArrowDown" ? 1 : -1;
-											setMention((current) =>
-												current
-													? {
-															...current,
-															activeIndex:
-																(current.activeIndex + delta + mentionItems.length) %
-																mentionItems.length,
-														}
-													: current,
-											);
+											setMention({
+												...mention,
+												activeIndex:
+													(activeIndex + delta + mentionItems.length) % mentionItems.length,
+											});
 											return;
 										}
-										if (event.key === "Enter" || event.key === "Tab") {
+										if (
+											(event.key === "Enter" || (event.key === "Tab" && mentionItems.length > 0)) &&
+											!event.shiftKey
+										) {
 											event.preventDefault();
-											selectMention(mentionItems[mention.activeIndex]);
+											if (mentionItems[activeIndex]) selectMention(mentionItems[activeIndex]);
 											return;
 										}
 									}
@@ -333,10 +656,16 @@ export function ChatComposer({
 										send();
 									}
 								}}
+								onKeyUp={(event) => {
+									if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+										updateMention(event.currentTarget.value, event.currentTarget.selectionStart);
+								}}
 								rows={1}
 							/>
 							<ComposerRuntimeControls
 								key={provider.id}
+								openMenu={runtimeMenu}
+								setOpenMenu={setRuntimeMenu}
 								providerId={provider.id}
 								models={models}
 								modelsLoading={modelsLoading}
@@ -395,6 +724,8 @@ export function ChatComposer({
 }
 
 function ComposerRuntimeControls({
+	openMenu,
+	setOpenMenu,
 	providerId,
 	models,
 	modelsLoading,
@@ -406,6 +737,8 @@ function ComposerRuntimeControls({
 	onModelChange,
 	onThinkingChange,
 }: {
+	openMenu: RuntimeMenu;
+	setOpenMenu: React.Dispatch<React.SetStateAction<RuntimeMenu>>;
 	providerId: ProviderId;
 	models: ModelInfo[];
 	modelsLoading: boolean;
@@ -417,9 +750,6 @@ function ComposerRuntimeControls({
 	onModelChange: (model: string) => void;
 	onThinkingChange: (thinking: "off" | "low" | "medium" | "high") => void;
 }) {
-	const [openMenu, setOpenMenu] = useState<"provider" | "model" | "thinking" | "context" | null>(
-		null,
-	);
 	const controlsRef = useRef<HTMLDivElement | null>(null);
 	const provider = getProviderInfo(providerId);
 	const model = models.find((item) => item.id === selectedModel);
@@ -718,27 +1048,21 @@ function formatComposerTokens(value: number): string {
 	return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}k tokens`;
 }
 
-function createReference(name: string, kind: KnowledgeMention["kind"], id: string): string {
-	return `[@${name}](#knowledge/${kind}/${encodeURIComponent(id)})`;
+function ComposerItemIcon({ item }: { item: ComposerItem }) {
+	if (item.kind === "diagram")
+		return <DiagramTypeIcon type={item.diagramType ?? "structure"} size={15} />;
+	if (item.kind === "entity" || item.id === "knowledge") return <Database size={15} />;
+	if (item.kind === "session") return <MessageCircle size={15} />;
+	if (item.kind === "source") return <FolderOpen size={15} />;
+	if (item.kind === "skill" || item.id === "plugins") return <Package size={15} />;
+	if (item.id === "model" || item.id === "status") return <Gauge size={15} />;
+	if (item.id === "thinking") return <Brain size={15} />;
+	if (item.id === "provider") return <Cloud size={15} />;
+	if (item.id === "image") return <ImagePlus size={15} />;
+	if (item.id === "settings") return <Settings size={15} />;
+	return item.reference ? <AtSign size={15} /> : <Slash size={15} />;
 }
-function parseReferences(input: string): KnowledgeMention[] {
-	const references: KnowledgeMention[] = [];
-	knowledgeReferencePattern.lastIndex = 0;
-	for (const match of input.matchAll(knowledgeReferencePattern)) {
-		try {
-			references.push({
-				name: match[1],
-				kind: match[2] as KnowledgeMention["kind"],
-				id: decodeURIComponent(match[3]),
-				detail: "",
-				raw: match[0],
-			});
-		} catch {
-			/* Ignore malformed user-entered reference syntax. */
-		}
-	}
-	return references;
-}
+
 async function readPromptImages(files: FileList | null): Promise<ComposerImage[]> {
 	if (!files) return [];
 	return Promise.all(

@@ -21,21 +21,34 @@ import {
 	Sparkles,
 	X,
 } from "lucide-react";
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+	memo,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import { createPortal } from "react-dom";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
+import { useAppStore } from "../../store";
+import { parseReferences } from "../../utils/composerInput";
 import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types";
 import { usageTokens } from "../../utils/branchUsage";
 import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTimestamp";
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
-import { normalizeMarkdownEmphasis } from "../../utils/markdown";
+import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../../utils/markdown";
 import { MermaidDiagram } from "../MermaidDiagram";
 import { isTurnActive } from "../../utils/sessionRuntime";
+import { recordPerformanceTiming } from "../../utils/performanceMarks";
 
-export function TurnMessage({
+export const TurnMessage = memo(function TurnMessage({
 	turn,
 	sessionNodeId,
 	entities,
@@ -54,14 +67,24 @@ export function TurnMessage({
 	entities: Entity[];
 	relations: Relation[];
 	diagrams: Diagram[];
-	onFork: () => void;
+	onFork: (turn: Turn) => void;
 	canFork: boolean;
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
-	onTextSelection: (text: string, rect: DOMRect) => void;
-	onOpenContextMenu: (position: { x: number; y: number }) => void;
+	onTextSelection: (turnId: string, text: string, rect: DOMRect) => void;
+	onOpenContextMenu: (turnId: string, position: { x: number; y: number }) => void;
 	isFocused: boolean;
 }) {
+	const renderStartedAt = performance.now();
+	useLayoutEffect(() => {
+		recordPerformanceTiming("chat-turn-render-commit", performance.now() - renderStartedAt);
+	});
+	const selectText = useCallback(
+		(text: string, rect: DOMRect) => {
+			onTextSelection(turn.id, text, rect);
+		},
+		[turn.id, onTextSelection],
+	);
 	const isUser = turn.role === "user";
 	const timestamp = formatChatTimestamp(turn.createdAt);
 	const fullTimestamp = formatFullChatTimestamp(turn.createdAt);
@@ -84,7 +107,7 @@ export function TurnMessage({
 			className={clsx("chat-turn group", isUser && "is-user", isFocused && "is-focused")}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				onOpenContextMenu({ x: event.clientX, y: event.clientY });
+				onOpenContextMenu(turn.id, { x: event.clientX, y: event.clientY });
 			}}
 		>
 			{!isUser && (
@@ -122,7 +145,7 @@ export function TurnMessage({
 							diagrams={diagrams}
 							onEntityClick={onEntityClick}
 							onDiagramClick={onDiagramClick}
-							onTextSelection={onTextSelection}
+							onTextSelection={selectText}
 						/>
 					)}
 				</div>
@@ -137,7 +160,7 @@ export function TurnMessage({
 							type="button"
 							title="Continue from here"
 							aria-label="Continue from here"
-							onClick={onFork}
+							onClick={() => onFork(turn)}
 						>
 							<GitFork size={14} />
 						</button>
@@ -167,7 +190,7 @@ export function TurnMessage({
 			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
 		</article>
 	);
-}
+});
 
 /** Shared by the transcript and node hover previews; no transcript identity or actions. */
 export function TurnBubbleContent({
@@ -675,7 +698,7 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>
 	},
 };
 
-function MarkdownContent({
+const MarkdownContent = memo(function MarkdownContent({
 	htmlPreviews,
 	content,
 	compact = false,
@@ -694,12 +717,19 @@ function MarkdownContent({
 	onDiagramClick?: (id: string) => void;
 	onTextSelection?: (text: string, rect: DOMRect) => void;
 }) {
+	const renderStartedAt = performance.now();
+	useLayoutEffect(() => {
+		recordPerformanceTiming("chat-markdown-render-commit", performance.now() - renderStartedAt);
+	});
 	const knowledgeReferences = references ?? emptyKnowledgeReferences;
-	const normalizedContent = useMemo(() => normalizeMarkdownEmphasis(content), [content]);
+	const normalizedContent = useMemo(
+		() => normalizeMarkdownMathDelimiters(normalizeMarkdownEmphasis(content)),
+		[content],
+	);
 	const remarkPlugins = useMemo<
 		NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>
 	>(
-		() => [remarkGfm, [remarkKnowledgeLinks, { references: knowledgeReferences }]],
+		() => [remarkGfm, remarkMath, [remarkKnowledgeLinks, { references: knowledgeReferences }]],
 		[knowledgeReferences],
 	);
 	const renderContext = useMemo<MarkdownRenderContextValue>(
@@ -726,13 +756,17 @@ function MarkdownContent({
 					onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
 				}}
 			>
-				<ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+				<ReactMarkdown
+					remarkPlugins={remarkPlugins}
+					rehypePlugins={[rehypeKatex]}
+					components={markdownComponents}
+				>
 					{normalizedContent}
 				</ReactMarkdown>
 			</div>
 		</MarkdownRenderContext.Provider>
 	);
-}
+});
 
 function KnowledgeAnchor({
 	href,
@@ -770,6 +804,33 @@ function KnowledgeAnchor({
 			window.removeEventListener("resize", dismiss);
 		};
 	}, [hovered]);
+	const contextReference = href ? parseReferences(`[@reference](${href})`)[0] : undefined;
+	if (contextReference?.kind === "skill") {
+		return (
+			<span className="knowledge-link-wrap" title={contextReference.id}>
+				{children}
+			</span>
+		);
+	}
+	if (contextReference?.kind === "source") {
+		return <a href="#/sources">{children}</a>;
+	}
+	if (contextReference?.kind === "session") {
+		return (
+			<a
+				href={href}
+				onClick={(event) => {
+					event.preventDefault();
+					const state = useAppStore.getState();
+					if (state.sessions.some((session) => session.id === contextReference.id)) {
+						state.setActiveSession(contextReference.id);
+					}
+				}}
+			>
+				{children}
+			</a>
+		);
+	}
 	return (
 		<span ref={anchorRef} className="knowledge-link-wrap" onMouseEnter={open} onMouseLeave={close}>
 			<a

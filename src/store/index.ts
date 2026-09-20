@@ -36,6 +36,7 @@ import {
 	sourceRefsForKnowledgeScope,
 } from "../utils/knowledgeExtraction";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
+import { distinctStorage } from "../utils/distinctStorage";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -130,6 +131,17 @@ function withoutModelRequestTelemetry(turn: Turn): Turn {
 	return persistedTurn;
 }
 
+// Preserve the projected array on UI-only updates so storage can skip serialization.
+let lastSourceTurns: Turn[] | undefined;
+let lastPersistedTurns: Turn[] = [];
+function persistedTurns(turns: Turn[]): Turn[] {
+	if (turns !== lastSourceTurns) {
+		lastSourceTurns = turns;
+		lastPersistedTurns = turns.map(withoutModelRequestTelemetry);
+	}
+	return lastPersistedTurns;
+}
+
 let persistenceWorkspacePath: string | null = null;
 const workspaceStorageKey = "rhyza-workspace-v2";
 const legacyWorkspaceStorageKey = `${["know", "branch"].join("")}-workspace-v2`;
@@ -187,6 +199,7 @@ const workspaceStorage: StateStorage = {
 						stampedValue.length,
 					);
 					console.error("Failed to persist workspace state.", error);
+					throw error;
 				},
 			);
 	},
@@ -1077,7 +1090,13 @@ export const useAppStore = create<AppState>()(
 		{
 			name: workspaceStorageKey,
 			skipHydration: true,
-			storage: createJSONStorage(() => workspaceStorage),
+			storage: distinctStorage(
+				createJSONStorage(() => workspaceStorage)!,
+				() => {
+					if (!useAppStore.persist.hasHydrated()) return undefined;
+					return window.rhyza ? (persistenceWorkspacePath ?? undefined) : "localStorage";
+				},
+			),
 			version: 2,
 			merge: (persisted, current) => {
 				const saved = (persisted ?? {}) as Partial<AppState>;
@@ -1094,7 +1113,7 @@ export const useAppStore = create<AppState>()(
 			partialize: (state) => ({
 				sessions: state.sessions,
 				activeSessionId: state.activeSessionId,
-				turns: state.turns.map(withoutModelRequestTelemetry),
+				turns: persistedTurns(state.turns),
 				entities: state.entities,
 				relations: state.relations,
 				diagrams: state.diagrams,

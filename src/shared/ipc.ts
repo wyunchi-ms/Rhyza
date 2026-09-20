@@ -8,6 +8,7 @@ export const ipcChannels = {
 	providerLogout: "rhyza:provider-logout",
 	modelCatalog: "rhyza:model-catalog",
 	pluginList: "rhyza:plugin-list",
+	composerSkills: "rhyza:composer-skills",
 	pluginInstall: "rhyza:plugin-install",
 	pluginSelectLocal: "rhyza:plugin-select-local",
 	pluginRemove: "rhyza:plugin-remove",
@@ -96,6 +97,13 @@ export interface PiPluginInfo {
 	scope: "user" | "project";
 	installed: boolean;
 	installedPath?: string;
+}
+
+export interface ComposerSkillInfo {
+	name: string;
+	description: string;
+	path: string;
+	scope: "Personal" | "Project" | "Plugin";
 }
 
 export interface PiPluginInstallRequest {
@@ -321,7 +329,16 @@ export interface DiagnosticReport {
 	regionStalls: Record<string, number>;
 	timings?: Record<
 		string,
-		{ count: number; totalMs: number; maxMs: number; totalBytes?: number; maxBytes?: number }
+		{
+			count: number;
+			totalMs: number;
+			maxMs: number;
+			totalBytes?: number;
+			maxBytes?: number;
+			over16Ms?: number;
+			over50Ms?: number;
+			over100Ms?: number;
+		}
 	>;
 }
 
@@ -434,6 +451,7 @@ export interface RhyzaBridge {
 	providerLogout(request: ProviderLogoutRequest): Promise<ProviderActionResponse>;
 	modelCatalog(request?: ModelCatalogRequest): Promise<ModelCatalogResponse>;
 	pluginList(): Promise<PiPluginInfo[]>;
+	composerSkills(request: ProviderStatusRequest): Promise<ComposerSkillInfo[]>;
 	pluginInstall(request: PiPluginInstallRequest): Promise<PiPluginMutationResponse>;
 	pluginSelectLocal(): Promise<{ source: string | null }>;
 	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;

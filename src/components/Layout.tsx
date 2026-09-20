@@ -8,7 +8,6 @@ import {
 	Search,
 	Settings,
 } from "lucide-react";
-import appIcon from "../../resources/branding/icon.png";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -92,8 +91,6 @@ const Layout: React.FC = () => {
 				}}
 			>
 				<div className="app-sidebar-brand">
-					<img className="brand-mark" src={appIcon} alt="" width={28} height={28} />
-					<span>Rhyza</span>
 					<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
 						<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
 						<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />

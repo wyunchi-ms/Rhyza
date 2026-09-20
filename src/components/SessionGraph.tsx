@@ -1,6 +1,6 @@
 import { useHoverRetention } from "../hooks/useHoverRetention";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, LocateFixed, GitBranch, Plus } from "lucide-react";
+import { ArrowDown, ArrowRight, GitBranch, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -172,7 +172,7 @@ export function SessionGraph({
 	useEffect(() => {
 		window.localStorage.setItem(orientationStorageKey, orientation);
 	}, [orientation]);
-	const { focusActive, interrupt } = useGraphFocus(
+	const { interrupt } = useGraphFocus(
 		flow,
 		canvasRef,
 		visible,
@@ -209,16 +209,6 @@ export function SessionGraph({
 						label="Vertical layout"
 						description="On: top to bottom. Off: left to right. Nodes move smoothly between layouts."
 					/>
-					<button
-						type="button"
-						className="secondary-button"
-						onClick={focusActive}
-						disabled={!activeSessionId}
-						title="Locate current round"
-						aria-label="Locate current round"
-					>
-						<LocateFixed size={16} />
-					</button>
 					<button
 						type="button"
 						className="secondary-button"

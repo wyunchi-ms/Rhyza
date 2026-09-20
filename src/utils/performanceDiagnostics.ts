@@ -7,6 +7,7 @@ import {
 	type BranchSwitchDetail,
 } from "./branchSwitch";
 import { drainPerformanceTimings, recordPerformanceTiming } from "./performanceMarks";
+import { inputEventStart } from "./inputDiagnostics";
 
 const sampleIntervalMs = 10_000;
 const heartbeatIntervalMs = 1_000;
@@ -25,9 +26,21 @@ export function startPerformanceDiagnostics(): () => void {
 	const rememberRegion = (event: Event) => {
 		lastRegion = diagnosticRegion(event.target);
 		lastRegionAt = performance.now();
+		if (
+			event.type === "keydown" &&
+			lastRegion === "composer" &&
+			document.visibilityState === "visible"
+		) {
+			recordPerformanceTiming(
+				"composer-keydown-queue",
+				lastRegionAt - inputEventStart(event.timeStamp, lastRegionAt, performance.timeOrigin),
+			);
+		}
 	};
 	window.addEventListener("pointerdown", rememberRegion, true);
 	window.addEventListener("keydown", rememberRegion, true);
+	window.addEventListener("input", rememberRegion, true);
+	window.addEventListener("compositionstart", rememberRegion, true);
 
 	const observer =
 		typeof PerformanceObserver !== "undefined" &&
@@ -107,6 +120,8 @@ export function startPerformanceDiagnostics(): () => void {
 		window.clearInterval(sampleTimer);
 		window.removeEventListener("pointerdown", rememberRegion, true);
 		window.removeEventListener("keydown", rememberRegion, true);
+		window.removeEventListener("input", rememberRegion, true);
+		window.removeEventListener("compositionstart", rememberRegion, true);
 		window.removeEventListener("pagehide", flush);
 		document.removeEventListener("visibilitychange", resetHeartbeat);
 		window.removeEventListener(branchSwitchStartEvent, branchStart);
@@ -120,8 +135,8 @@ function diagnosticRegion(target: EventTarget | null): string {
 	for (const [selector, name] of [
 		[".mermaid-diagram", "diagram"],
 		[".html-preview", "interactive-diagram"],
+		[".composer-shell, .chat-composer", "composer"],
 		[".chat-scroll", "chat"],
-		[".chat-composer", "composer"],
 		[".app-sidebar", "sidebar"],
 		[".knowledge-pane", "knowledge-pane"],
 		["[role='dialog']", "dialog"],

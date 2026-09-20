@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHistory";
 import { DiagramViewer } from "../components/DiagramViewer";
 import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
@@ -21,6 +23,7 @@ import { MermaidDiagram } from "../components/MermaidDiagram";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { providerModelSelection } from "../shared/providers";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
+import { normalizeMarkdownMathDelimiters } from "../utils/markdown";
 import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
 import { withTimeout } from "../utils/common";
@@ -353,7 +356,8 @@ function MarkdownPreview({ content }: { content: string }) {
 		<div className="entity-markdown-preview-body markdown-body">
 			{content ? (
 				<ReactMarkdown
-					remarkPlugins={[remarkGfm]}
+					remarkPlugins={[remarkGfm, remarkMath]}
+					rehypePlugins={[rehypeKatex]}
 					components={{
 						code: ({ className, children, ...props }) => {
 							const source = String(children).replace(/\n$/, "");
@@ -373,7 +377,7 @@ function MarkdownPreview({ content }: { content: string }) {
 						},
 					}}
 				>
-					{content}
+					{normalizeMarkdownMathDelimiters(content)}
 				</ReactMarkdown>
 			) : (
 				<p className="text-secondary">Add content to start this entity note.</p>
