@@ -2,12 +2,16 @@
 
 本指南面向从源码运行当前 Windows MVP 的用户。功能范围和已知限制请同时参考 [Feature 文档](features.md)。
 
+[项目首页](../README.md) · [文档导航](README.md) · [开发指南](development-guide.md)
+
+第一次使用按“安装 → 选目录 → 连 Provider → 发起对话”完成配置即可。Pi 插件和知识策略可以稍后调整。
+
 ## 1. 安装与启动
 
 ### 环境要求
 
 - Windows 10/11
-- Node.js `22.12+`，推荐 Node.js 22 LTS；也支持 `20.19+`
+- Node.js `22.12+`；也支持 `20.19+`
 - npm
 - Git 2.x
 - 可访问所选 AI Provider 和 npm registry 的网络
@@ -52,19 +56,59 @@ Workspace 同时决定：
 
 进入 **Settings → AI Provider**：
 
-1. 在 Codex、Claude Code 或 GitHub Copilot 旁点击 **Connect**。
-2. Codex 会先检测当前 Windows 用户的 Codex Desktop/CLI 登录；已有登录时直接复用，否则显示浏览器授权链接。GitHub Copilot 会显示 Device Code。
-3. 等待 Provider 显示为 Connected。
-4. 在 **Default Provider** 中选择新消息默认使用的 Provider。
-5. 在 **Default Model** 中选择模型，或保留 Provider 默认值。
+1. 在 **Provider** 下拉菜单中选择 GitHub Copilot、Codex 或 Claude Code。
+2. 按下面对应的步骤完成登录，再检查界面上的连接状态。
+3. 在 **Default Model** 中选择模型，或保留 **Use provider default**。
 
-三个 Provider 可以同时保持连接。Codex 通过官方 `codex app-server` 使用 `%USERPROFILE%\.codex`，Token 的读取和刷新都由 Codex 负责，Rhyza 不复制 ChatGPT Desktop Cookie 或原始 Token。Claude Code 和 GitHub Copilot 继续通过 Pi SDK 使用 `~/.pi/agent/auth.json`。
+切换 Provider 会重置模型选择。聊天、分支标题和知识提取使用所选 Provider；模型权限、额度和计费由服务提供方管理。
 
-使用 Codex Provider 时需要本机已有 Codex Desktop 或 Codex CLI；Pi CLI、Claude Code CLI 和 GitHub Copilot CLI 不是前置依赖。普通 ChatGPT 聊天登录不一定包含 Codex 授权，Rhyza 的 Connect 会在共享状态不可用时提供新的授权链接。
+#### GitHub Copilot
+
+1. 点击 **Sign In**，复制出现的 Device Code。
+2. 点击 **Open sign-in**，在浏览器完成 GitHub 授权。
+3. 返回 Rhyza，等待连接成功，再选择模型。
+
+需要具有 Copilot 权限的 GitHub 账号。Pi SDK 已随项目安装，无需 Pi CLI、Copilot CLI 或 VS Code 扩展，也无需在 `.env` 填写 Token。已有 Pi 登录通常可通过 `~/.pi/agent/auth.json` 复用；VS Code 或 GitHub CLI 的登录不保证能复用。当前界面仅支持 `github.com`。
+
+#### Codex
+
+安装 Codex Desktop 或 Codex CLI 后，选择 **Codex → Sign In**。Rhyza 通过官方 `codex app-server` 检测同一用户的 Codex 登录，已有账号时直接复用，否则显示浏览器授权链接；模型目录也从 App Server 获取。
+
+Codex 管理自己的凭据与 Token 刷新。普通 ChatGPT 聊天登录不等于 Codex 授权，Rhyza 不读取聊天 Cookie。若找不到可执行文件，可在启动前设置 `RHYZA_CODEX_EXECUTABLE` 为 Codex 可执行文件的绝对路径。配置目录由 Codex 管理，通常为 `~/.codex`（可由 `CODEX_HOME` 改写）。
+
+**Sign Out 会调用 Codex App Server 退出登录，可能影响使用同一配置目录的其他客户端。**
+
+#### Claude Code
+
+单独安装 Claude Code CLI，在终端完成登录：
+
+```powershell
+claude auth login
+claude auth status
+```
+
+重启 Rhyza，选择 **Claude Code → Check connection**。Rhyza 调用本机 `claude --print` 的结构化流式接口；凭据和退出登录由 Claude Code CLI 管理，不通过 Pi 登录。
+
+没有模型列表时可保留 Provider 默认值，或在 **Custom model ID or CLI alias** 输入 CLI 支持的别名或模型 ID。安装路径未被识别时，在启动前设置 `RHYZA_CLAUDE_PATH` 为可执行文件绝对路径。当前适配器要求 CLI 支持 `auth status --json`、`--input-format stream-json`、`--include-partial-messages`、`--permission-mode dontAsk` 和 `--effort`。
+
+Windows 上可写工作流需要 Git for Windows 提供的 Git Bash；必要时设置 `CLAUDE_CODE_GIT_BASH_PATH`。Claude Code 的 Worktree 不是操作系统沙箱，可写会话的 Bash 以当前用户权限执行。图片请使用 PNG、JPEG、GIF 或 WebP，Claude Code 不接受 BMP。
+
+#### Provider 使用差异
+
+| 项目               | 当前行为                                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| 登录状态           | Check connection 检查本地配置；实际模型权限、额度和网络错误在请求时显示                             |
+| Pi 插件            | 设置界面只面向 GitHub Copilot 提供支持；Claude Code 不加载 Pi 插件，不应假定 Codex 具有相同工具行为 |
+| Sources            | Copilot 可调用 Source 搜索/读取工具；Claude Code 使用请求前检索到的相关片段                         |
+| Claude Code 上下文 | 每次请求从当前分支的可见文本和图片构建输入，不跨请求重放 CLI 内部工具历史                           |
+| Thinking level     | 请求的档位由 Provider 映射；不保证每个 Provider 或模型都有相同效果                                  |
+| 用量               | 只展示可获得的字段；费用为 0 不代表服务免费，请以 Provider 账单为准                                 |
+
+请求面板中的输入快照不一定是 Provider 内部每次模型调用的原始 HTTP payload；不要将其理解为完整网络抓包。
 
 ### 2.3 可选：安装 Pi 插件
 
-进入 **Settings → Pi Plugins**。支持：
+进入 **Settings → Pi Plugins (GitHub Copilot only)**。该入口面向 GitHub Copilot 工作流。支持：
 
 - `npm:` package；
 - `git:` package；
@@ -75,6 +119,8 @@ Workspace 同时决定：
 Pi package 以当前用户权限执行代码，Skill 也会影响 Agent 行为，只安装已审查和信任的来源。安装或移除后，Rhyza 会重建 Agent Session，下一条消息使用新的插件集合。
 
 如需交互式图表，可安装仓库中的 `extensions\pi-archify`，详情见 [Archify extension](../extensions/pi-archify/README.md)。
+
+本地安装引用原目录，不复制源文件；Remove 只取消配置，不删除本地目录。代码修改后重启应用。已保存的 HTML 快照在卸载扩展后仍可查看。
 
 ## 3. 日常工作流
 
@@ -136,7 +182,7 @@ Pi package 以当前用户权限执行代码，Skill 也会影响 Agent 行为�
 - 单文件上限 2 MB；
 - 每个 Source 最多记录 50,000 个文本文件。
 
-`indexed` 仅表示文件清单建立完成。Agent 使用 `search_sources` 进行文本命中检索，并通过 `read_source` 读取受限片段；当前没有 Embedding 或向量检索。
+`indexed` 仅表示文件清单建立完成。Pi 路径提供 `search_sources` 和 `read_source`；Claude Code 使用请求前检索到的片段。当前没有 Embedding 或向量检索。
 
 Source 可重新扫描或归档。文件内容变化后，建议 Reindex；与旧 revision 关联的知识来源可能显示为 stale。
 
@@ -150,6 +196,8 @@ Source 可重新扫描或归档。文件内容变化后，建议 Reindex；与�
 
 Git Workspace 中的可写 Session 会尝试创建独立 Worktree。创建失败时会回退到原 Workspace，因此执行高风险操作前应检查 Code 页首行显示的实际路径以及 `Isolated worktree`/`Workspace` 标记。
 
+Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离后开放。Codex App Server 按请求的可写标记选择 `workspace-write` 或 `read-only`，不能把 Worktree 失败理解为所有 Provider 都会自动只读。Pi 扩展也有自己的执行能力；Worktree 不等于插件沙箱。
+
 ## 4. 设置说明
 
 ### Appearance
@@ -160,7 +208,7 @@ Git Workspace 中的可写 Session 会尝试创建独立 Worktree。创建失败
 ### Knowledge policy
 
 - **Auto-extract Knowledge**：每轮完成后运行知识提取。
-- **Suggest changes**：生成 Proposed ChangeSet；当前默认模式。
+- **Suggest changes**：生成 Proposed ChangeSet；提取结果先以乐观方式显示，Accept 提交状态，Reject 恢复修改前内容。当前默认模式。
 - **Automatic**：直接提交提取结果。
 - **Hybrid**：当前行为与 Automatic 相同，细分策略尚未实现。
 - **Read only**：可读取已有知识，但不自动写入。
@@ -178,18 +226,24 @@ Git Workspace 中的可写 Session 会尝试创建独立 Worktree。创建失败
 
 Windows 中的 `~` 表示当前用户目录，例如 `C:\Users\<username>`。
 
-| 路径 | 内容 |
-| --- | --- |
-| `~\.pi-graph\workspaces.json` | Workspace Path 到状态文件的映射 |
-| `~\.pi-graph\workspaces\<hash>.json` | Session、Turn、Knowledge、设置和布局 |
-| `~\.pi-graph\sources\<hash>.json` | Source Catalog 和文件清单 |
-| `~\.pi-graph\worktrees\` | Rhyza 创建的 Git Worktree |
-| `~\.pi-graph\diagnostics\performance-YYYY-MM-DD.jsonl` | 结构化性能诊断 |
-| `~\.pi\agent\auth.json` | Pi Provider 凭据 |
-| `~\.pi\agent\models-store.json` | Pi 动态模型目录缓存 |
-| `%USERPROFILE%\.codex` | Codex Desktop/CLI 与 Rhyza 共享的 Codex 配置和登录状态 |
+| 路径                                                   | 内容                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------ |
+| `~\.pi-graph\workspaces.json`                          | Workspace Path 到状态文件的映射                        |
+| `~\.pi-graph\workspaces\<hash>.json`                   | Session、Turn、Knowledge、设置和布局                   |
+| `~\.pi-graph\sources\<hash>.json`                      | Source Catalog 和文件清单                              |
+| `~\.pi-graph\worktrees\`                               | Rhyza 创建的 Git Worktree                              |
+| `~\.pi-graph\provider-sessions\`                       | Provider 切换及上下文代次，不含登录凭据                |
+| `~\.pi-graph\model-request-dumps\`                     | 请求快照，可能包含对话和检索到的代码，不应公开分享     |
+| `~\.pi-graph\diagnostics\performance-YYYY-MM-DD.jsonl` | 结构化性能诊断                                         |
+| `~\.pi\agent\auth.json`                                | Pi Provider 凭据                                       |
+| `~\.pi\agent\settings.json`                            | Pi package 等共享配置                                  |
+| `~\.pi\agent\rhyza-sessions\`                          | Rhyza 的 Pi 会话记录                                   |
+| `~\.pi\agent\models-store.json`                        | Pi 动态模型目录缓存                                    |
+| `%USERPROFILE%\.codex`                                 | Codex Desktop/CLI 与 Rhyza 共享的 Codex 配置和登录状态 |
 
 `.pi-graph` 和 `PiGraph` 是历史兼容的数据目录；代码和运行时接口统一使用 Rhyza 命名。不要手工移动兼容目录。
+
+本地优先指状态存储方式。发起 AI 请求时，对话、图片和相关代码/文档片段会发送到所选 Provider。分享诊断信息前，应区分不含正文的性能统计与可能包含正文的请求快照。
 
 ## 6. 常见问题
 
@@ -210,7 +264,7 @@ Rhyza 使用 Electron single-instance lock。重复启动通常会聚焦现有�
 
 ### Provider 已登录，但没有模型
 
-确认账号具备对应订阅和模型权限，再 Sign Out/Connect 或重启应用。GitHub Copilot 的组织账号还可能受管理员模型策略限制。
+先点击 **Refresh status** 并确认账号具备对应模型权限。GitHub Copilot 的组织账号可能受管理员策略限制。Claude Code 不提供此处的动态模型列表，可使用默认模型或填写支持的别名。
 
 ### ChatGPT Desktop 已登录，但 Codex 仍显示未连接
 
@@ -227,3 +281,15 @@ Rhyza 复用的是同一 Windows 用户下的 **Codex 登录状态**，不是普
 ### Electron 下载失败或很慢
 
 确认 npm registry 和 Electron binary 下载地址可访问，并检查企业代理、防火墙或 VPN。依赖安装完成后无需安装全局 Electron。
+
+### npm ci 报 E404，随后出现 SDK TS2307
+
+先解决依赖下载失败，再启动应用。检查 `npm config get registry` 与代理设置；仓库的依赖 override 和 `.npmrc` 背景见[开发指南](development-guide.md#10-npm-代理源与依赖安装)。
+
+### 重启后找不到会话
+
+确认 **Settings → Workspace** 指向原来的绝对路径。不同 Workspace 使用独立状态文件，映射位于 `~/.pi-graph/workspaces.json`。
+
+### 输入、粘贴或流式输出时卡顿
+
+按[性能诊断](performance-diagnostics.md)复现并运行 `npm run diagnostics:analyze`，提供耗时摘要及复现步骤。
