@@ -17,9 +17,9 @@
 
 Rhyza 是一个本地优先的 AI 桌面工作台，适合阅读代码、研究问题和整理项目知识。你可以从任意历史回答继续追问，保留每条探索路径；再把值得复用的概念、关系和图表保存在同一个 Workspace 中，供后续对话使用。
 
-![Rhyza 工作区：左侧分支会话树与当前对话](docs/images/workspace-overview.png)
+![Rhyza 工作区：左侧分支节点图、会话预览与当前对话](docs/images/workspace-overview.png)
 
-<p align="center"><em>当前界面截图，使用虚构的订单服务演示数据；未连接模型。</em></p>
+<p align="center"><em>在节点图中浏览探索路径，预览历史回答，再回到当前对话继续追问。</em></p>
 
 > [!NOTE]
 > 当前为早期 MVP，主要在 Windows 10/11 上开发和验证，通过源码运行。尚未提供安装包、签名或自动更新；macOS 和 Linux 尚未完成验证。
@@ -88,7 +88,7 @@ npm run electron:dev
 
 ![Rhyza 知识库：概念列表、详情及关系](docs/images/knowledge-library.png)
 
-_当前 Knowledge 界面，使用与上图相同的演示数据。_
+_当前 Knowledge 界面，使用虚构的订单服务演示数据。_
 
 需要交互式图表时，可按[扩展说明](extensions/pi-archify/README.md)安装可选的 **Archify Pi extension**。默认 Mermaid 无需安装扩展；Pi 插件目前只面向 GitHub Copilot 工作流提供支持。
 

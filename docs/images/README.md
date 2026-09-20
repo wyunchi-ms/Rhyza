@@ -1,15 +1,15 @@
 # 文档媒体素材清单
 
-README 使用本目录中已提交的 PNG。截图直接渲染当前 React 界面，使用虚构的订单服务演示数据，不是概念设计图，也不代表一次真实模型调用。
+README 使用本目录中已提交的 PNG，展示真实产品界面。工作区主图展示已有会话，知识库截图使用虚构的订单服务数据；二者不是同一次演示。
 
 ## 已有素材
 
-| 文件                                             | 内容                             | 尺寸     |
-| ------------------------------------------------ | -------------------------------- | -------- |
-| [workspace-overview.png](workspace-overview.png) | 会话列表、回答、知识引用与输入框 | 1440×960 |
-| [knowledge-library.png](knowledge-library.png)   | Entity 列表、详情与关系          | 1440×960 |
+| 文件                                             | 内容                                      | 尺寸      |
+| ------------------------------------------------ | ----------------------------------------- | --------- |
+| [workspace-overview.png](workspace-overview.png) | 分支节点图、会话预览、对话与 Mermaid 图表 | 2560×1343 |
+| [knowledge-library.png](knowledge-library.png)   | Entity 列表、详情与关系                   | 1440×960  |
 
-本次素材通过隐藏 Electron 窗口加载当前 Renderer，在隔离临时 profile 中注入演示 Session、Turn、Entity 和 Relation；没有加载应用 Main/preload、真实 Provider、用户登录或真实 Workspace。聊天页因此显示运行时不可用提示。这些截图展示浏览与知识界面，不用于证明 Agent 执行成功。
+`knowledge-library.png` 通过隐藏 Electron 窗口加载当前 Renderer，在隔离临时 profile 中注入演示 Session、Turn、Entity 和 Relation；没有加载应用 Main/preload、真实 Provider、用户登录或真实 Workspace。它展示知识界面，不用于证明 Agent 执行成功。`workspace-overview.png` 为后续替换的桌面会话截图，保留了节点图与历史预览。
 
 后续更新时沿用下面的演示场景；涉及真实 Agent 行为的动图应在完整桌面应用中录制。
 
