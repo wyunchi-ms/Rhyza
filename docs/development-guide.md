@@ -137,6 +137,20 @@ demo-video/                  独立 HyperFrames 演示视频工程
 
 `demo-video` 是独立子项目，修改前必须遵守其中的 `AGENTS.md` 和 `CLAUDE.md`。
 
+### 界面样式与设计 skill
+
+项目内安装了 [Taste Skill](https://github.com/Leonxlnx/taste-skill) 的
+`design-taste-frontend` 与 `redesign-existing-projects`，位于 `.agents/skills/`；
+`skills-lock.json` 记录上游来源和内容校验值，许可证保留在 `.agents/skills/LICENSE`。
+更新时使用 `npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend --skill redesign-existing-projects --agent github-copilot --yes`。
+
+Rhyza 是工具型桌面应用，采用 redesign-preserve 模式：保留工作区布局、路由、品牌图标和操作流程，
+只使用适合产品界面的排版、层级、状态和可访问性建议，不引入营销页动效或远程字体。
+`src/theme.css` 维护深浅主题和高对比度语义变量；`src/interface.css` 维护共享外壳、
+导航、聊天和基础控件；页面专属布局位于 `src/pages/library-pages.css` 与
+`src/pages/settings-page.css`。这些样式由 `src/main.tsx` 在基础样式之后加载。
+新增控件复用主题变量，保留错误、禁用、键盘焦点与 reduced-motion 状态。
+
 ## 5. 开发命令
 
 | 命令                                     | 作用                                               |
@@ -150,6 +164,7 @@ demo-video/                  独立 HyperFrames 演示视频工程
 | `npm test`                               | 编译测试配置并运行 `tests/*.test.ts`               |
 | `npm run test:html-preview`              | 运行 Chromium/DOM HTML Preview 回归                |
 | `npm run test:chat-performance`          | 隐藏 Electron 窗口中的输入、消息更新和保存去重回归 |
+| `npm run test:ui`                        | 五个页面的深浅主题、窄窗口、文字对比度和导航回归 |
 | `npm run test:formatter`                 | 在临时目录验证格式化与 hook 路径处理               |
 | `npm run smoke:ipc`                      | IPC payload 和边界 smoke                           |
 | `npm run smoke:branch-usage`             | 分支 usage 聚合 smoke                              |
@@ -193,6 +208,15 @@ HTML Preview：
 node --import tsx --test tests\html-preview.test.ts
 npm run test:html-preview
 ```
+
+界面与主题：
+
+```powershell
+npm run test:ui
+```
+
+UI 回归使用隐藏 Electron 窗口、独立临时用户目录和合成数据，不读取真实 Workspace，
+覆盖 375、768、1024、1440 宽度、空/有数据状态、大字体、高对比度及关键导航。
 
 完整桌面路径：
 

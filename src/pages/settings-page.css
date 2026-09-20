@@ -1,0 +1,640 @@
+html[data-theme] .settings-page {
+	min-width: 0;
+	background: var(--color-bg);
+	color: var(--color-primary);
+	font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+	container: settings / inline-size;
+}
+
+.settings-page .settings-sections {
+	gap: 2.25rem;
+}
+
+.settings-page .settings-section {
+	min-width: 0;
+}
+
+.settings-page .settings-section-header {
+	margin-bottom: 0.85rem;
+}
+
+html[data-theme] .settings-page .settings-section-header h2 {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	margin: 0;
+	color: var(--color-primary);
+	font-size: 0.9375rem;
+	font-weight: 600;
+	letter-spacing: -0.015em;
+	line-height: 1.5;
+}
+
+.settings-page .settings-section-header h2 svg {
+	flex: 0 0 auto;
+	color: var(--color-secondary);
+	stroke-width: 1.7;
+}
+
+html[data-theme] .settings-page .settings-section-header p {
+	max-width: 65ch;
+	margin: 0.35rem 0 0;
+	color: var(--color-secondary);
+	font-size: 0.8125rem;
+	line-height: 1.6;
+	text-wrap: pretty;
+}
+
+/* The legacy settings rule applies important borders to direct section children. */
+html[data-theme] .settings-page .settings-section > .settings-panel {
+	min-width: 0;
+	margin: 0;
+	border: 1px solid var(--ui-border) !important;
+	border-radius: 0.75rem !important;
+	background: var(--color-surface) !important;
+	color: var(--color-primary);
+	box-shadow: var(--ui-shadow-sm) !important;
+	padding: 0 1.25rem;
+}
+
+.settings-page .settings-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.25rem;
+	padding: 1.15rem 0;
+}
+
+.settings-page .settings-row + .settings-row {
+	border-top: 1px solid var(--ui-border);
+}
+
+.settings-page .settings-row--field {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 1.5rem;
+}
+
+.settings-page .settings-row-copy {
+	min-width: 0;
+}
+
+html[data-theme] .settings-page .settings-label,
+html[data-theme] .settings-page .settings-row h3,
+html[data-theme] .settings-page .pi-plugin-install > label,
+html[data-theme] .settings-page .pi-plugin-list-header h3 {
+	display: block;
+	margin: 0;
+	color: var(--color-primary);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+html[data-theme] .settings-page .settings-help,
+html[data-theme] .settings-page .pi-plugin-install > p,
+html[data-theme] .settings-page .pi-plugin-reload-note {
+	margin: 0.3rem 0 0;
+	color: var(--color-secondary);
+	font-size: 0.75rem !important;
+	font-weight: 400;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.settings-page .settings-row-copy .settings-help {
+	max-width: 58ch;
+}
+
+html[data-theme] .settings-page .settings-input {
+	width: 100%;
+	min-width: 0;
+	min-height: 2.75rem;
+	margin: 0;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem !important;
+	background: var(--ui-surface-muted) !important;
+	color: var(--color-primary);
+	box-shadow: none;
+	padding: 0.6rem 0.75rem;
+	font: inherit;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	transition:
+		border-color 160ms ease,
+		background-color 160ms ease;
+}
+
+html[data-theme] .settings-page .settings-input::placeholder {
+	color: var(--color-secondary);
+	opacity: 0.8;
+}
+
+html[data-theme] .settings-page .settings-input:hover:not(:disabled) {
+	border-color: var(--color-secondary);
+}
+
+html[data-theme] .settings-page .settings-input:focus-visible {
+	border-color: var(--ui-brand-ink);
+}
+
+.settings-page select.settings-input {
+	cursor: pointer;
+}
+
+html[data-theme] .settings-page .settings-input--number {
+	width: 5.5rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.settings-page .settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.settings-page .settings-provider-connection {
+	flex-wrap: wrap;
+}
+
+.settings-page .settings-provider-connection .settings-row-copy {
+	flex: 1 1 15rem;
+}
+
+.settings-page .settings-provider-connection .settings-actions {
+	flex: 0 1 auto;
+}
+
+html[data-theme] .settings-page :is(.command-button, .secondary-button) {
+	min-height: 2.5rem;
+	max-width: 100%;
+	flex-shrink: 0;
+	gap: 0.45rem;
+	border-radius: 0.5rem;
+	padding: 0.55rem 0.8rem;
+	font-family: inherit;
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.4;
+	text-align: center;
+	white-space: normal;
+	cursor: pointer;
+}
+
+.settings-page :is(.command-button, .secondary-button) svg {
+	flex: 0 0 auto;
+}
+
+html[data-theme] .settings-page .secondary-button {
+	border: 1px solid var(--ui-border);
+	background: var(--color-surface);
+	color: var(--color-primary);
+}
+
+html[data-theme] .settings-page .secondary-button:hover:not(:disabled) {
+	border-color: var(--color-secondary);
+	background: var(--ui-hover);
+}
+
+html[data-theme] .settings-page :is(button, input, select):disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+html[data-theme] .settings-page :is(button, input, select):focus-visible {
+	outline: 2px solid var(--ui-brand-ink);
+	outline-offset: 3px;
+}
+
+.settings-page .settings-inset {
+	margin: 0 0 1rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	background: var(--ui-surface-muted);
+	padding: 0.85rem 1rem;
+	color: var(--color-secondary);
+	overflow-wrap: anywhere;
+}
+
+.settings-page .settings-inset p {
+	font-size: 0.75rem;
+	line-height: 1.65;
+}
+
+.settings-page .settings-setup-instructions p {
+	white-space: pre-line;
+}
+
+.settings-page .settings-inset p + p {
+	margin-top: 0.5rem;
+}
+
+.settings-page .settings-auth-events {
+	display: grid;
+	gap: 0.75rem;
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft);
+	color: var(--ui-brand-ink);
+}
+
+.settings-page .settings-auth-actions,
+.settings-page .settings-auth-link {
+	margin-top: 0.6rem;
+}
+
+.settings-page .settings-workspace-path {
+	overflow-wrap: anywhere;
+}
+
+.settings-page .settings-status {
+	display: inline-flex;
+	max-width: 100%;
+	flex: 0 0 auto;
+	align-items: center;
+	border: 1px solid var(--ui-brand-border);
+	border-radius: 0.35rem;
+	background: var(--ui-brand-soft);
+	padding: 0.3rem 0.5rem;
+	color: var(--ui-brand-ink);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+html[data-theme] .settings-page .settings-section > .theme-settings {
+	padding: 1.25rem;
+}
+
+.settings-page .theme-options {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+}
+
+html[data-theme] .settings-page .theme-options label {
+	gap: 0.65rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	background: var(--color-surface) !important;
+	padding: 1rem;
+	color: var(--color-secondary);
+	box-shadow: none;
+}
+
+html[data-theme] .settings-page .theme-options label:hover {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-hover) !important;
+}
+
+html[data-theme] .settings-page .theme-options label.is-selected {
+	border-color: var(--ui-brand-ink);
+	background: var(--ui-brand-soft) !important;
+	color: var(--ui-brand-ink);
+	box-shadow: inset 0 0 0 1px var(--ui-brand-border);
+}
+
+html[data-theme] .settings-page .theme-options strong {
+	color: var(--color-primary);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+html[data-theme] .settings-page .theme-options small {
+	color: var(--color-secondary);
+	font-size: 0.6875rem;
+	line-height: 1.5;
+}
+
+html[data-theme] .settings-page .theme-options input {
+	flex-shrink: 0;
+	border-color: var(--color-secondary);
+}
+
+html[data-theme] .settings-page .theme-options input:checked {
+	border-color: var(--ui-brand-ink);
+}
+
+html[data-theme] .settings-page .theme-options input::before {
+	background: var(--ui-brand-ink);
+}
+
+html[data-theme] .settings-page .settings-theme-note {
+	margin-top: 0.85rem;
+}
+
+.settings-page .settings-switch,
+.settings-page .settings-switch-input {
+	position: relative;
+	display: inline-block;
+	width: 2.75rem;
+	height: 2.75rem;
+	flex: 0 0 auto;
+	appearance: none;
+	margin: 0;
+	border: 0;
+	border-radius: 0.5rem;
+	background: transparent;
+	padding: 0;
+	cursor: pointer;
+}
+
+.settings-page .settings-switch-track,
+.settings-page .settings-switch-input::before {
+	position: absolute;
+	top: 50%;
+	left: 0.125rem;
+	width: 2.5rem;
+	height: 1.5rem;
+	border: 1px solid var(--color-secondary);
+	border-radius: 2rem;
+	background: var(--ui-surface-muted);
+	transform: translateY(-50%);
+	content: "";
+	transition:
+		background-color 160ms ease,
+		border-color 160ms ease;
+}
+
+.settings-page .settings-switch-track::after,
+.settings-page .settings-switch-input::after {
+	position: absolute;
+	top: 50%;
+	left: 0.125rem;
+	width: 1.125rem;
+	height: 1.125rem;
+	border-radius: 50%;
+	background: var(--color-secondary);
+	transform: translateY(-50%);
+	content: "";
+	transition:
+		transform 160ms ease,
+		background-color 160ms ease;
+}
+
+.settings-page .settings-switch-input::after {
+	left: 0.3125rem;
+}
+
+.settings-page .settings-switch[aria-checked="true"] .settings-switch-track,
+.settings-page .settings-switch-input:checked::before {
+	border-color: var(--ui-brand-ink);
+	background: var(--ui-brand-ink);
+}
+
+.settings-page .settings-switch[aria-checked="true"] .settings-switch-track::after,
+.settings-page .settings-switch-input:checked::after {
+	background: var(--color-surface);
+	transform: translate(1rem, -50%);
+}
+
+.settings-page .settings-switch:hover .settings-switch-track,
+.settings-page .settings-switch-input:hover::before {
+	box-shadow: 0 0 0 3px var(--ui-hover);
+}
+
+.settings-page .settings-range-control {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 0.9rem;
+}
+
+.settings-page .settings-range-control input {
+	width: 100%;
+	min-width: 0;
+	height: 2.75rem;
+	margin: 0;
+	accent-color: var(--ui-brand-ink);
+	cursor: pointer;
+}
+
+.settings-page .settings-range-control output {
+	min-width: 3.1rem;
+	color: var(--color-primary);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+html[data-theme] .settings-page .settings-section > .pi-plugins-card {
+	padding: 1.25rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-warning {
+	gap: 0.65rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	background: var(--ui-surface-muted);
+	padding: 0.85rem;
+	color: var(--color-secondary);
+}
+
+.settings-page .pi-plugin-warning p {
+	font-size: 0.75rem;
+	line-height: 1.6;
+}
+
+.settings-page .pi-plugin-warning svg {
+	margin-top: 0.15rem;
+	color: var(--color-primary);
+}
+
+.settings-page .pi-plugin-install {
+	gap: 0.55rem;
+	margin-top: 1.25rem;
+}
+
+.settings-page .pi-plugin-source-row {
+	align-items: stretch;
+}
+
+.settings-page .pi-plugin-install > .secondary-button {
+	justify-self: start;
+	margin-top: 0.15rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-list-header {
+	flex-wrap: wrap;
+	gap: 0.65rem;
+	margin-top: 1.5rem;
+	border-color: var(--ui-border);
+	padding-bottom: 0.85rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-list-header h3 {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-list-header h3 span {
+	min-width: 1.35rem;
+	height: 1.35rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.3rem;
+	background: var(--ui-surface-muted);
+	color: var(--color-secondary);
+	font-size: 0.6875rem;
+	font-variant-numeric: tabular-nums;
+}
+
+html[data-theme] .settings-page .pi-plugin-list li {
+	align-items: flex-start;
+	gap: 0.85rem;
+	border-color: var(--ui-border);
+	padding: 1rem 0;
+}
+
+html[data-theme] .settings-page .pi-plugin-list strong {
+	color: var(--color-primary);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+html[data-theme] .settings-page .pi-plugin-list code {
+	overflow: visible;
+	color: var(--color-secondary);
+	font-size: 0.6875rem;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
+html[data-theme] .settings-page .pi-plugin-list small {
+	margin-top: 0.15rem;
+	color: var(--color-secondary);
+	font-size: 0.6875rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+html[data-theme] .settings-page .pi-plugin-empty {
+	min-height: 5rem;
+	padding: 1rem 0.5rem;
+	color: var(--color-secondary);
+	font-size: 0.75rem;
+	line-height: 1.6;
+	text-align: center;
+}
+
+.settings-page .pi-plugin-empty svg {
+	flex: 0 0 auto;
+}
+
+html[data-theme] .settings-page .settings-error,
+html[data-theme] .settings-page .pi-plugin-error {
+	border: 1px solid var(--ui-border);
+	border-left: 3px solid currentColor;
+	border-radius: 0.35rem;
+	background: var(--ui-surface-muted);
+	padding: 0.65rem 0.8rem;
+	color: var(--color-primary);
+	font-size: 0.75rem;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.settings-page .settings-error {
+	margin-top: 0.6rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-reload-note {
+	margin-top: 0.75rem;
+}
+
+html.high-contrast .settings-page {
+	--ui-border: var(--color-primary);
+}
+
+html.high-contrast .settings-page .settings-help,
+html.high-contrast .settings-page .settings-section-header p {
+	color: var(--color-primary);
+}
+
+@container settings (max-width: 36rem) {
+	.settings-page .settings-row--field {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.65rem;
+	}
+
+	.settings-page .settings-workspace-folder {
+		flex-wrap: wrap;
+	}
+
+	.settings-page .settings-workspace-folder .settings-row-copy {
+		flex-basis: 100%;
+	}
+}
+
+@container settings (max-width: 28rem) {
+	html[data-theme] .settings-page .settings-section > .settings-panel {
+		padding-inline: 1rem;
+	}
+
+	.settings-page .theme-options {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.settings-page .pi-plugin-source-row {
+		flex-wrap: wrap;
+	}
+
+	.settings-page .pi-plugin-source-row .settings-input {
+		flex-basis: 100%;
+	}
+
+	.settings-page .pi-plugin-list li {
+		flex-wrap: wrap;
+	}
+
+	.settings-page .pi-plugin-list li > div {
+		flex-basis: 100%;
+	}
+
+	.settings-page .settings-row {
+		gap: 0.8rem;
+	}
+
+	.settings-page .settings-status {
+		max-width: 7rem;
+		flex-shrink: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.settings-page *,
+	.settings-page *::before,
+	.settings-page *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+@media (forced-colors: active) {
+	.settings-page .settings-switch-track,
+	.settings-page .settings-switch-input::before {
+		border-color: ButtonText;
+	}
+
+	.settings-page .settings-switch-track::after,
+	.settings-page .settings-switch-input::after {
+		background: ButtonText;
+	}
+
+	.settings-page .settings-switch[aria-checked="true"] .settings-switch-track,
+	.settings-page .settings-switch-input:checked::before {
+		border-color: Highlight;
+		background: Highlight;
+		forced-color-adjust: none;
+	}
+
+	.settings-page .settings-switch[aria-checked="true"] .settings-switch-track::after,
+	.settings-page .settings-switch-input:checked::after {
+		background: HighlightText;
+		forced-color-adjust: none;
+	}
+}

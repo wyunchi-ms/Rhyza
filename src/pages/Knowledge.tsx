@@ -128,17 +128,41 @@ const Knowledge = () => {
 	};
 
 	return (
-		<div className="knowledge-page flex-1 bg-white overflow-hidden">
+		<div className="knowledge-page library-page flex-1 overflow-hidden">
 			<header className="knowledge-page-header">
 				<div>
 					<p className="knowledge-eyebrow">Workspace library</p>
-					<h1>Knowledge</h1>
+					<h1 className="page-title">Knowledge</h1>
 				</div>
-				<div className="knowledge-tabs" role="tablist" aria-label="Knowledge resource type">
+				<div
+					className="knowledge-tabs"
+					role="tablist"
+					aria-label="Knowledge resource type"
+					onKeyDown={(event) => {
+						if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+						event.preventDefault();
+						const nextMode =
+							event.key === "Home"
+								? "entities"
+								: event.key === "End"
+									? "diagrams"
+									: mode === "entities"
+										? "diagrams"
+										: "entities";
+						setMode(nextMode);
+						setSearch("");
+						event.currentTarget
+							.querySelector<HTMLButtonElement>(`#knowledge-${nextMode}-tab`)
+							?.focus();
+					}}
+				>
 					<button
 						type="button"
 						role="tab"
+						id="knowledge-entities-tab"
+						aria-controls="knowledge-resource-panel"
 						aria-selected={mode === "entities"}
+						tabIndex={mode === "entities" ? 0 : -1}
 						className={mode === "entities" ? "is-active" : ""}
 						onClick={() => {
 							setMode("entities");
@@ -152,7 +176,10 @@ const Knowledge = () => {
 					<button
 						type="button"
 						role="tab"
+						id="knowledge-diagrams-tab"
+						aria-controls="knowledge-resource-panel"
 						aria-selected={mode === "diagrams"}
+						tabIndex={mode === "diagrams" ? 0 : -1}
 						className={mode === "diagrams" ? "is-active" : ""}
 						onClick={() => {
 							setMode("diagrams");
@@ -171,6 +198,9 @@ const Knowledge = () => {
 						disabled={rebuildDisabled}
 						onClick={() => void rebuildRelations()}
 						title={rebuildTitle}
+						aria-label={
+							rebuildState.status === "running" ? "Rebuilding relations" : "Rebuild relations"
+						}
 					>
 						<RefreshCw
 							size={15}
@@ -187,6 +217,17 @@ const Knowledge = () => {
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder={resourceCount === 0 ? `No ${mode} to search` : `Search ${mode}`}
 						/>
+						{search && (
+							<button
+								type="button"
+								className="knowledge-search-clear"
+								onClick={() => setSearch("")}
+								aria-label="Clear search"
+								title="Clear search"
+							>
+								<X size={14} />
+							</button>
+						)}
 					</label>
 					{rebuildState.message && (
 						<p className={`knowledge-rebuild-feedback is-${rebuildState.status}`} role="status">
@@ -195,11 +236,18 @@ const Knowledge = () => {
 					)}
 				</div>
 			</header>
-			<div className="knowledge-browser">
+			<div
+				className="knowledge-browser"
+				id="knowledge-resource-panel"
+				role="tabpanel"
+				aria-labelledby={`knowledge-${mode}-tab`}
+			>
 				<aside className="knowledge-resource-pane" aria-label={`${mode} list`}>
 					<div className="knowledge-resource-heading">
 						<strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong>
-						<span>{filteredResourceCount} shown</span>
+						<span role="status">
+							{search ? `${filteredResourceCount} of ${resourceCount}` : `${resourceCount} total`}
+						</span>
 					</div>
 					<div className="knowledge-resource-list">
 						{mode === "entities"
@@ -209,6 +257,8 @@ const Knowledge = () => {
 										key={entity.id}
 										onClick={() => store.setSelectedEntity(entity.id)}
 										className={selected?.id === entity.id ? "is-selected" : ""}
+										aria-pressed={selected?.id === entity.id}
+										title={entity.name}
 									>
 										<span>
 											<strong>{entity.name}</strong>
@@ -225,6 +275,8 @@ const Knowledge = () => {
 										key={item.id}
 										onClick={() => setSelectedDiagramId(item.id)}
 										className={diagram?.id === item.id ? "is-selected" : ""}
+										aria-pressed={diagram?.id === item.id}
+										title={item.name}
 									>
 										<div className="knowledge-diagram-list-title">
 											<DiagramTypeIcon type={item.type} size={17} aria-hidden="true" />
@@ -266,7 +318,7 @@ const Knowledge = () => {
 									<EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />
 								)}
 							</section>
-							<aside className="knowledge-inspector">
+							<aside className="knowledge-inspector" aria-label="Entity details and relations">
 								<EntityMetaPanel
 									entity={selected}
 									onOpenHistory={() =>
@@ -286,7 +338,7 @@ const Knowledge = () => {
 							<section className="knowledge-primary-detail">
 								<DiagramViewer diagram={diagram} />
 							</section>
-							<aside className="knowledge-inspector">
+							<aside className="knowledge-inspector" aria-label="Diagram details and connections">
 								<DiagramEditor
 									diagram={diagram}
 									entities={activeEntities}
@@ -303,12 +355,23 @@ const Knowledge = () => {
 							</aside>
 						</div>
 					) : (
-						<div className="empty-state h-full">
-							{resourceCount === 0
-								? mode === "entities"
-									? "No entities yet. Complete a chat turn to build your knowledge base."
-									: "No diagrams yet. Mermaid diagrams from agent responses will appear here."
-								: `No ${mode} match “${searchTerm}”.`}
+						<div className="empty-state knowledge-empty-state">
+							<span className="library-empty-icon" aria-hidden="true">
+								{mode === "entities" ? <Database size={23} /> : <Network size={23} />}
+							</span>
+							<h2>{resourceCount === 0 ? `No ${mode} yet` : `No matching ${mode}`}</h2>
+							<p>
+								{resourceCount === 0
+									? mode === "entities"
+										? "Complete a chat turn to build your knowledge base."
+										: "Mermaid diagrams from agent responses will appear here."
+									: `No ${mode} match “${searchTerm}”. Try another search.`}
+							</p>
+							{search && (
+								<button type="button" className="secondary-button" onClick={() => setSearch("")}>
+									Clear search
+								</button>
+							)}
 						</div>
 					)}
 				</main>
@@ -331,13 +394,14 @@ function EntityPreview({ entity, onEdit }: { entity: Entity; onEdit: () => void 
 		<div className="entity-markdown-preview h-full overflow-y-auto p-6 lg:p-10">
 			<article className="mx-auto max-w-3xl">
 				<header>
-					<div className="flex items-start justify-between gap-4">
+					<div className="entity-preview-heading">
 						<div>
 							<div className="flex flex-wrap items-center gap-2">
 								<span className="status-badge status-progress">{entity.type}</span>
 								<span className="status-badge status-success">{entity.confidence}</span>
+								<span className="entity-version">v{entity.version}</span>
 							</div>
-							<h1>{entity.name}</h1>
+							<h2 className="entity-preview-title">{entity.name}</h2>
 							{entity.summary && <p>{entity.summary}</p>}
 						</div>
 						<button type="button" className="secondary-button shrink-0" onClick={onEdit}>
@@ -412,8 +476,8 @@ function EntityCenterEditor({
 			<div className="mx-auto max-w-4xl space-y-5">
 				<div className="flex items-center justify-between gap-3">
 					<div>
-						<span className="text-xs uppercase font-bold text-accent">Editing entity</span>
-						<h1>{draft.name || "Untitled entity"}</h1>
+						<span className="entity-editor-label">Editing entity</span>
+						<h2 className="entity-preview-title">{draft.name || "Untitled entity"}</h2>
 					</div>
 					<button type="button" className="secondary-button" onClick={onCancel}>
 						Cancel
@@ -633,11 +697,11 @@ function EntityMetaPanel({
 		setRelationForm(null);
 	};
 	return (
-		<div className="p-5 space-y-5">
-			<div className="flex items-start justify-between gap-3">
+		<div className="knowledge-inspector-content p-5 space-y-5">
+			<div className="knowledge-inspector-heading">
 				<div className="min-w-0">
-					<span className="text-xs uppercase font-bold text-accent">{entity.type}</span>
-					<h2 className="text-xl font-black text-primary truncate">{entity.name}</h2>
+					<span className="knowledge-inspector-type">{entity.type}</span>
+					<h2 title={entity.name}>{entity.name}</h2>
 				</div>
 				<div className="flex shrink-0 items-center gap-1">
 					<button
@@ -990,16 +1054,16 @@ function DiagramEditor({
 	};
 	return (
 		<form
-			className="p-5 space-y-5"
+			className="knowledge-inspector-content p-5 space-y-5"
 			onSubmit={(event) => {
 				event.preventDefault();
 				if (draft.mermaidSource.trim()) saveDiagram(draft);
 			}}
 		>
-			<div className="flex items-start justify-between gap-3">
+			<div className="knowledge-inspector-heading">
 				<div className="min-w-0">
-					<span className="text-xs uppercase font-bold text-accent">Diagram</span>
-					<h2 className="text-xl font-black text-primary truncate">{diagram.name}</h2>
+					<span className="knowledge-inspector-type">Diagram</span>
+					<h2 title={diagram.name}>{diagram.name}</h2>
 				</div>
 				<div className="flex shrink-0 items-center gap-1">
 					<button
@@ -1058,6 +1122,7 @@ function DiagramEditor({
 						Connected entities
 					</h3>
 					<span className="entity-section-actions">
+						<small>{linkedNodes.length}</small>
 						<button
 							type="button"
 							disabled={unlinkedNodes.length === 0 || entities.length === 0}

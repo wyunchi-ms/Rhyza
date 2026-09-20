@@ -55,21 +55,26 @@ const Settings: React.FC = () => {
 			</div>
 
 			<div className="settings-sections">
-				<section>
-					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-						<Package size={16} /> Pi Plugins (GitHub Copilot only)
-					</h2>
-					<p className="text-sm text-secondary mb-4">
-						These plugins run only with GitHub Copilot through Pi, not with Codex or Claude Code.
-					</p>
+				<section className="settings-section" aria-labelledby="plugins-heading">
+					<header className="settings-section-header">
+						<h2 id="plugins-heading">
+							<Package size={17} aria-hidden="true" /> Pi plugins
+						</h2>
+						<p>
+							These plugins run only with GitHub Copilot through Pi, not with Codex or Claude Code.
+						</p>
+					</header>
 					<PluginSettings />
 				</section>
 
-				<section>
-					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-						<Palette size={16} /> Appearance
-					</h2>
-					<fieldset className="theme-settings border border-gray-200 rounded-2xl p-6 bg-white shadow-sm">
+				<section className="settings-section" aria-labelledby="appearance-heading">
+					<header className="settings-section-header">
+						<h2 id="appearance-heading">
+							<Palette size={17} aria-hidden="true" /> Appearance
+						</h2>
+						<p>Choose a comfortable environment for your workspace.</p>
+					</header>
+					<fieldset className="settings-panel theme-settings">
 						<legend className="sr-only">App theme</legend>
 						<div className="theme-options">
 							<label className={clsx(settings.theme === "light" && "is-selected")}>
@@ -101,31 +106,38 @@ const Settings: React.FC = () => {
 								</span>
 							</label>
 						</div>
-						<p className="text-xs text-secondary mt-4">
+						<p className="settings-help settings-theme-note">
 							Interactive diagrams follow the app theme automatically.
 						</p>
 					</fieldset>
 				</section>
 
-				<section>
-					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-						<Cloud size={16} /> AI Provider
-					</h2>
-					<div className="border border-gray-200 rounded-2xl p-6 bg-white shadow-sm">
-						<div className="mb-6">
-							<label
-								htmlFor="provider-select"
-								className="block text-sm font-bold text-primary mb-2"
-							>
-								Provider
-							</label>
+				<section className="settings-section" aria-labelledby="provider-heading">
+					<header className="settings-section-header">
+						<h2 id="provider-heading">
+							<Cloud size={17} aria-hidden="true" /> AI provider
+						</h2>
+						<p>Manage your connection and the model used for new requests.</p>
+					</header>
+					<div className="settings-panel">
+						<div className="settings-row settings-row--field">
+							<div className="settings-row-copy">
+								<label htmlFor="provider-select" className="settings-label">
+									Provider
+								</label>
+								<p id="provider-help" className="settings-help">
+									Used for new messages, titles, and knowledge extraction. Changing provider resets
+									the model to its default.
+								</p>
+							</div>
 							<select
 								id="provider-select"
 								value={provider.id}
 								onChange={(event) =>
 									updateSettings({ provider: normalizeProviderId(event.target.value) })
 								}
-								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
+								aria-describedby="provider-help"
+								className="field settings-input"
 							>
 								{providers.map((item) => (
 									<option key={item.id} value={item.id}>
@@ -133,18 +145,11 @@ const Settings: React.FC = () => {
 									</option>
 								))}
 							</select>
-							<p className="text-xs text-secondary mt-2">
-								Used for new messages, titles, and knowledge extraction. Changing provider resets
-								the model to its default.
-							</p>
 						</div>
-						<div
-							className="flex flex-wrap justify-between items-center gap-4 mb-6"
-							aria-busy={electron.loading}
-						>
-							<div>
-								<h3 className="font-bold text-primary text-lg">{provider.label}</h3>
-								<p className="text-sm text-secondary">
+						<div className="settings-row settings-provider-connection" aria-busy={electron.loading}>
+							<div className="settings-row-copy">
+								<h3>{provider.label}</h3>
+								<p className="settings-help" role="status">
 									{electron.isElectron
 										? electron.loading
 											? "Checking connection…"
@@ -157,12 +162,12 @@ const Settings: React.FC = () => {
 										: "Provider controls require the Electron desktop runtime."}
 								</p>
 								{electron.error && (
-									<p role="alert" className="text-xs text-red-500 mt-1">
+									<p role="alert" className="settings-error">
 										{electron.error}
 									</p>
 								)}
 							</div>
-							<div className="flex items-center gap-2 shrink-0">
+							<div className="settings-actions">
 								{!externalAuth && (
 									<button
 										type="button"
@@ -172,7 +177,7 @@ const Settings: React.FC = () => {
 												: electron.login())
 										}
 										disabled={!electron.isElectron || electron.loading}
-										className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
+										className="secondary-button"
 									>
 										{electron.action === "login"
 											? "Signing In…"
@@ -187,14 +192,10 @@ const Settings: React.FC = () => {
 									type="button"
 									onClick={() => void electron.refresh()}
 									disabled={!electron.isElectron || electron.loading}
-									className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
+									className="secondary-button"
 								>
 									{electron.loading && (
-										<LoaderCircle
-											size={14}
-											className="inline mr-2 animate-spin"
-											aria-hidden="true"
-										/>
+										<LoaderCircle size={14} className="pi-plugin-spinner" aria-hidden="true" />
 									)}
 									{electron.action === "refresh"
 										? "Checking…"
@@ -206,36 +207,37 @@ const Settings: React.FC = () => {
 						</div>
 
 						{setupInstructions && (
-							<div className="mb-6 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm text-secondary">
-								<p className="whitespace-pre-line">{setupInstructions}</p>
+							<div className="settings-inset settings-setup-instructions">
+								<p>{setupInstructions}</p>
 								{externalAuth && (
-									<p className="mt-2">
-										Sign-in and sign-out are managed by the local CLI, not Rhyza.
-									</p>
+									<p>Sign-in and sign-out are managed by the local CLI, not Rhyza.</p>
 								)}
 							</div>
 						)}
 
 						{!externalAuth && electron.authEvents.length > 0 && (
-							<div
-								role="status"
-								className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900 space-y-1"
-							>
+							<div role="status" className="settings-inset settings-auth-events">
 								{electron.authEvents.map((event, index) => (
 									<AuthEventItem key={`${event.type}-${index}`} event={event} />
 								))}
 							</div>
 						)}
 
-						<div>
-							<label htmlFor="model-select" className="block text-sm font-bold text-primary mb-2">
-								Default Model
-							</label>
+						<div className="settings-row settings-row--field">
+							<div className="settings-row-copy">
+								<label htmlFor="model-select" className="settings-label">
+									Default model
+								</label>
+								<p id="model-help" className="settings-help">
+									Use the provider default or choose an available model.
+								</p>
+							</div>
 							<select
 								id="model-select"
 								value={selectedModel}
 								onChange={(e) => updateSettings({ defaultModel: e.target.value })}
-								className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
+								aria-describedby="model-help"
+								className="field settings-input"
 							>
 								<option value="">Use provider default</option>
 								{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
@@ -245,48 +247,50 @@ const Settings: React.FC = () => {
 									</option>
 								))}
 							</select>
-							{externalAuth && (
-								<div className="mt-4">
-									<label
-										htmlFor="custom-model-id"
-										className="block text-sm font-bold text-primary mb-2"
-									>
+						</div>
+						{externalAuth && (
+							<div className="settings-row settings-row--field">
+								<div className="settings-row-copy">
+									<label htmlFor="custom-model-id" className="settings-label">
 										Custom model ID or CLI alias
 									</label>
-									<input
-										id="custom-model-id"
-										type="text"
-										value={selectedModel}
-										onChange={(event) => updateSettings({ defaultModel: event.target.value })}
-										placeholder="Leave blank for provider default"
-										aria-describedby="custom-model-help"
-										className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent/20 focus:border-accent font-medium text-sm outline-none"
-									/>
-									<p id="custom-model-help" className="text-xs text-secondary mt-2">
+									<p id="custom-model-help" className="settings-help">
 										{provider.label} may not publish a model catalog. The provider default works
 										without one; you can also enter a supported SDK/CLI model ID or alias.
 									</p>
 								</div>
-							)}
-						</div>
+								<input
+									id="custom-model-id"
+									type="text"
+									value={selectedModel}
+									onChange={(event) => updateSettings({ defaultModel: event.target.value })}
+									placeholder="Leave blank for provider default"
+									aria-describedby="custom-model-help"
+									className="field settings-input"
+								/>
+							</div>
+						)}
 					</div>
 				</section>
 
-				<section>
-					<h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-						<Settings2 size={16} /> Workspace
-					</h2>
-					<div className="border border-gray-200 rounded-2xl p-6 bg-white shadow-sm space-y-6">
-						<div className="flex justify-between items-center gap-4">
-							<div>
-								<h3 className="font-bold text-primary">Workspace Folder</h3>
-								<p className="text-sm text-secondary break-all">
+				<section className="settings-section" aria-labelledby="workspace-heading">
+					<header className="settings-section-header">
+						<h2 id="workspace-heading">
+							<Settings2 size={17} aria-hidden="true" /> Workspace
+						</h2>
+						<p>Set the working folder and how sessions use it.</p>
+					</header>
+					<div className="settings-panel">
+						<div className="settings-row settings-workspace-folder">
+							<div className="settings-row-copy">
+								<h3>Workspace folder</h3>
+								<p className="settings-help settings-workspace-path">
 									{electron.isElectron
 										? (electron.workspace.path ?? "No workspace selected.")
 										: "Workspace selection requires the Electron desktop runtime."}
 								</p>
 								{electron.workspaceError && (
-									<p role="alert" className="text-xs text-red-500 mt-1">
+									<p role="alert" className="settings-error">
 										{electron.workspaceError}
 									</p>
 								)}
@@ -295,57 +299,57 @@ const Settings: React.FC = () => {
 								type="button"
 								onClick={handleSelectWorkspace}
 								disabled={!electron.isElectron}
-								className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-primary font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
+								className="secondary-button"
 							>
 								Choose Folder
 							</button>
 						</div>
 
-						<div className="flex justify-between items-center">
-							<div>
-								<h3 className="font-bold text-primary">Auto-extract Knowledge</h3>
-								<p className="text-sm text-secondary">
+						<div className="settings-row">
+							<div className="settings-row-copy">
+								<h3 id="auto-extract-label">Auto-extract knowledge</h3>
+								<p id="auto-extract-help" className="settings-help">
 									Automatically propose ChangeSets after turns.
 								</p>
 							</div>
 							<button
 								type="button"
+								role="switch"
+								aria-checked={settings.autoExtract}
+								aria-labelledby="auto-extract-label"
+								aria-describedby="auto-extract-help"
 								onClick={() => updateSettings({ autoExtract: !settings.autoExtract })}
-								className={clsx(
-									"w-12 h-6 rounded-full relative cursor-pointer transition-colors",
-									settings.autoExtract ? "bg-accent" : "bg-gray-300",
-								)}
+								className="settings-switch"
 							>
-								<div
-									className={clsx(
-										"absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-										settings.autoExtract ? "right-1" : "left-1",
-									)}
-								/>
+								<span className="settings-switch-track" aria-hidden="true" />
 							</button>
 						</div>
 
-						<div className="flex justify-between items-center">
-							<div>
-								<h3 className="font-bold text-primary">Worktree isolation</h3>
-								<p className="text-sm text-secondary">
-									Run writable sessions in separate Git worktrees.
-								</p>
+						<div className="settings-row">
+							<div className="settings-row-copy">
+								<h3>Worktree isolation</h3>
+								<p className="settings-help">Run writable sessions in separate Git worktrees.</p>
 							</div>
-							<span className="status-badge status-success">Required for Git</span>
+							<span className="settings-status">Required for Git</span>
 						</div>
 					</div>
 				</section>
 
-				<section>
-					<h2 className="text-sm font-bold uppercase text-gray-400 mb-4 flex items-center gap-2">
-						<Brain size={16} /> Knowledge policy
-					</h2>
-					<div className="border border-gray-200 rounded-lg p-6 bg-white space-y-5">
-						<label className="form-label">
-							Write mode
+				<section className="settings-section" aria-labelledby="knowledge-heading">
+					<header className="settings-section-header">
+						<h2 id="knowledge-heading">
+							<Brain size={17} aria-hidden="true" /> Knowledge policy
+						</h2>
+						<p>Control knowledge updates and request behavior.</p>
+					</header>
+					<div className="settings-panel">
+						<div className="settings-row settings-row--field">
+							<label htmlFor="knowledge-mode" className="settings-label">
+								Write mode
+							</label>
 							<select
-								className="field mt-1"
+								id="knowledge-mode"
+								className="field settings-input"
 								value={settings.knowledgeMode}
 								onChange={(event) =>
 									updateSettings({
@@ -358,11 +362,11 @@ const Settings: React.FC = () => {
 								<option value="hybrid">Hybrid</option>
 								<option value="read_only">Read only</option>
 							</select>
-						</label>
-						<div className="flex justify-between items-center gap-4">
-							<div>
-								<h3 className="font-bold text-primary">Knowledge tools in chat</h3>
-								<p className="text-sm text-secondary">
+						</div>
+						<div className="settings-row">
+							<div className="settings-row-copy">
+								<h3 id="knowledge-tools-label">Knowledge tools in chat</h3>
+								<p id="knowledge-tools-help" className="settings-help">
 									Let the main agent query the knowledge base when needed. The end-of-turn organizer
 									always has access.
 								</p>
@@ -371,25 +375,21 @@ const Settings: React.FC = () => {
 								type="button"
 								role="switch"
 								aria-checked={settings.knowledgeTools}
-								aria-label="Knowledge tools in chat"
+								aria-labelledby="knowledge-tools-label"
+								aria-describedby="knowledge-tools-help"
 								onClick={() => updateSettings({ knowledgeTools: !settings.knowledgeTools })}
-								className={clsx(
-									"w-12 h-6 rounded-full relative shrink-0 cursor-pointer transition-colors",
-									settings.knowledgeTools ? "bg-accent" : "bg-gray-300",
-								)}
+								className="settings-switch"
 							>
-								<div
-									className={clsx(
-										"absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-										settings.knowledgeTools ? "right-1" : "left-1",
-									)}
-								/>
+								<span className="settings-switch-track" aria-hidden="true" />
 							</button>
 						</div>
-						<label className="form-label">
-							Thinking level
+						<div className="settings-row settings-row--field">
+							<label htmlFor="thinking-level" className="settings-label">
+								Thinking level
+							</label>
 							<select
-								className="field mt-1"
+								id="thinking-level"
+								className="field settings-input"
 								value={settings.thinkingLevel}
 								onChange={(event) =>
 									updateSettings({
@@ -402,73 +402,120 @@ const Settings: React.FC = () => {
 								<option value="medium">Medium</option>
 								<option value="high">High</option>
 							</select>
-						</label>
-						<label className="form-label">
-							Concurrent questions (1–10)
+						</div>
+						<div className="settings-row settings-row--field">
+							<div className="settings-row-copy">
+								<label htmlFor="concurrent-questions" className="settings-label">
+									Concurrent questions (1–10)
+								</label>
+								<p id="concurrent-questions-help" className="settings-help">
+									Default: 5. Requests in the same conversation stay ordered.
+								</p>
+							</div>
 							<input
-								className="field mt-1"
+								id="concurrent-questions"
+								className="field settings-input settings-input--number"
 								type="number"
 								min="1"
 								max="10"
+								aria-describedby="concurrent-questions-help"
 								value={settings.maxConcurrentRequests}
 								onChange={(event) =>
 									updateSettings({ maxConcurrentRequests: Number(event.target.value) })
 								}
 							/>
-							<span className="text-xs text-secondary mt-1 block">
-								Default: 5. Requests in the same conversation stay ordered.
-							</span>
-						</label>
-						<label className="form-label">
-							Confidence threshold: {Math.round(settings.confidenceThreshold * 100)}%
-							<input
-								type="range"
-								min="0"
-								max="1"
-								step="0.05"
-								value={settings.confidenceThreshold}
-								onChange={(event) =>
-									updateSettings({ confidenceThreshold: Number(event.target.value) })
-								}
-								className="w-full mt-2"
-							/>
-						</label>
+						</div>
+						<div className="settings-row settings-row--field">
+							<label htmlFor="confidence-threshold" className="settings-label">
+								Confidence threshold
+							</label>
+							<div className="settings-range-control">
+								<input
+									id="confidence-threshold"
+									type="range"
+									min="0"
+									max="1"
+									step="0.05"
+									value={settings.confidenceThreshold}
+									aria-valuetext={`${Math.round(settings.confidenceThreshold * 100)}%`}
+									onChange={(event) =>
+										updateSettings({ confidenceThreshold: Number(event.target.value) })
+									}
+								/>
+								<output htmlFor="confidence-threshold" aria-hidden="true">
+									{Math.round(settings.confidenceThreshold * 100)}%
+								</output>
+							</div>
+						</div>
 					</div>
 				</section>
 
-				<section>
-					<h2 className="text-sm font-bold uppercase text-gray-400 mb-4 flex items-center gap-2">
-						<Accessibility size={16} /> Accessibility
-					</h2>
-					<div className="border border-gray-200 rounded-lg p-6 bg-white space-y-4">
-						<label className="flex justify-between items-center text-sm font-semibold">
-							Reduce motion
+				<section className="settings-section" aria-labelledby="accessibility-heading">
+					<header className="settings-section-header">
+						<h2 id="accessibility-heading">
+							<Accessibility size={17} aria-hidden="true" /> Accessibility
+						</h2>
+						<p>Adjust motion, contrast, and text size to suit you.</p>
+					</header>
+					<div className="settings-panel">
+						<div className="settings-row">
+							<div className="settings-row-copy">
+								<label htmlFor="reduce-motion" className="settings-label">
+									Reduce motion
+								</label>
+								<p id="reduce-motion-help" className="settings-help">
+									Limit animations and animated transitions.
+								</p>
+							</div>
 							<input
+								id="reduce-motion"
 								type="checkbox"
+								role="switch"
+								className="settings-switch-input"
+								aria-describedby="reduce-motion-help"
 								checked={settings.reduceMotion}
 								onChange={(event) => updateSettings({ reduceMotion: event.target.checked })}
 							/>
-						</label>
-						<label className="flex justify-between items-center text-sm font-semibold">
-							High contrast
+						</div>
+						<div className="settings-row">
+							<div className="settings-row-copy">
+								<label htmlFor="high-contrast" className="settings-label">
+									High contrast
+								</label>
+								<p id="high-contrast-help" className="settings-help">
+									Increase contrast for text and interface borders.
+								</p>
+							</div>
 							<input
+								id="high-contrast"
 								type="checkbox"
+								role="switch"
+								className="settings-switch-input"
+								aria-describedby="high-contrast-help"
 								checked={settings.highContrast}
 								onChange={(event) => updateSettings({ highContrast: event.target.checked })}
 							/>
-						</label>
-						<label className="form-label">
-							Font scale: {Math.round(settings.fontScale * 100)}%
-							<input
-								type="range"
-								min="0.85"
-								max="1.35"
-								step="0.05"
-								value={settings.fontScale}
-								onChange={(event) => updateSettings({ fontScale: Number(event.target.value) })}
-								className="w-full mt-2"
-							/>
-						</label>
+						</div>
+						<div className="settings-row settings-row--field">
+							<label htmlFor="font-scale" className="settings-label">
+								Font scale
+							</label>
+							<div className="settings-range-control">
+								<input
+									id="font-scale"
+									type="range"
+									min="0.85"
+									max="1.35"
+									step="0.05"
+									value={settings.fontScale}
+									aria-valuetext={`${Math.round(settings.fontScale * 100)}%`}
+									onChange={(event) => updateSettings({ fontScale: Number(event.target.value) })}
+								/>
+								<output htmlFor="font-scale" aria-hidden="true">
+									{Math.round(settings.fontScale * 100)}%
+								</output>
+							</div>
+						</div>
 					</div>
 				</section>
 			</div>
@@ -482,6 +529,7 @@ function PluginSettings() {
 	const [source, setSource] = useState("");
 	const [busySource, setBusySource] = useState<string | null>(bridge ? "list" : null);
 	const [error, setError] = useState<string | null>(null);
+	const [hasLoadedPlugins, setHasLoadedPlugins] = useState(false);
 
 	useEffect(() => {
 		if (!bridge) return;
@@ -489,7 +537,10 @@ function PluginSettings() {
 		bridge
 			.pluginList()
 			.then((items) => {
-				if (!cancelled) setPlugins(items);
+				if (!cancelled) {
+					setPlugins(items);
+					setHasLoadedPlugins(true);
+				}
 			})
 			.catch((loadError) => {
 				if (!cancelled) setError(errorToMessage(loadError));
@@ -509,6 +560,7 @@ function PluginSettings() {
 		try {
 			const result = await bridge.pluginInstall({ source: requestedSource });
 			setPlugins(result.plugins);
+			setHasLoadedPlugins(true);
 			setSource("");
 		} catch (installError) {
 			setError(errorToMessage(installError));
@@ -537,6 +589,7 @@ function PluginSettings() {
 		try {
 			const result = await bridge.pluginRemove({ source: pluginSource });
 			setPlugins(result.plugins);
+			setHasLoadedPlugins(true);
 		} catch (removeError) {
 			setError(errorToMessage(removeError));
 		} finally {
@@ -545,7 +598,7 @@ function PluginSettings() {
 	};
 
 	return (
-		<div className="pi-plugins-card">
+		<div className="settings-panel pi-plugins-card" aria-busy={busySource !== null}>
 			<div className="pi-plugin-warning" role="note">
 				<ShieldAlert size={17} aria-hidden="true" />
 				<p>
@@ -561,14 +614,17 @@ function PluginSettings() {
 				}}
 			>
 				<label htmlFor="pi-plugin-source">Package source</label>
-				<div>
+				<div className="pi-plugin-source-row">
 					<input
 						id="pi-plugin-source"
-						className="field"
+						className="field settings-input"
 						value={source}
 						onChange={(event) => setSource(event.target.value)}
 						disabled={!bridge || busySource !== null}
 						placeholder="npm:@scope/package or git:github.com/user/repo"
+						aria-describedby="pi-plugin-source-help"
+						autoCapitalize="none"
+						spellCheck={false}
 					/>
 					<button
 						type="submit"
@@ -576,26 +632,28 @@ function PluginSettings() {
 						disabled={!bridge || !source.trim() || busySource !== null}
 					>
 						{busySource && busySource !== "list" ? (
-							<LoaderCircle className="pi-plugin-spinner" size={14} />
+							<LoaderCircle className="pi-plugin-spinner" size={14} aria-hidden="true" />
 						) : (
-							<Package size={14} />
+							<Package size={14} aria-hidden="true" />
 						)}
 						Install
 					</button>
 				</div>
-				<p>Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.</p>
+				<p id="pi-plugin-source-help">
+					Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.
+				</p>
 				<button
 					type="button"
 					className="secondary-button"
 					disabled={!bridge || busySource !== null}
 					onClick={() => void installLocal()}
 				>
-					<Package size={14} /> Install from local folder…
+					<Package size={14} aria-hidden="true" /> Install from local folder…
 				</button>
 			</form>
 			<div className="pi-plugin-list-header">
-				<h3>
-					Installed packages <span>{plugins.length}</span>
+				<h3 id="installed-packages-heading">
+					Installed packages {bridge && hasLoadedPlugins && <span>{plugins.length}</span>}
 				</h3>
 				<button
 					type="button"
@@ -607,7 +665,7 @@ function PluginSettings() {
 					}
 					disabled={!bridge}
 				>
-					<ExternalLink size={13} /> Browse packages
+					<ExternalLink size={14} aria-hidden="true" /> Browse packages
 				</button>
 			</div>
 			{error && (
@@ -615,14 +673,17 @@ function PluginSettings() {
 					{error}
 				</p>
 			)}
-			{busySource === "list" ? (
-				<p className="pi-plugin-empty">
-					<LoaderCircle className="pi-plugin-spinner" size={15} /> Loading installed packages…
+			{!bridge ? (
+				<p className="pi-plugin-empty">Package management requires the Electron desktop runtime.</p>
+			) : busySource === "list" ? (
+				<p className="pi-plugin-empty" role="status">
+					<LoaderCircle className="pi-plugin-spinner" size={15} aria-hidden="true" /> Loading
+					installed packages…
 				</p>
-			) : plugins.length === 0 ? (
+			) : !hasLoadedPlugins ? null : plugins.length === 0 ? (
 				<p className="pi-plugin-empty">No Pi packages are configured yet.</p>
 			) : (
-				<ul className="pi-plugin-list">
+				<ul className="pi-plugin-list" aria-labelledby="installed-packages-heading">
 					{plugins.map((plugin) => (
 						<li key={`${plugin.scope}:${plugin.source}`}>
 							<div>
@@ -632,11 +693,15 @@ function PluginSettings() {
 									{plugin.scope === "project" ? "Workspace" : "User"} ·{" "}
 									{plugin.installed ? "Installed" : "Missing on disk"}
 								</small>
+								{plugin.scope === "project" && (
+									<small>Managed by the workspace .pi/settings.json file.</small>
+								)}
 							</div>
 							<button
 								type="button"
 								className="secondary-button pi-plugin-remove"
 								disabled={busySource !== null || plugin.scope === "project"}
+								aria-label={`Remove ${pluginDisplayName(plugin.source)}`}
 								title={
 									plugin.scope === "project"
 										? "Project packages are managed by the workspace .pi/settings.json file."
@@ -645,9 +710,9 @@ function PluginSettings() {
 								onClick={() => void remove(plugin.source)}
 							>
 								{busySource === plugin.source ? (
-									<LoaderCircle className="pi-plugin-spinner" size={13} />
+									<LoaderCircle className="pi-plugin-spinner" size={14} aria-hidden="true" />
 								) : (
-									<Trash2 size={13} />
+									<Trash2 size={14} aria-hidden="true" />
 								)}{" "}
 								Remove
 							</button>
@@ -676,20 +741,20 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 				<p>
 					Device code: <strong className="font-mono">{event.userCode}</strong>
 				</p>
-				<div className="flex gap-2 mt-2">
+				<div className="settings-actions settings-auth-actions">
 					<button
 						type="button"
 						className="secondary-button"
 						onClick={() => void navigator.clipboard.writeText(event.userCode)}
 					>
-						<Copy size={13} /> Copy code
+						<Copy size={14} aria-hidden="true" /> Copy code
 					</button>
 					<button
 						type="button"
 						className="secondary-button"
 						onClick={() => void getRhyzaBridge()?.openExternal({ url: event.verificationUri })}
 					>
-						<ExternalLink size={13} /> Open sign-in
+						<ExternalLink size={14} aria-hidden="true" /> Open sign-in
 					</button>
 				</div>
 			</div>
@@ -702,7 +767,7 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 				className="secondary-button"
 				onClick={() => void getRhyzaBridge()?.openExternal({ url: event.url })}
 			>
-				<ExternalLink size={13} /> Open authentication page
+				<ExternalLink size={14} aria-hidden="true" /> Open authentication page
 			</button>
 		);
 	}
@@ -714,10 +779,10 @@ function AuthEventItem({ event }: { event: AuthBridgeEvent }) {
 					<button
 						type="button"
 						key={link.url}
-						className="secondary-button mt-2"
+						className="secondary-button settings-auth-link"
 						onClick={() => void getRhyzaBridge()?.openExternal({ url: link.url })}
 					>
-						<ExternalLink size={13} /> {link.label ?? "Open link"}
+						<ExternalLink size={14} aria-hidden="true" /> {link.label ?? "Open link"}
 					</button>
 				))}
 			</div>
