@@ -1,0 +1,49 @@
+.turn-expanded-content[hidden],
+.markdown-section-body[hidden] {
+	display: none;
+}
+
+.markdown-body .markdown-section-heading {
+	display: flex;
+	align-items: baseline;
+	gap: 0.35rem;
+	cursor: pointer;
+}
+
+.markdown-section-heading-text {
+	min-width: 0;
+}
+
+.markdown-body .markdown-section-toggle {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	align-self: flex-start;
+	width: 1.5rem;
+	height: 1.5rem;
+	border: 0;
+	border-radius: 0.25rem;
+	padding: 0;
+	background: transparent;
+	color: var(--color-secondary);
+	cursor: pointer;
+}
+
+.markdown-body .markdown-section-toggle:hover {
+	background: color-mix(in srgb, var(--color-secondary) 10%, transparent);
+	color: var(--color-primary);
+}
+
+.markdown-body .markdown-section-toggle:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+.markdown-section-toggle[aria-expanded="false"] > svg {
+	transform: rotate(-90deg);
+}
+
+.markdown-body > .markdown-section:first-child > .markdown-section-heading {
+	margin-top: 0;
+}

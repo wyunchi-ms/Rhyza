@@ -13,11 +13,7 @@ import { useConversationNavigation } from "../hooks/useConversationNavigation";
 import { createId, summarize, withTimeout } from "../utils/common";
 import { buildAgentTranscriptBeforeTurn } from "../utils/agentTranscript";
 import { selectionContinuationTarget } from "../utils/sessionFork";
-import {
-	createSelectionAppendDebugSnapshot,
-	forkDebugEventName,
-	type ForkDebugEventDetail,
-} from "../utils/forkDebug";
+import { announceForkDebug, createSelectionAppendDebugSnapshot } from "../utils/forkDebug";
 import {
 	failRunningTurnActivities,
 	finishTurnActivity,
@@ -41,6 +37,8 @@ import { TurnNavigator } from "./TurnNavigator";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { isLightweightGreeting } from "../utils/promptWorkPolicy";
 import { buildComposerReferenceContext } from "../utils/composerInput";
+import { conversationTurnTitle } from "../utils/conversationTitle";
+import { AnswerOutline } from "./chat/AnswerOutline";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
@@ -50,7 +48,6 @@ export const ChatPane: React.FC = () => {
 	const composerDraftRef = useRef<ComposerDraftHandle>(null);
 	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
-	const [forkDebugStatus, setForkDebugStatus] = useState<ForkDebugEventDetail | null>(null);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
 	const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
 	const [turnContextMenu, setTurnContextMenu] = useState<TurnContextMenuState | null>(null);
@@ -65,7 +62,11 @@ export const ChatPane: React.FC = () => {
 		sessionTurns,
 		turnSessionMap,
 		moveKeyboardTurn,
+		preserveReadingPosition,
 	} = useConversationNavigation(store.turns, activeSessionId, store.sessions);
+	const focusedAnswer = sessionTurns.find(
+		(turn) => turn.id === focusedTurnId && turn.role === "assistant",
+	);
 	const { openEntityById: openEntityPreview, openDiagramById: openDiagramPreview } =
 		useKnowledgePreviewActions();
 	useLayoutEffect(() => {
@@ -83,12 +84,6 @@ export const ChatPane: React.FC = () => {
 			window.removeEventListener(branchSwitchStartEvent, start);
 			window.removeEventListener(branchSwitchEndEvent, end);
 		};
-	}, []);
-	useEffect(() => {
-		const onForkDebug = (event: Event) =>
-			setForkDebugStatus((event as CustomEvent<ForkDebugEventDetail>).detail);
-		window.addEventListener(forkDebugEventName, onForkDebug);
-		return () => window.removeEventListener(forkDebugEventName, onForkDebug);
 	}, []);
 	useEffect(() => {
 		const createInitialSession = () => {
@@ -127,18 +122,22 @@ export const ChatPane: React.FC = () => {
 		const now = new Date().toISOString();
 		const userTurnId = createId("turn");
 		const assistantTurnId = createId("turn");
+		const quote =
+			options?.selectedText && options.quotedTurnId
+				? { turnId: options.quotedTurnId, text: options.selectedText }
+				: undefined;
+		const promptSummary = prompt
+			? summarize(conversationTurnTitle({ content: prompt, quote }))
+			: "";
 		store.addManualTurn({
 			id: userTurnId,
 			sessionId: targetSessionId,
 			role: "user",
 			content: prompt,
 			status: "complete",
-			summary: summarize(prompt),
+			summary: promptSummary,
 			images: promptImages,
-			quote:
-				options?.selectedText && options.quotedTurnId
-					? { turnId: options.quotedTurnId, text: options.selectedText }
-					: undefined,
+			quote,
 			createdAt: now,
 		});
 		store.addManualTurn({
@@ -180,7 +179,7 @@ export const ChatPane: React.FC = () => {
 				const provider = getProviderInfo(selectedModel.providerId);
 				// Automatic titles should never add a second model turn to the critical path.
 				// Users can still request semantic title regeneration from the session tree.
-				const summaryPromise = Promise.resolve<SummaryResponse>({ summary: summarize(prompt) });
+				const summaryPromise = Promise.resolve<SummaryResponse>({ summary: promptSummary });
 				const sourceHits = lightweightGreeting
 					? []
 					: await bridge.sourceSearch({ query: agentPrompt, limit: 8 });
@@ -449,23 +448,24 @@ export const ChatPane: React.FC = () => {
 					snapshot,
 				}).then(
 					(response) =>
-						setForkDebugStatus({
+						announceForkDebug({
 							ok: true,
 							message: `No fork was created (leaf node). Decision dump: ${response.path}`,
 						}),
 					(error: unknown) =>
-						setForkDebugStatus({
+						announceForkDebug({
 							ok: false,
 							message: `Selection dump failed: ${errorToMessage(error)}`,
 						}),
 				);
 			} else {
-				setForkDebugStatus({
+				announceForkDebug({
 					ok: false,
 					message:
 						"Selection dump unavailable. Restart Electron to load the updated preload bridge.",
 				});
 			}
+			preserveReadingPosition();
 			setSelection(null);
 			void handleSend({
 				sessionId: target.sessionId,
@@ -475,11 +475,12 @@ export const ChatPane: React.FC = () => {
 			});
 			return;
 		}
-		const result = current.forkSession(selected.turnId);
+		const result = current.forkSession(selected.turnId, { activate: false });
 		if (!result) {
 			setSendError("The selected conversation point could not be forked.");
 			return;
 		}
+		preserveReadingPosition();
 		setSelection(null);
 		void handleSend({
 			sessionId: result.forkSessionId,
@@ -573,7 +574,7 @@ export const ChatPane: React.FC = () => {
 			>
 				{sessionTurns.map((turn, index) => (
 					<TurnMessage
-						key={turn.id}
+						key={turn.sourceTurnId ?? turn.id}
 						turn={turn}
 						sessionNodeId={turnSessionMap.get(turn.id) ?? turn.sessionId}
 						isFocused={turn.id === focusedTurnId}
@@ -600,6 +601,11 @@ export const ChatPane: React.FC = () => {
 					</div>
 				)}
 			</div>
+			<AnswerOutline
+				turnId={focusedAnswer?.id ?? null}
+				scrollContainerRef={scrollContainerRef}
+				reduceMotion={store.settings.reduceMotion}
+			/>
 			{turnContextMenu &&
 				(() => {
 					const selectedTurn = store.turns.find((turn) => turn.id === turnContextMenu.turnId);
@@ -632,11 +638,6 @@ export const ChatPane: React.FC = () => {
 			)}
 			{sessionTurns.length > 1 && (
 				<TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
-			)}
-			{forkDebugStatus && (
-				<div className={clsx("fork-debug-status", !forkDebugStatus.ok && "is-error")} role="status">
-					{forkDebugStatus.message}
-				</div>
 			)}
 			<ChatComposer
 				draftRef={composerDraftRef}

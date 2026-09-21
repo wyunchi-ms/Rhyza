@@ -4867,16 +4867,6 @@ a:focus-visible {
 	background: #fee2e2;
 	color: #b91c1c;
 }
-.fork-debug-status {
-	margin: 0 auto 0.35rem;
-	width: min(100% - 2rem, 980px);
-	color: #64748b;
-	font-size: 0.7rem;
-	overflow-wrap: anywhere;
-}
-.fork-debug-status.is-error {
-	color: #b91c1c;
-}
 .empty-state {
 	display: flex;
 	align-items: center;

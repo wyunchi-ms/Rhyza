@@ -32,7 +32,7 @@ import React, {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
@@ -44,9 +44,16 @@ import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTi
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../../utils/markdown";
+import {
+	markdownHeadingSelector,
+	rehypeMarkdownSections,
+	remarkMarkdownSections,
+	revealMarkdownHeadingEvent,
+} from "../../utils/markdownSections";
 import { MermaidDiagram } from "../MermaidDiagram";
 import { isTurnActive } from "../../utils/sessionRuntime";
 import { recordPerformanceTiming } from "../../utils/performanceMarks";
+import "./markdownSections.css";
 
 export const TurnMessage = memo(function TurnMessage({
 	turn,
@@ -90,6 +97,7 @@ export const TurnMessage = memo(function TurnMessage({
 	const fullTimestamp = formatFullChatTimestamp(turn.createdAt);
 	const [collapsed, setCollapsed] = useState(false);
 	const [detailsOpen, setDetailsOpen] = useState(false);
+	const revealResponse = useCallback(() => setCollapsed(false), []);
 	useEffect(() => {
 		if (!detailsOpen) return;
 		const close = (event: KeyboardEvent) => {
@@ -133,11 +141,12 @@ export const TurnMessage = memo(function TurnMessage({
 							/>
 						</button>
 					)}
-					{collapsed && !isUser ? (
+					{collapsed && !isUser && (
 						<p className="truncate text-sm font-medium text-secondary">
 							{turn.summary || "Assistant response"}
 						</p>
-					) : (
+					)}
+					<div className="turn-expanded-content" hidden={collapsed && !isUser}>
 						<TurnBubbleContent
 							turn={turn}
 							entities={entities}
@@ -146,8 +155,10 @@ export const TurnMessage = memo(function TurnMessage({
 							onEntityClick={onEntityClick}
 							onDiagramClick={onDiagramClick}
 							onTextSelection={selectText}
+							collapsibleSections={!isUser}
+							onRevealHeading={revealResponse}
 						/>
-					)}
+					</div>
 				</div>
 				<div className={clsx("turn-actions", isUser && "flex-row-reverse")}>
 					{timestamp && (
@@ -201,6 +212,8 @@ export function TurnBubbleContent({
 	onEntityClick,
 	onDiagramClick,
 	onTextSelection,
+	collapsibleSections = false,
+	onRevealHeading,
 }: {
 	turn: Turn;
 	entities: Entity[];
@@ -209,6 +222,8 @@ export function TurnBubbleContent({
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
 	onTextSelection?: (text: string, rect: DOMRect) => void;
+	collapsibleSections?: boolean;
+	onRevealHeading?: () => void;
 }) {
 	const isUser = turn.role === "user";
 	return (
@@ -235,6 +250,8 @@ export function TurnBubbleContent({
 						onEntityClick={onEntityClick}
 						onDiagramClick={onDiagramClick}
 						onTextSelection={isUser ? undefined : onTextSelection}
+						collapsibleSections={!isUser && collapsibleSections}
+						onRevealHeading={onRevealHeading}
 					/>
 				</div>
 			)}
@@ -602,6 +619,8 @@ function LinkifiedContent({
 	onEntityClick,
 	onDiagramClick,
 	onTextSelection,
+	collapsibleSections,
+	onRevealHeading,
 }: {
 	turn: Turn;
 	entities: Entity[];
@@ -610,6 +629,8 @@ function LinkifiedContent({
 	onEntityClick: (id: string) => void;
 	onDiagramClick: (id: string) => void;
 	onTextSelection?: (text: string, rect: DOMRect) => void;
+	collapsibleSections?: boolean;
+	onRevealHeading?: () => void;
 }) {
 	const references = useMemo(
 		() => buildKnowledgeReferences(entities, relations, diagrams),
@@ -624,6 +645,8 @@ function LinkifiedContent({
 			onEntityClick={onEntityClick}
 			onDiagramClick={onDiagramClick}
 			onTextSelection={onTextSelection}
+			collapsibleSections={collapsibleSections}
+			onRevealHeading={onRevealHeading}
 		/>
 	);
 }
@@ -655,8 +678,76 @@ const MarkdownRenderContext = React.createContext<MarkdownRenderContextValue>({
 	references: emptyKnowledgeReferences,
 });
 
+const MarkdownSectionContext = React.createContext<{
+	collapsedIds: ReadonlySet<string>;
+	toggle: (id: string) => void;
+}>({ collapsedIds: new Set(), toggle: () => {} });
+
+function MarkdownHeading({
+	node,
+	children,
+	className,
+	...props
+}: React.ComponentProps<"h2"> & { node?: import("hast").Element }) {
+	const { collapsedIds, toggle } = React.useContext(MarkdownSectionContext);
+	const Heading = (node?.tagName ?? "h2") as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+	const id = node?.properties.dataMarkdownHeadingId;
+	if (typeof id !== "string") {
+		return (
+			<Heading className={className} {...props}>
+				{children}
+			</Heading>
+		);
+	}
+	const expanded = !collapsedIds.has(id);
+	const label = String(node?.properties.dataMarkdownHeadingText || "Untitled");
+	return (
+		<Heading
+			{...props}
+			className={clsx(className, "markdown-section-heading")}
+			onClick={(event) => {
+				if (
+					(event.target instanceof Element &&
+						event.target.closest("a, button, input, select, textarea, [role='button']")) ||
+					window.getSelection()?.isCollapsed === false
+				) {
+					return;
+				}
+				toggle(id);
+			}}
+		>
+			<button
+				type="button"
+				className="markdown-section-toggle"
+				aria-expanded={expanded}
+				aria-controls={`${id}-body`}
+				aria-label={`${expanded ? "Collapse" : "Expand"} ${label} section`}
+				onClick={() => toggle(id)}
+			>
+				<ChevronDown size={16} aria-hidden="true" />
+			</button>
+			<span className="markdown-section-heading-text">{children}</span>
+		</Heading>
+	);
+}
+
 // Stable component types preserve iframe documents and diagram state across parent updates.
 const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>["components"]> = {
+	h1: MarkdownHeading,
+	h2: MarkdownHeading,
+	h3: MarkdownHeading,
+	h4: MarkdownHeading,
+	h5: MarkdownHeading,
+	h6: MarkdownHeading,
+	div: function MarkdownDiv({ node, children, ...props }) {
+		const { collapsedIds } = React.useContext(MarkdownSectionContext);
+		const id = node?.properties.dataMarkdownSectionBody;
+		return (
+			<div {...props} hidden={typeof id === "string" ? collapsedIds.has(id) : undefined}>
+				{children}
+			</div>
+		);
+	},
 	pre: ({ children }) => <>{children}</>,
 	code: function MarkdownCode({ className, children, ...props }) {
 		const { compact, finalized, htmlPreviews } = React.useContext(MarkdownRenderContext);
@@ -707,6 +798,8 @@ const MarkdownContent = memo(function MarkdownContent({
 	onEntityClick,
 	onDiagramClick,
 	onTextSelection,
+	collapsibleSections = false,
+	onRevealHeading,
 }: {
 	htmlPreviews?: HtmlPreviewDocument[];
 	content: string;
@@ -716,7 +809,59 @@ const MarkdownContent = memo(function MarkdownContent({
 	onEntityClick?: (id: string) => void;
 	onDiagramClick?: (id: string) => void;
 	onTextSelection?: (text: string, rect: DOMRect) => void;
+	collapsibleSections?: boolean;
+	onRevealHeading?: () => void;
 }) {
+	const headingPrefix = React.useId();
+	const containerRef = useRef<HTMLDivElement>(null);
+	const sectionsEnabled = collapsibleSections && !compact;
+	const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
+	const toggle = useCallback((id: string) => {
+		setCollapsedIds((previous) => {
+			const next = new Set(previous);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	}, []);
+	const sectionContext = useMemo(() => ({ collapsedIds, toggle }), [collapsedIds, toggle]);
+	useLayoutEffect(() => {
+		const container = containerRef.current;
+		if (!container || !sectionsEnabled) return;
+		const reveal = (event: Event) => {
+			if (!(event instanceof CustomEvent) || !(event.target instanceof Element)) return;
+			const target = event.target.closest<HTMLElement>(
+				`${markdownHeadingSelector}, [data-markdown-section-id]`,
+			);
+			if (
+				!target ||
+				!container.contains(target) ||
+				event.detail?.headingId !==
+					(target.dataset.markdownHeadingId ?? target.dataset.markdownSectionId)
+			) {
+				return;
+			}
+			const ancestors = new Set<string>();
+			for (
+				let element: HTMLElement | null = target;
+				element && element !== container;
+				element = element.parentElement
+			) {
+				const id = element.dataset.markdownSectionId;
+				if (id) ancestors.add(id);
+			}
+			// Native outline events must reveal the entire path before the caller's next frame.
+			flushSync(() => {
+				setCollapsedIds((previous) => {
+					if (![...ancestors].some((id) => previous.has(id))) return previous;
+					return new Set([...previous].filter((id) => !ancestors.has(id)));
+				});
+				onRevealHeading?.();
+			});
+		};
+		container.addEventListener(revealMarkdownHeadingEvent, reveal);
+		return () => container.removeEventListener(revealMarkdownHeadingEvent, reveal);
+	}, [onRevealHeading, sectionsEnabled]);
 	const renderStartedAt = performance.now();
 	useLayoutEffect(() => {
 		recordPerformanceTiming("chat-markdown-render-commit", performance.now() - renderStartedAt);
@@ -729,9 +874,24 @@ const MarkdownContent = memo(function MarkdownContent({
 	const remarkPlugins = useMemo<
 		NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>
 	>(
-		() => [remarkGfm, remarkMath, [remarkKnowledgeLinks, { references: knowledgeReferences }]],
-		[knowledgeReferences],
+		() => [
+			remarkGfm,
+			remarkMath,
+			[remarkKnowledgeLinks, { references: knowledgeReferences }],
+			...(sectionsEnabled
+				? [
+						[remarkMarkdownSections, { idPrefix: `markdown-${headingPrefix}` }] as [
+							typeof remarkMarkdownSections,
+							{ idPrefix: string },
+						],
+					]
+				: []),
+		],
+		[headingPrefix, knowledgeReferences, sectionsEnabled],
 	);
+	const rehypePlugins = useMemo<
+		NonNullable<React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>
+	>(() => [rehypeKatex, ...(sectionsEnabled ? [rehypeMarkdownSections] : [])], [sectionsEnabled]);
 	const renderContext = useMemo<MarkdownRenderContextValue>(
 		() => ({
 			compact,
@@ -745,25 +905,28 @@ const MarkdownContent = memo(function MarkdownContent({
 	);
 	return (
 		<MarkdownRenderContext.Provider value={renderContext}>
-			<div
-				className={clsx("markdown-body", compact && "markdown-compact")}
-				onMouseUp={(event) => {
-					if (!onTextSelection || compact) return;
-					const selected = window.getSelection();
-					if (!selected || selected.isCollapsed || !selected.toString().trim()) return;
-					const range = selected.getRangeAt(0);
-					if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
-					onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
-				}}
-			>
-				<ReactMarkdown
-					remarkPlugins={remarkPlugins}
-					rehypePlugins={[rehypeKatex]}
-					components={markdownComponents}
+			<MarkdownSectionContext.Provider value={sectionContext}>
+				<div
+					ref={containerRef}
+					className={clsx("markdown-body", compact && "markdown-compact")}
+					onMouseUp={(event) => {
+						if (!onTextSelection || compact) return;
+						const selected = window.getSelection();
+						if (!selected || selected.isCollapsed || !selected.toString().trim()) return;
+						const range = selected.getRangeAt(0);
+						if (!event.currentTarget.contains(range.commonAncestorContainer)) return;
+						onTextSelection(selected.toString().trim(), range.getBoundingClientRect());
+					}}
 				>
-					{normalizedContent}
-				</ReactMarkdown>
-			</div>
+					<ReactMarkdown
+						remarkPlugins={remarkPlugins}
+						rehypePlugins={rehypePlugins}
+						components={markdownComponents}
+					>
+						{normalizedContent}
+					</ReactMarkdown>
+				</div>
+			</MarkdownSectionContext.Provider>
 		</MarkdownRenderContext.Provider>
 	);
 });

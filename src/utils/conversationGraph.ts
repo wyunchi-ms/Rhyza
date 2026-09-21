@@ -1,4 +1,5 @@
 import type { SessionNode, Turn } from "../types";
+import { conversationTurnTitle } from "./conversationTitle";
 
 export interface ConversationRound {
 	id: string;
@@ -34,10 +35,15 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 		grouped.set(turn.sessionId, group);
 		if (turn.role === "user") {
 			const id = canonical(turn);
-			if (!rounds.has(id) || !turn.sourceTurnId) rounds.set(id, {
-				id, parentId: null, sessionId: turn.sessionId, user: turn, answers: [],
-				title: turn.summary?.trim() || turn.content.trim() || "Image prompt",
-			});
+			if (!rounds.has(id) || !turn.sourceTurnId)
+				rounds.set(id, {
+					id,
+					parentId: null,
+					sessionId: turn.sessionId,
+					user: turn,
+					answers: [],
+					title: conversationTurnTitle(turn),
+				});
 		}
 	}
 	for (const session of sessions) {
@@ -49,7 +55,8 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 			if (turn.role === "user") {
 				current = rounds.get(canonical(turn));
 				if (!current) continue;
-				if (!turn.sourceTurnId || !current.parentId) current.parentId = path[path.length - 1] ?? null;
+				if (!turn.sourceTurnId || !current.parentId)
+					current.parentId = path[path.length - 1] ?? null;
 				if (path[path.length - 1] !== current.id) path.push(current.id);
 				target.set(current.id, turn.id);
 			}
@@ -61,7 +68,13 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 		}
 		if (!hasLocalRound) {
 			const id = `empty:${session.id}`;
-			rounds.set(id, { id, parentId: path[path.length - 1] ?? paths.get(session.parentId ?? "")?.slice(-1)[0] ?? null, sessionId: session.id, answers: [], title: session.title });
+			rounds.set(id, {
+				id,
+				parentId: path[path.length - 1] ?? paths.get(session.parentId ?? "")?.slice(-1)[0] ?? null,
+				sessionId: session.id,
+				answers: [],
+				title: session.title,
+			});
 			path.push(id);
 		}
 		paths.set(session.id, path);
@@ -107,8 +120,14 @@ export function resolveGraphHistory(sessions: SessionNode[], turns: Turn[]): Tur
 			const source = parentTurns[i];
 			const copy = childTurns[i];
 			if (canonical(copy.id) === canonical(source.id)) continue;
-			if (copy.sourceTurnId || copy.role !== source.role || copy.createdAt !== source.createdAt
-				|| copy.content !== source.content || JSON.stringify(copy.images) !== JSON.stringify(source.images)) break;
+			if (
+				copy.sourceTurnId ||
+				copy.role !== source.role ||
+				copy.createdAt !== source.createdAt ||
+				copy.content !== source.content ||
+				JSON.stringify(copy.images) !== JSON.stringify(source.images)
+			)
+				break;
 			aliases.set(copy.id, canonical(source.id));
 		}
 	};

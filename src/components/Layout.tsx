@@ -18,6 +18,8 @@ import { PanelResizeHandle, usePanelSize, useViewportWidth } from "./PanelResize
 import { SessionTree } from "./SessionTree";
 import { SessionGraph } from "./SessionGraph";
 import { IconSwitch } from "./IconSwitch";
+import { SessionStatusFilter } from "./SessionStatusFilter";
+import type { LeafStatusFilter } from "../utils/conversationFilter";
 
 const Layout: React.FC = () => {
 	const sidebarOpen = useAppStore((state) => state.sidebarOpen);
@@ -28,6 +30,7 @@ const Layout: React.FC = () => {
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
 	const sidebarSize = usePanelSize("rhyza-layout-sidebar-width", 260, 200, sidebarMax);
 	const [graphMode, setGraphModeState] = useState(false);
+	const [leafStatuses, setLeafStatuses] = useState<LeafStatusFilter[]>([]);
 	const [graphVisited, setGraphVisited] = useState(false);
 	const setGraphMode = (enabled: boolean) => {
 		if (enabled) setGraphVisited(true);
@@ -149,14 +152,19 @@ const Layout: React.FC = () => {
 				<div className="sidebar-view-content" hidden={graphMode}>
 					<SessionTree
 						embedded
+						leafStatuses={leafStatuses}
+						onClearFilter={() => setLeafStatuses([])}
 						viewControl={
-							<IconSwitch
-								checked={false}
-								onChange={setGraphMode}
-								icon={GitBranch}
-								label="Node view"
-								description="On: preview each conversation round as a node. Off: return to the chat list."
-							/>
+							<>
+								<SessionStatusFilter statuses={leafStatuses} onChange={setLeafStatuses} />
+								<IconSwitch
+									checked={false}
+									onChange={setGraphMode}
+									icon={GitBranch}
+									label="Node view"
+									description="On: preview each conversation round as a node. Off: return to the chat list."
+								/>
+							</>
 						}
 					/>
 				</div>
@@ -164,14 +172,19 @@ const Layout: React.FC = () => {
 					<div className="sidebar-view-content" hidden={!graphMode}>
 						<SessionGraph
 							visible={graphMode && sidebarVisible}
+							leafStatuses={leafStatuses}
+							onClearFilter={() => setLeafStatuses([])}
 							viewControl={
-								<IconSwitch
-									checked
-									onChange={setGraphMode}
-									icon={GitBranch}
-									label="Node view"
-									description="On: preview each conversation round as a node. Off: return to the chat list."
-								/>
+								<>
+									<SessionStatusFilter statuses={leafStatuses} onChange={setLeafStatuses} />
+									<IconSwitch
+										checked
+										onChange={setGraphMode}
+										icon={GitBranch}
+										label="Node view"
+										description="On: preview each conversation round as a node. Off: return to the chat list."
+									/>
+								</>
 							}
 						/>
 					</div>

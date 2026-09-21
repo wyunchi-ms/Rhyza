@@ -67,6 +67,7 @@ interface AppState {
 	createRootSession: () => string;
 	forkSession: (
 		turnId: string,
+		options?: { activate?: boolean },
 	) => { forkSessionId: string; originalSessionId: string; branchPointSessionId: string } | null;
 	forkNode: (sessionId: string, turnId?: string) => string | null;
 	cloneNode: (sessionId: string, turnId?: string) => string | null;
@@ -286,16 +287,25 @@ export const useAppStore = create<AppState>()(
 				return id;
 			},
 
-			forkSession: (turnId) => {
+			forkSession: (turnId, options) => {
 				const state = get();
 				const result = forkSessionAtTurn(state, turnId, createId);
 				if (!result) return null;
 				const debugSnapshot = createForkDebugSnapshot(state, turnId, result);
+				// Splitting the displayed path moves its tail into the original continuation.
+				const retainedSessionId = (id: string | null) =>
+					id === result.branchPointSessionId ? result.originalSessionId : id;
 				set({
 					sessions: result.sessions,
 					turns: result.turns,
-					activeSessionId: result.forkSessionId,
-					visibleSessionId: result.forkSessionId,
+					activeSessionId:
+						options?.activate === false
+							? retainedSessionId(state.activeSessionId)
+							: result.forkSessionId,
+					visibleSessionId:
+						options?.activate === false
+							? retainedSessionId(state.visibleSessionId)
+							: result.forkSessionId,
 				});
 				const dumpWriter = typeof window !== "undefined" ? window.rhyza?.forkDebugDump : undefined;
 				if (typeof dumpWriter === "function") {

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { mkdtemp, readFile, rm, writeFile } = require("node:fs/promises");
@@ -10,7 +9,7 @@ if (!process.versions.electron) {
 	const test = require("node:test");
 	const { spawn } = require("node:child_process");
 	async function runPreviewTest(archify) {
-		const userData = await mkdtemp(path.join(os.tmpdir(), "rhyza-preview-rendering-"));
+		const userData = await mkdtemp(path.join(projectRoot, ".rhyza-preview-rendering-"));
 		const env = {
 			...process.env,
 			RHYZA_PREVIEW_TEST_DATA: userData,
@@ -93,7 +92,7 @@ if (!process.versions.electron) {
 	};
 	const html = `<style>body { margin: 0; } main { height: 1800px; }</style>
 		<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono">
-		<main><input id="state" value="initial"></main>
+		<main><h1 style="margin: 0">Iframe heading</h1><input id="state" value="initial"></main>
 		<script>parent.postMessage({ type: "preview-test-loaded" }, "*");</script>`;
 	const reference = { version: 1, path: "preview.html", title: "Interactive preview" };
 
@@ -106,7 +105,8 @@ if (!process.versions.electron) {
 			<script type="module">
 				import React from "react";
 				import { createRoot } from "react-dom/client";
-				import { TurnMessage } from "/src/components/chat/TurnMessage.tsx";
+				import { TurnBubbleContent, TurnMessage } from "/src/components/chat/TurnMessage.tsx";
+				import { markdownHeadingSelector, revealMarkdownHeadingEvent } from "/src/utils/markdownSections.ts";
 				import "/src/index.css";
 				const root = createRoot(document.getElementById("root"));
 				let html = ${JSON.stringify(html).replace(/</g, "\\u003c")};
@@ -116,6 +116,14 @@ if (!process.versions.electron) {
 				let extraDocuments = [];
 				let revision = 0;
 				let status = "complete";
+				let tail = "";
+				window.headingSelector = markdownHeadingSelector;
+				window.revealHeading = (target) => {
+					target.dispatchEvent(new CustomEvent(revealMarkdownHeadingEvent, {
+						detail: { headingId: target.dataset.markdownHeadingId ?? target.dataset.markdownSectionId },
+						bubbles: true
+					}));
+				};
 				window.loads = 0;
 				window.addEventListener("message", (event) => {
 					if (event.data?.type === "preview-test-loaded") window.loads++;
@@ -127,13 +135,40 @@ if (!process.versions.electron) {
 					if ("previewError" in updates) previewError = updates.previewError;
 					if ("extraDocuments" in updates) extraDocuments = updates.extraDocuments;
 					if ("status" in updates) status = updates.status;
+					if ("tail" in updates) tail = updates.tail;
 					const currentRevision = ++revision;
 					const content = [
+						"# Preview **sections**",
+						"",
+						"Introductory text.",
+						"",
+						"### [Entity](#knowledge/entity/example) and $x^2$",
+						"",
 						"\`\`\`html-preview",
 						JSON.stringify(reference),
 						"\`\`\`",
 						"",
-						"[Entity](#knowledge/entity/example) [Diagram](#knowledge/diagram/example)"
+						"[Entity](#knowledge/entity/example) [Diagram](#knowledge/diagram/example)",
+						"",
+						"###### Deep section",
+						"",
+						"Deep body.",
+						"",
+						"### Duplicate",
+						"",
+						"Sibling body.",
+						"",
+						"### Duplicate",
+						"",
+						"Another sibling.",
+						"",
+						"Setext section",
+						"==============",
+						"",
+						"\`\`\`markdown",
+						"# Fenced heading",
+						"\`\`\`",
+						tail
 					].join("\\n");
 					root.render(React.createElement(React.StrictMode, null,
 						React.createElement(TurnMessage, {
@@ -143,6 +178,7 @@ if (!process.versions.electron) {
 								role: "assistant",
 								status,
 								content,
+								reasoning: "# Reasoning heading\\n\\nNot an answer section.",
 								htmlPreviews: html === null ? [] : [...extraDocuments, { ...reference, html, previewHtml, previewError }],
 								createdAt: "2026-01-01T00:00:00Z",
 								completedAt: "2026-01-01T00:00:01Z"
@@ -162,6 +198,36 @@ if (!process.versions.electron) {
 					));
 					return revision;
 				};
+				const secondaryHost = document.createElement("div");
+				secondaryHost.id = "secondary-markdown";
+				document.body.append(secondaryHost);
+				const secondaryProps = {
+					turn: {
+						id: "secondary-turn",
+						role: "assistant",
+						status: "complete",
+						content: "# Graph preview heading\\n\\nUnchanged rendering.",
+						createdAt: "2026-01-01T00:00:00Z"
+					},
+					entities: [],
+					relations: [],
+					diagrams: [],
+					onEntityClick: () => {},
+					onDiagramClick: () => {}
+				};
+				createRoot(secondaryHost).render(React.createElement(React.Fragment, null,
+					React.createElement(TurnBubbleContent, secondaryProps),
+					React.createElement(TurnMessage, {
+						...secondaryProps,
+						turn: { ...secondaryProps.turn, id: "user-turn", role: "user", content: "# User heading" },
+						sessionNodeId: "session",
+						onFork: () => {},
+						canFork: false,
+						onTextSelection: () => {},
+						onOpenContextMenu: () => {},
+						isFocused: false
+					})
+				));
 				window.refreshPreview();
 			</script></body></html>`;
 		server = await createServer({
@@ -224,6 +290,7 @@ if (!process.versions.electron) {
 			'document.querySelector("#state").value = "preserved"',
 		);
 		assert.equal(fontWarnings, 1, "External font styles must remain blocked by CSP.");
+		await verifyMarkdownSections();
 
 		for (let iteration = 0; iteration < 6; iteration++) {
 			const revision = await host(
@@ -602,6 +669,200 @@ if (!process.versions.electron) {
 				`real content change fits ${frameHeight}px`,
 			);
 		}
+	}
+
+	async function verifyMarkdownSections() {
+		assert.deepEqual(
+			await host(`Array.from(document.querySelectorAll(window.headingSelector), (heading) => ({
+				idMatches: heading.id === heading.dataset.markdownHeadingId,
+				level: heading.dataset.markdownHeadingLevel,
+				text: heading.dataset.markdownHeadingText
+			}))`),
+			[
+				{ idMatches: true, level: "1", text: "Preview sections" },
+				{ idMatches: true, level: "3", text: "Entity and x^2" },
+				{ idMatches: true, level: "6", text: "Deep section" },
+				{ idMatches: true, level: "3", text: "Duplicate" },
+				{ idMatches: true, level: "3", text: "Duplicate" },
+				{ idMatches: true, level: "1", text: "Setext section" },
+			],
+		);
+		assert.equal(
+			await host(
+				'document.querySelectorAll("#secondary-markdown [data-markdown-heading-id], .reasoning-block [data-markdown-heading-id]").length',
+			),
+			0,
+			"User messages, reasoning and graph previews must not expose folding metadata.",
+		);
+		assert.equal(
+			await host(
+				'document.querySelectorAll(".markdown-section-toggle a, .markdown-section-toggle button").length',
+			),
+			0,
+			"Heading links must not be nested in the toggle button.",
+		);
+		assert.equal(
+			await host(
+				'!!document.querySelector(".markdown-section-heading strong") && !!document.querySelector(".markdown-section-heading .katex")',
+			),
+			true,
+			"Heading emphasis and inline math must retain their renderers.",
+		);
+		await host(`window.originalHeadings = Array.from(document.querySelectorAll(window.headingSelector));
+			window.headingIds = window.originalHeadings.map((heading) => heading.id);
+			window.originalHeadings[1].querySelector("a").click();`);
+		assert.equal(
+			await host(
+				'window.originalHeadings[1].querySelector("button").getAttribute("aria-expanded")',
+			),
+			"true",
+			"Following a heading link must not toggle its section.",
+		);
+		await host(
+			'window.originalHeadings[1].querySelector(".markdown-section-heading-text").click()',
+		);
+		await until(
+			'window.originalHeadings[1].querySelector("button").getAttribute("aria-expanded") === "false"',
+			"heading text toggles its section",
+		);
+		assert.equal(
+			await host(
+				'document.getElementById(window.originalHeadings[1].querySelector("button").getAttribute("aria-controls")).hidden',
+			),
+			true,
+		);
+		assert.equal(
+			await host("window.originalHeadings.every((heading) => heading.isConnected)"),
+			true,
+		);
+		assert.equal(
+			await host('window.originalFrame === document.querySelector("iframe")'),
+			true,
+			"Folding must preserve the iframe DOM node.",
+		);
+		const revision = await host(
+			'window.refreshPreview({ tail: "\\n\\n## Streaming heading\\n\\nStreaming content.", status: "running" })',
+		);
+		await until(
+			"document.querySelectorAll(window.headingSelector).length === 7",
+			"streamed heading joins the outline",
+		);
+		assert.deepEqual(
+			await host(
+				"Array.from(document.querySelectorAll(window.headingSelector), (heading) => heading.id).slice(0, 6)",
+			),
+			await host("window.headingIds"),
+		);
+		assert.equal(
+			await host(
+				'window.originalHeadings[1].querySelector("button").getAttribute("aria-expanded")',
+			),
+			"false",
+			"Streaming must preserve the collapsed section.",
+		);
+		assert.equal(
+			await host("window.originalHeadings.every((heading) => heading.isConnected)"),
+			true,
+		);
+		await host('window.originalHeadings[1].querySelector("a").click()');
+		assert.deepEqual(await host("window.lastClick"), { kind: "entity", id: "example", revision });
+		for (const dispatchOnSection of [false, true]) {
+			await host(`for (const index of [0, 1, 2, 3]) {
+				const button = window.originalHeadings[index].querySelector("button");
+				if (button.getAttribute("aria-expanded") === "true") button.click();
+			}
+			document.querySelector(".response-collapse").click();`);
+			await until(
+				'document.querySelector(".turn-expanded-content").hidden',
+				"whole response is hidden without unmounting",
+			);
+			assert.equal(
+				await host("window.originalHeadings.every((heading) => heading.isConnected)"),
+				true,
+			);
+			assert.deepEqual(
+				await host(`new Promise((resolve) => {
+					document.querySelector(".response-collapse").focus({ preventScroll: true });
+					const focused = document.activeElement;
+					const scrollTop = window.scrollY;
+					const heading = window.originalHeadings[2];
+					window.revealHeading(${dispatchOnSection ? 'heading.closest("[data-markdown-section-id]")' : "heading"});
+					requestAnimationFrame(() => resolve({
+						expanded: [0, 1, 2].every((index) =>
+							window.originalHeadings[index].querySelector("button").getAttribute("aria-expanded") === "true"),
+						unrelatedCollapsed: window.originalHeadings[3].querySelector("button").getAttribute("aria-expanded") === "false",
+						responseVisible: !document.querySelector(".turn-expanded-content").hidden,
+						focusUnchanged: document.activeElement === focused,
+						scrollUnchanged: window.scrollY === scrollTop
+					}));
+				})`),
+				{
+					expanded: true,
+					unrelatedCollapsed: true,
+					responseVisible: true,
+					focusUnchanged: true,
+					scrollUnchanged: true,
+				},
+				`Reveal dispatched on a ${dispatchOnSection ? "section" : "heading"} must synchronously expand the target and ancestors without focus or scroll side effects.`,
+			);
+		}
+		await host(`window.originalHeadings[3].querySelector("button").focus({ preventScroll: true });
+			document.getElementById("root").style.width = "320px";`);
+		browser.webContents.debugger.attach("1.3");
+		await browser.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
+			type: "keyDown",
+			key: "Enter",
+			code: "Enter",
+			windowsVirtualKeyCode: 13,
+			text: "\r",
+		});
+		await browser.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
+			type: "keyUp",
+			key: "Enter",
+			code: "Enter",
+			windowsVirtualKeyCode: 13,
+		});
+		await until(
+			'window.originalHeadings[3].querySelector("button").getAttribute("aria-expanded") === "true"',
+			"Enter operates a native heading button at narrow widths",
+		);
+		await browser.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
+			type: "keyDown",
+			key: " ",
+			code: "Space",
+			windowsVirtualKeyCode: 32,
+			text: " ",
+		});
+		await browser.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
+			type: "keyUp",
+			key: " ",
+			code: "Space",
+			windowsVirtualKeyCode: 32,
+		});
+		await until(
+			'window.originalHeadings[3].querySelector("button").getAttribute("aria-expanded") === "false"',
+			"Space operates a native heading button",
+		);
+		browser.webContents.debugger.detach();
+		await host(`window.revealHeading(window.originalHeadings[3]);
+			document.getElementById("root").style.width = "900px";
+			window.refreshPreview({ tail: "", status: "complete" });`);
+		await until(
+			"document.querySelectorAll(window.headingSelector).length === 6",
+			"stream fixture restored",
+		);
+		assert.equal(await host('window.originalFrame === document.querySelector("iframe")'), true);
+		assert.equal(
+			await host("window.loads"),
+			1,
+			"Folding, revealing and streaming must not reload previews.",
+		);
+		assert.equal(
+			await browser.webContents.mainFrame.frames[0].executeJavaScript(
+				'document.querySelector("#state").value',
+			),
+			"preserved",
+		);
 	}
 
 	async function verifyArchify() {

@@ -164,6 +164,7 @@ Rhyza 是工具型桌面应用，采用 redesign-preserve 模式：保留工作�
 | `npm test`                               | 编译测试配置并运行 `tests/*.test.ts`               |
 | `npm run test:html-preview`              | 运行 Chromium/DOM HTML Preview 回归                |
 | `npm run test:chat-performance`          | 隐藏 Electron 窗口中的输入、消息更新和保存去重回归 |
+| `npm run test:answer-outline`            | 聚焦回答目录、章节折叠、查找展开和窄窗口阅读回归 |
 | `npm run test:ui`                        | 五个页面的深浅主题、窄窗口、文字对比度和导航回归 |
 | `npm run test:formatter`                 | 在临时目录验证格式化与 hook 路径处理               |
 | `npm run smoke:ipc`                      | IPC payload 和边界 smoke                           |
@@ -213,6 +214,7 @@ npm run test:html-preview
 
 ```powershell
 npm run test:ui
+npm run test:answer-outline
 ```
 
 UI 回归使用隐藏 Electron 窗口、独立临时用户目录和合成数据，不读取真实 Workspace，
