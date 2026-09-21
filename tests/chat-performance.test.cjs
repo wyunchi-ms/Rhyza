@@ -9,7 +9,7 @@ if (!process.versions.electron) {
 	const { test } = require("node:test");
 	const { spawn } = require("node:child_process");
 	test(
-		"typing isolates history, unchanged turns skip Markdown, and drafts send intact",
+		"typing isolates history, drafts send intact, and selection questions preserve reading",
 		{ timeout: 120_000 },
 		async () => {
 			const userData = await mkdtemp(path.join(os.tmpdir(), "rhyza-chat-performance-"));
@@ -66,6 +66,189 @@ if (!process.versions.electron) {
 		}
 		throw new Error(`Timed out: ${code}`);
 	};
+	async function checkSelectionReading(action, mode) {
+		const label = `${action}: ${mode}`;
+		await host(`(() => {
+			const store = chatTest.store;
+			const turns = Array.from({ length: 8 }, (_, index) => ({
+				id: "reading-turn-" + index, sessionId: "reading", role: index % 2 ? "assistant" : "user",
+				content: index % 2
+					? "## Answer " + index + "\\n\\n" + Array.from({ length: 20 }, (_, paragraph) =>
+						"Passage " + index + ", paragraph " + paragraph + ". Keep reading this explanation without leaving the original thread."
+					).join("\\n\\n")
+					: "Reading question " + index,
+				status: "complete", createdAt: "2026-09-20T00:00:00Z"
+			}));
+			store.setState({
+				sessions: [{ id: "reading", parentId: null, title: "Reading", isRoot: true, status: "idle" }],
+				turns, activeSessionId: "reading", visibleSessionId: "reading"
+			});
+			let selectedId = ${mode === "middle" || mode === "inherited" ? '"reading-turn-3"' : '"reading-turn-7"'};
+			if (${JSON.stringify(mode)} === "branched") {
+				store.getState().forkSession("reading-turn-7", { activate: false });
+			}
+			if (${JSON.stringify(mode)} === "inherited") {
+				const fork = store.getState().forkSession("reading-turn-3", { activate: false });
+				store.getState().setActiveSession(fork.originalSessionId);
+				selectedId = store.getState().turns.find(turn =>
+					turn.sessionId === fork.originalSessionId && turn.sourceTurnId === "reading-turn-1"
+				).id;
+			}
+			chatTest.selectedId = selectedId;
+			chatTest.selectedSourceId = store.getState().turns.find(turn => turn.id === selectedId).sourceTurnId ?? selectedId;
+			chatTest.readingSessionId = store.getState().activeSessionId;
+			chatTest.readingContents = store.getState().turns
+				.filter(turn => turn.sessionId === chatTest.readingSessionId).map(turn => turn.content);
+			chatTest.readingParagraph = () => {
+				const turn = store.getState().turns.find(turn =>
+					turn.sessionId === store.getState().activeSessionId
+					&& (turn.sourceTurnId ?? turn.id) === chatTest.selectedSourceId
+				);
+				return document.getElementById("turn-" + turn.id).querySelectorAll(".markdown-body p")[8];
+			};
+			editDraft("");
+		})()`);
+		await frame();
+		await host(`document.querySelectorAll('button[aria-label="Expand response"]')
+			.forEach(button => button.click())`);
+		await frame();
+		if (mode === "middle") {
+			await host('document.querySelector("#turn-reading-turn-1 .response-collapse").click()');
+			await frame();
+		}
+		await host(`(() => {
+			const container = document.querySelector(".chat-scroll");
+			container.classList.add("is-positioning");
+			container.scrollTop += chatTest.readingParagraph().getBoundingClientRect().top
+				- container.getBoundingClientRect().top - 100;
+			container.classList.remove("is-positioning");
+		})()`);
+		await frame();
+		const before = await host(`(() => {
+			const paragraph = chatTest.readingParagraph();
+			chatTest.readingParagraphElement = paragraph;
+			const range = document.createRange();
+			range.selectNodeContents(paragraph);
+			window.getSelection().removeAllRanges();
+			window.getSelection().addRange(range);
+			paragraph.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+			return {
+				scrollTop: document.querySelector(".chat-scroll").scrollTop,
+				passageTop: paragraph.getBoundingClientRect().top,
+				quote: paragraph.textContent,
+				requestCount: chatTest.sent.length
+			};
+		})()`);
+		await until('Boolean(document.querySelector(".text-selection-menu"))');
+		if (action === "ask") {
+			await host('document.querySelector(".text-selection-menu button").click()');
+			await until('Boolean(document.querySelector(".text-selection-popover textarea"))');
+			await host(`(() => {
+				const textarea = document.querySelector(".text-selection-popover textarea");
+				Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
+					.set.call(textarea, "What does this passage mean?");
+				textarea.dispatchEvent(new Event("input", { bubbles: true }));
+			})()`);
+			await frame();
+			await host('document.querySelector(".text-selection-popover").requestSubmit()');
+		} else {
+			await host('document.querySelectorAll(".text-selection-menu button")[1].click()');
+		}
+		await until(`chatTest.sent.length === ${before.requestCount + 1}`);
+		await frame();
+		assert.equal(
+			await host('document.querySelector(".chat-pane").textContent.includes("dump")'),
+			false,
+			`${label}: diagnostics must not appear above the composer`,
+		);
+		const assertReading = async (phase) => {
+			const after = await host(`(() => {
+				const state = chatTest.store.getState();
+				const request = chatTest.sent.at(-1);
+				const displayed = state.turns.filter(turn => turn.sessionId === state.activeSessionId);
+				const focused = state.turns.find(turn => turn.id === chatTest.focus.getState().turnId);
+				const question = state.turns.find(turn =>
+					turn.sessionId === request.frontendSessionId && turn.quote?.turnId === chatTest.selectedId
+				);
+				return {
+					scrollTop: document.querySelector(".chat-scroll").scrollTop,
+					passageTop: chatTest.readingParagraph().getBoundingClientRect().top,
+					retainedElement: chatTest.readingParagraph() === chatTest.readingParagraphElement,
+					activeSessionId: state.activeSessionId,
+					visibleSessionId: state.visibleSessionId,
+					readingSessionId: chatTest.readingSessionId,
+					requestSessionId: request.frontendSessionId,
+					contents: displayed.slice(0, 8).map(turn => turn.content),
+					readingContents: chatTest.readingContents,
+					focusedSourceId: focused?.sourceTurnId ?? focused?.id,
+					selectedSourceId: chatTest.selectedSourceId,
+					quote: question?.quote?.text,
+					question: question?.content,
+					questionTitle: question?.summary
+				};
+			})()`);
+			assert.ok(
+				Math.abs(after.scrollTop - before.scrollTop) <= 1,
+				`${label} ${phase}: scroll moved from ${before.scrollTop} to ${after.scrollTop}`,
+			);
+			assert.ok(
+				Math.abs(after.passageTop - before.passageTop) <= 1,
+				`${label} ${phase}: selected passage moved`,
+			);
+			assert.equal(after.retainedElement, true, `${label}: reading content must not remount`);
+			assert.deepEqual(after.contents, after.readingContents, `${label}: original path retained`);
+			assert.equal(
+				after.focusedSourceId,
+				after.selectedSourceId,
+				`${label}: reading focus retained`,
+			);
+			assert.equal(after.visibleSessionId, after.activeSessionId);
+			assert.equal(after.quote, before.quote);
+			assert.equal(after.question, action === "ask" ? "What does this passage mean?" : "explain");
+			if (action === "explain") {
+				assert.ok(
+					after.questionTitle.startsWith("Explain: Passage "),
+					`${label}: subject in title`,
+				);
+			}
+			if (mode === "leaf") {
+				assert.equal(after.activeSessionId, after.requestSessionId);
+			} else {
+				assert.notEqual(
+					after.activeSessionId,
+					after.requestSessionId,
+					`${label}: no branch switch`,
+				);
+			}
+			if (mode !== "middle") assert.equal(after.activeSessionId, after.readingSessionId);
+		};
+		await assertReading("queued");
+		await host(`chatTest.store.getState().updateTurn(chatTest.sent.at(-1).frontendTurnId, {
+			content: "Streaming response.\\n\\n".repeat(40), status: "running"
+		})`);
+		await frame();
+		await assertReading("streaming");
+		await host(
+			'chatTest.finishes.shift()({ ok: true, assistantText: "The passage is explained." })',
+		);
+		await until(
+			'chatTest.store.getState().sessions.find(session => session.id === chatTest.sent.at(-1).frontendSessionId).status === "idle"',
+		);
+		await frame();
+		await assertReading("complete");
+		await host(`(() => {
+			const request = chatTest.sent.at(-1);
+			sessionStorage.setItem("rhyza-focus-turn", request.frontendTurnId);
+			chatTest.store.getState().setActiveSession(request.frontendSessionId);
+			window.dispatchEvent(new CustomEvent("rhyza:focus-turn", { detail: { turnId: request.frontendTurnId } }));
+		})()`);
+		await until(`(() => {
+			const container = document.querySelector(".chat-scroll").getBoundingClientRect();
+			const answer = document.getElementById("turn-" + chatTest.sent.at(-1).frontendTurnId)?.getBoundingClientRect();
+			return answer && answer.top < container.bottom && answer.bottom > container.top;
+		})()`);
+		await frame();
+	}
 	async function run() {
 		await app.whenReady();
 		const { createServer } = await import(
@@ -223,6 +406,7 @@ if (!process.versions.electron) {
 		await host(`window.rhyza = {
 			isElectron: true,
 			sourceSearch: async () => [],
+			forkDebugDump: async () => ({ path: "test-fork-dump" }),
 			agentPrompt: (request) => { chatTest.sent.push(request); return new Promise(resolve => chatTest.finishes.push(resolve)); }
 		};
 		editDraft("First prompt", "insertFromPaste");`);
@@ -230,6 +414,14 @@ if (!process.versions.electron) {
 		await host('document.querySelector(".composer-send").click()');
 		await until("chatTest.sent.length === 1");
 		await frame();
+		assert.equal(
+			await host(`(() => {
+				const container = document.querySelector(".chat-scroll");
+				return Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) <= 1;
+			})()`),
+			true,
+			"Ordinary sends still scroll to the new message",
+		);
 		assert.equal(await host("chatTest.sent[0].images[0].mimeType"), "image/png");
 		assert.equal(await host("chatTest.sent[0].images[0].data"), "iVBORw==");
 		assert.equal(await host('document.querySelectorAll(".composer-attachment").length'), 0);
@@ -253,6 +445,19 @@ if (!process.versions.electron) {
 			await host('document.querySelector(".composer-input").value'),
 			"Keep this unsent draft",
 		);
+		for (const action of ["ask", "explain"]) {
+			for (const mode of ["middle", "leaf", "branched", "inherited"]) {
+				await checkSelectionReading(action, mode);
+			}
+		}
+		await host(`(() => {
+			const state = chatTest.store.getState();
+			const turn = state.turns.find(turn => turn.sessionId === state.activeSessionId);
+			const fork = state.forkSession(turn.id);
+			if (chatTest.store.getState().activeSessionId !== fork.forkSessionId) {
+				throw new Error("Explicit forks must still activate the new branch");
+			}
+		})()`);
 		console.log(
 			JSON.stringify({
 				typingEvents: 28,

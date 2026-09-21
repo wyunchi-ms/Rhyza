@@ -142,7 +142,13 @@ Pi package 以当前用户权限执行代码，Skill 也会影响 Agent 行为�
 - 继承该位置之前的相关路径，而不是携带所有无关分支；
 - 保留原路径，方便随时返回。
 
+使用 **Ask about this** 或 **Explain** 后，当前阅读路径和滚动位置保持不变。新问题照常提交并生成回答，但不会自动跳到新节点或消息；需要查看时，再主动选择对应节点。
+
 左侧 Chats 显示会话树和 Token 用量。使用 **Node view** 可切换到图形化节点视图。节点支持重命名、删除、折叠和状态管理；运行中的节点会显示真实活动状态。
+
+Chats 顶部的筛选按钮支持按叶节点标记状态多选：**Unmarked**、**To explore**、**In progress**、**Completed** 和 **On hold**。匹配任一所选状态的叶节点及其祖先路径会保留；非叶节点自身的状态不决定是否命中。选择 **All statuses** 或清空选择即可恢复全部节点。筛选在列表和 Node view 间同步，不改变当前对话或 Total 用量统计。
+
+**Explain** 节点显示为 `Explain: 引用内容摘要`，便于区分不同的解释问题。已有节点也会根据保存的引用补全显示，无需重新提问；自定义标题不会被覆盖。
 
 <!-- GIF TODO: docs/images/branch-and-resume.gif，脚本见 images/README.md。 -->
 
@@ -197,6 +203,12 @@ Source 可重新扫描或归档。文件内容变化后，建议 Reindex；与�
 Git Workspace 中的可写 Session 会尝试创建独立 Worktree。创建失败时会回退到原 Workspace，因此执行高风险操作前应检查 Code 页首行显示的实际路径以及 `Isolated worktree`/`Workspace` 标记。
 
 Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离后开放。Codex App Server 按请求的可写标记选择 `workspace-write` 或 `read-only`，不能把 Worktree 失败理解为所有 Provider 都会自动只读。Pi 扩展也有自己的执行能力；Worktree 不等于插件沙箱。
+
+### 3.7 阅读长回答
+
+宽屏下，Markdown 回答左侧的空白区域会显示 **In this answer** 目录，内容随当前聚焦的 Assistant 回答切换。点击目录可跳到对应标题，正在阅读的章节会高亮。目录只使用正文之外的空白，不改变正文宽度；空间不足或回答没有 Markdown 标题时自动隐藏。
+
+点击回答标题旁的折叠按钮，可收起该标题下的正文和子章节，再次点击即可展开。目录仍保留折叠章节的条目，点击会展开所需的父章节；页面内查找也会展开匹配内容。折叠只隐藏内容，不卸载其中的交互式 HTML 预览。
 
 ## 4. 设置说明
 

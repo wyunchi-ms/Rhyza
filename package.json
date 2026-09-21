@@ -12,6 +12,7 @@
 		"test:formatter": "node --test tests/format-code.test.mjs",
 		"test:html-preview": "node --test tests/html-preview-rendering.test.cjs",
 		"test:chat-performance": "node --test tests/chat-performance.test.cjs",
+		"test:answer-outline": "node --test tests/answer-outline.test.cjs",
 		"test:ui": "node --test tests/ui-refinement.test.cjs",
 		"dev": "vite --host 127.0.0.1 --port 5175 --strictPort",
 		"test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",

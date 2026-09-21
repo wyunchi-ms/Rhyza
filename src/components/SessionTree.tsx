@@ -29,11 +29,14 @@ import { isTurnActive } from "../utils/sessionRuntime";
 import { roundMetrics } from "../utils/roundMetrics";
 import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
+import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
 
-export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.ReactNode }> = ({
-	embedded = false,
-	viewControl,
-}) => {
+export const SessionTree: React.FC<{
+	embedded?: boolean;
+	viewControl?: React.ReactNode;
+	leafStatuses?: readonly LeafStatusFilter[];
+	onClearFilter?: () => void;
+}> = ({ embedded = false, viewControl, leafStatuses = [], onClearFilter }) => {
 	const {
 		sessions,
 		turns,
@@ -46,6 +49,16 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 	} = useAppStore();
 	const focus = useConversationFocus();
 	const tree = useMemo(() => projectConversationTree(sessions, turns), [turns, sessions]);
+	const visibleNodes = useMemo(
+		() =>
+			new Set(
+				filterConversationRounds(tree.graph.rounds, sessions, leafStatuses)
+					.map((round) => tree.nodeByRoundId.get(round.id))
+					.filter((id): id is string => id !== undefined),
+			),
+		[tree, sessions, leafStatuses],
+	);
+	const visibleRoots = tree.roots.filter((root) => visibleNodes.has(root.id));
 	const activePath = tree.graph.paths.get(activeSessionId ?? "") ?? [];
 	const focusedRoundId =
 		focus.sessionId === activeSessionId && focus.turnId
@@ -133,10 +146,10 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 				const localTurns = node.rounds.flatMap((round) =>
 					round.user ? [round.user, ...round.answers] : round.answers,
 				);
-				const text =
-					[...localTurns].reverse().find((turn) => turn.role === "user")?.content ??
-					localTurns.map((turn) => turn.content).join("\n") ??
-					node.title;
+				const userTurn = [...localTurns].reverse().find((turn) => turn.role === "user");
+				const text = userTurn
+					? [userTurn.quote?.text, userTurn.content].filter(Boolean).join("\n\n")
+					: localTurns.map((turn) => turn.content).join("\n") || node.title;
 				return bridge.generateSummary({ text: text || node.title, model });
 			}),
 		);
@@ -175,12 +188,13 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 				</div>
 			</div>
 			<div className="flex-1 overflow-y-auto px-2 pb-2">
-				{tree.roots.map((root) => (
+				{visibleRoots.map((root) => (
 					<SessionGroup
 						key={root.id}
 						root={root}
 						sessions={sessions}
 						tree={tree}
+						visibleNodes={visibleNodes}
 						currentId={visibleNodeId}
 						viewportId={visibleNodeId}
 						onSelect={selectSession}
@@ -190,6 +204,14 @@ export const SessionTree: React.FC<{ embedded?: boolean; viewControl?: React.Rea
 						usage={usage}
 					/>
 				))}
+				{leafStatuses.length > 0 && visibleRoots.length === 0 && (
+					<div className="session-filter-empty" role="status">
+						<p>No leaves match these statuses.</p>
+						<button type="button" className="secondary-button" onClick={onClearFilter}>
+							Clear filter
+						</button>
+					</div>
+				)}
 			</div>
 		</div>
 	);
@@ -199,6 +221,7 @@ const SessionGroup = ({
 	root,
 	sessions,
 	tree,
+	visibleNodes,
 	currentId,
 	viewportId,
 	onSelect,
@@ -210,6 +233,7 @@ const SessionGroup = ({
 	root: ConversationTreeNode;
 	sessions: SessionNode[];
 	tree: ReturnType<typeof projectConversationTree>;
+	visibleNodes: Set<string>;
 	currentId: string | null;
 	viewportId: string | null;
 	onSelect: (id: string) => void;
@@ -235,7 +259,8 @@ const SessionGroup = ({
 		return () => window.cancelAnimationFrame(frame);
 	}, [editingTitle?.nodeId]);
 
-	const getChildren = (parentId: string) => tree.childrenById.get(parentId) ?? [];
+	const getChildren = (parentId: string) =>
+		(tree.childrenById.get(parentId) ?? []).filter((node) => visibleNodes.has(node.id));
 
 	useEffect(() => {
 		if (!currentId) return;

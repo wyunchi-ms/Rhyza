@@ -149,6 +149,72 @@ html[data-theme] .sidebar-reopen {
 	margin-left: auto;
 }
 
+.session-filter-trigger {
+	position: relative;
+}
+
+html[data-theme] .session-filter-trigger.is-active {
+	background: var(--ui-brand-soft);
+	color: var(--ui-brand-ink);
+}
+
+.session-filter-count {
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	display: grid;
+	min-width: 14px;
+	height: 14px;
+	place-items: center;
+	border-radius: 7px;
+	background: var(--ui-action);
+	color: var(--ui-on-action);
+	font-size: 9px;
+	font-weight: 700;
+}
+
+.session-filter-menu {
+	max-width: calc(100vw - 16px);
+	max-height: calc(100dvh - 16px);
+	overflow-y: auto;
+}
+
+.session-filter-menu .session-status-menu-title,
+.session-filter-hint {
+	color: var(--color-secondary);
+}
+
+.session-filter-hint {
+	margin: 0;
+	padding: 0 0.55rem 0.5rem;
+	font-size: 11px;
+	line-height: 1.5;
+}
+
+.session-filter-label {
+	flex: 1;
+	color: var(--color-primary);
+	font-size: 12px;
+}
+
+.session-filter-menu .session-status-option:hover,
+.session-filter-menu .session-status-option:focus-visible {
+	background: var(--ui-hover);
+}
+
+.session-filter-empty {
+	display: flex;
+	min-height: 8rem;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	padding: 1rem;
+	color: var(--color-secondary);
+	font-size: 12px;
+	text-align: center;
+}
+
 html[data-theme] .session-tree-header h2 {
 	color: var(--color-secondary);
 	font-size: 0.72rem;

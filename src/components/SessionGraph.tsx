@@ -39,6 +39,7 @@ import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
 import { graphPreviewPosition } from "../utils/graphPreviewPosition";
 import { ConversationPathEdge } from "./ConversationPathEdge";
 import { createGraphPreviewOwner } from "../utils/graphPreviewOwner";
+import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
 
 const orientationStorageKey = "rhyza-session-graph-orientation";
 
@@ -60,9 +61,13 @@ const edgeTypes = { conversation: ConversationPathEdge };
 export function SessionGraph({
 	viewControl,
 	visible = true,
+	leafStatuses = [],
+	onClearFilter,
 }: {
 	viewControl?: ReactNode;
 	visible?: boolean;
+	leafStatuses?: readonly LeafStatusFilter[];
+	onClearFilter?: () => void;
 }) {
 	const sessions = useAppStore((state) => state.sessions);
 	const turns = useAppStore((state) => state.turns);
@@ -81,13 +86,17 @@ export function SessionGraph({
 	}, [visible, previewOwner]);
 	const focus = useConversationFocus();
 	const projection = useMemo(() => projectConversationGraph(sessions, turns), [sessions, turns]);
+	const visibleRounds = useMemo(
+		() => filterConversationRounds(projection.rounds, sessions, leafStatuses),
+		[projection, sessions, leafStatuses],
+	);
 	const activePath = projection.paths.get(activeSessionId ?? "") ?? [];
 	const focusedRoundId =
 		focus.sessionId === activeSessionId && focus.turnId
 			? projection.roundByTurnId.get(focus.turnId)
 			: undefined;
 	const activeRoundId = focusedRoundId ?? activePath[activePath.length - 1];
-	const topology = JSON.stringify(projection.rounds.map(({ id, parentId }) => ({ id, parentId })));
+	const topology = JSON.stringify(visibleRounds.map(({ id, parentId }) => ({ id, parentId })));
 	const positions = useMemo(
 		() =>
 			new Map(layoutSessionGraph(JSON.parse(topology), orientation).map((node) => [node.id, node])),
@@ -148,7 +157,7 @@ export function SessionGraph({
 	const graph = useMemo(
 		() =>
 			buildGraph({
-				rounds: projection.rounds,
+				rounds: visibleRounds,
 				sessions,
 				activeRoundId,
 				activePath,
@@ -164,7 +173,7 @@ export function SessionGraph({
 			orientation,
 			displayPositions,
 			selectRound,
-			projection.rounds,
+			visibleRounds,
 			sessions,
 		],
 	);
@@ -194,7 +203,7 @@ export function SessionGraph({
 						<h1>
 							Chats{" "}
 							<span className="graph-round-count">
-								{projection.rounds.filter((round) => round.user).length} rounds
+								{visibleRounds.filter((round) => round.user).length} rounds
 							</span>
 						</h1>
 					</div>
@@ -226,7 +235,7 @@ export function SessionGraph({
 				onPointerDownCapture={interrupt}
 				onWheelCapture={interrupt}
 			>
-				{sessions.length ? (
+				{visibleRounds.length ? (
 					<ReactFlow
 						nodes={graph.nodes}
 						edges={graph.edges}
@@ -260,6 +269,13 @@ export function SessionGraph({
 							maskColor="rgb(238 242 255 / 76%)"
 						/>
 					</ReactFlow>
+				) : leafStatuses.length > 0 ? (
+					<div className="session-filter-empty" role="status">
+						<p>No leaves match these statuses.</p>
+						<button type="button" className="secondary-button" onClick={onClearFilter}>
+							Clear filter
+						</button>
+					</div>
 				) : (
 					<div className="session-graph-empty">
 						<GitBranch size={38} />

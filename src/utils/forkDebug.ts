@@ -1,5 +1,9 @@
 import type { SessionNode, Turn } from "../types";
-import type { SelectionContinuationTarget, SessionForkResult, SessionForkState } from "./sessionFork";
+import type {
+	SelectionContinuationTarget,
+	SessionForkResult,
+	SessionForkState,
+} from "./sessionFork";
 
 export const forkDebugEventName = "rhyza:fork-debug";
 
@@ -79,11 +83,14 @@ export function createSelectionAppendDebugSnapshot(
 		decision: {
 			mode: target.mode,
 			targetSessionId: target.sessionId,
-			reason: "The selected turn is the end of the current path and the session has no child branches, so the question is appended instead of creating a fork.",
+			reason:
+				"The selected turn is the end of the current path and the session has no child branches, so the question is appended instead of creating a fork.",
 			selectedTurnIndex: selectedIndex,
 			sessionTurnCount: sessionTurns.length,
 			hasLaterTurns: selectedIndex >= 0 && selectedIndex < sessionTurns.length - 1,
-			childSessionIds: state.sessions.filter((session) => session.parentId === target.sessionId).map((session) => session.id),
+			childSessionIds: state.sessions
+				.filter((session) => session.parentId === target.sessionId)
+				.map((session) => session.id),
 			selectedTurn: selectedTurn ? serializeTurn(selectedTurn, state.turns) : null,
 			sourceTurn: sourceTurn ? serializeTurn(sourceTurn, state.turns) : null,
 		},
@@ -94,6 +101,8 @@ export function createSelectionAppendDebugSnapshot(
 
 export function announceForkDebug(detail: ForkDebugEventDetail): void {
 	if (typeof window === "undefined") return;
+	if (detail.ok) console.debug("[Rhyza fork]", detail.message);
+	else console.warn("[Rhyza fork]", detail.message);
 	window.dispatchEvent(new CustomEvent<ForkDebugEventDetail>(forkDebugEventName, { detail }));
 }
 
@@ -101,7 +110,9 @@ function serializeState(sessions: SessionNode[], turns: Turn[]) {
 	return {
 		sessions: sessions.map((session) => ({
 			...session,
-			childSessionIds: sessions.filter((child) => child.parentId === session.id).map((child) => child.id),
+			childSessionIds: sessions
+				.filter((child) => child.parentId === session.id)
+				.map((child) => child.id),
 			ancestorSessionIds: ancestorIds(session, sessions),
 			turnIds: turns.filter((turn) => turn.sessionId === session.id).map((turn) => turn.id),
 		})),
@@ -114,12 +125,14 @@ function serializeTree(sessions: SessionNode[], turns: Turn[]): ForkDebugTreeNod
 		sessionId: session.id,
 		title: session.title,
 		parentSessionId: session.parentId,
-		turns: turns.filter((turn) => turn.sessionId === session.id).map((turn) => ({
-			id: turn.id,
-			role: turn.role,
-			summary: turn.summary,
-			sourceTurnId: turn.sourceTurnId,
-		})),
+		turns: turns
+			.filter((turn) => turn.sessionId === session.id)
+			.map((turn) => ({
+				id: turn.id,
+				role: turn.role,
+				summary: turn.summary,
+				sourceTurnId: turn.sourceTurnId,
+			})),
 		children: sessions.filter((candidate) => candidate.parentId === session.id).map(visit),
 	});
 	return sessions.filter((session) => session.parentId === null).map(visit);
@@ -130,7 +143,9 @@ function serializeTurn(turn: Turn, turns: Turn[]) {
 		id: turn.id,
 		sessionId: turn.sessionId,
 		sourceTurnId: turn.sourceTurnId,
-		sourceSessionId: turn.sourceTurnId ? turns.find((candidate) => candidate.id === turn.sourceTurnId)?.sessionId : undefined,
+		sourceSessionId: turn.sourceTurnId
+			? turns.find((candidate) => candidate.id === turn.sourceTurnId)?.sessionId
+			: undefined,
 		role: turn.role,
 		status: turn.status,
 		summary: turn.summary,

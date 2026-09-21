@@ -166,6 +166,7 @@ if (!process.versions.electron) {
 			return [...document.querySelectorAll(
 				".page-title, .page-subtitle, .chat-topbar h1, .chat-empty p, .chat-empty-hint, " +
 				".settings-page section > h2, .command-button:not(:disabled), " +
+				".session-filter-label, .session-filter-hint, .session-filter-count, " +
 				".text-selection-actions button[type=submit]:not(:disabled), .analyze-context-button"
 			)].filter(element => element.getBoundingClientRect().width > 0).map(element => {
 				let background = element;
@@ -401,6 +402,175 @@ if (!process.versions.electron) {
 			"#/sources",
 			"skip link must not change HashRouter route",
 		);
+	}
+
+	async function checkSidebarFilter() {
+		browser.setContentSize(1440, 960);
+		await navigate("/", ".chat-topbar h1");
+		await host(`(() => {
+			const timestamp = "2026-09-21T00:00:00Z";
+			const rootTurns = [
+				{ id: "filter-root-question", sessionId: "filter-root", role: "user", content: "Shared context", status: "complete", createdAt: timestamp },
+				{ id: "filter-root-answer", sessionId: "filter-root", role: "assistant", content: "Context for a branch.", status: "complete", createdAt: timestamp }
+			];
+			const childTurns = (sessionId, id, content, quote) => [
+				...rootTurns.map(turn => ({ ...turn, id: sessionId + "-" + turn.id, sessionId, sourceTurnId: turn.id })),
+				{ id, sessionId, role: "user", content, summary: content, quote, status: "complete", createdAt: timestamp },
+				{ id: id + "-answer", sessionId, role: "assistant", content: "A detailed explanation for continued reading.\\n\\n".repeat(30), status: "complete", createdAt: timestamp }
+			];
+			window.uiStore.setState({
+				sessions: [
+					{ id: "filter-root", parentId: null, title: "Shared context", isRoot: true, status: "idle", progressStatus: "parked" },
+					{ id: "filter-done", parentId: "filter-root", forkedFromTurnId: "filter-root-answer", title: "explain", isRoot: false, status: "idle", progressStatus: "complete" },
+					{ id: "filter-todo", parentId: "filter-root", forkedFromTurnId: "filter-root-answer", title: "Explore attention", isRoot: false, status: "idle", progressStatus: "todo" },
+					{ id: "filter-empty", parentId: null, title: "Unmarked chat", isRoot: true, status: "idle" }
+				],
+				turns: [
+					...rootTurns,
+					...childTurns("filter-done", "filter-done-question", "explain", { turnId: "filter-root-answer", text: "decoder-only architecture" }),
+					...childTurns("filter-todo", "filter-todo-question", "Explore attention")
+				],
+				activeSessionId: "filter-todo",
+				visibleSessionId: "filter-todo",
+				sidebarOpen: true
+			});
+		})()`);
+		await settle();
+		const filterButton =
+			'.sidebar-view-content:not([hidden]) button[aria-label="Filter by leaf status"]';
+		const nodeViewSwitch = '.sidebar-view-content:not([hidden]) [aria-label="Node view"]';
+		const visibleIds = () =>
+			host(
+				'[...document.querySelectorAll(".session-tree [data-session-tree-id]")].map(node => node.dataset.sessionTreeId)',
+			);
+		const choose = async (label) => {
+			await host(`Array.from(document.querySelectorAll(".session-filter-menu [role=menuitemcheckbox]"))
+				.find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`);
+			await settle();
+		};
+		const open = async () => {
+			await host(`document.querySelector(${JSON.stringify(filterButton)}).click()`);
+			await until('Boolean(document.querySelector(".session-filter-menu"))', "leaf filter menu");
+			await settle();
+		};
+		const close = async () => {
+			await host(`document.querySelector(".session-filter-menu")
+				.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+			await until('!document.querySelector(".session-filter-menu")', "leaf filter dismissal");
+		};
+		for (const theme of ["light", "dark"]) {
+			await setAppearance(theme, { highContrast: false, reduceMotion: true, fontScale: 1 });
+			assert.equal(
+				await host(
+					"document.querySelector('[data-session-tree-id=\"filter-done-question\"] .session-node-title').textContent",
+				),
+				"Explain: decoder-only architecture",
+				"existing Explain nodes show the selected subject",
+			);
+			await host(`(() => {
+				const scroll = document.querySelector(".chat-scroll");
+				scroll.classList.add("is-positioning");
+				scroll.scrollTop = 240;
+				scroll.classList.remove("is-positioning");
+			})()`);
+			await settle();
+			const before = await host('document.querySelector(".chat-scroll").scrollTop');
+			const total = await host(
+				'document.querySelector(".session-tree-header .session-usage").textContent',
+			);
+			await open();
+			assert.equal(
+				await host("document.activeElement.textContent.trim()"),
+				"All statuses",
+				"filter opens with keyboard focus",
+			);
+			await host(
+				`document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))`,
+			);
+			assert.equal(await host("document.activeElement.textContent.trim()"), "Unmarked");
+			await choose("Completed");
+			assert.deepEqual(await visibleIds(), ["filter-root-question", "filter-done-question"]);
+			assert.equal(
+				await host("window.uiStore.getState().activeSessionId"),
+				"filter-todo",
+				"filter must not navigate",
+			);
+			assert.ok(
+				Math.abs((await host('document.querySelector(".chat-scroll").scrollTop')) - before) <= 1,
+				"filter must not scroll the conversation",
+			);
+			assert.equal(
+				await host('document.querySelector(".session-tree-header .session-usage").textContent'),
+				total,
+				"filter must not change total usage",
+			);
+			await host('window.uiStore.getState().setSessionProgressStatus("filter-todo", "complete")');
+			await settle();
+			assert.deepEqual(await visibleIds(), [
+				"filter-root-question",
+				"filter-done-question",
+				"filter-todo-question",
+			]);
+			await host('window.uiStore.getState().setSessionProgressStatus("filter-todo", "todo")');
+			await settle();
+			await choose("To explore");
+			assert.deepEqual(await visibleIds(), [
+				"filter-root-question",
+				"filter-done-question",
+				"filter-todo-question",
+			]);
+			assert.equal(
+				await host('document.querySelector(".session-tree .session-filter-count").textContent'),
+				"2",
+			);
+			await checkContrast(`${theme} leaf filter`);
+			await screenshot(`${theme}-leaf-filter`);
+			await choose("To explore");
+			await close();
+			assert.equal(
+				await host('document.activeElement.getAttribute("aria-label")'),
+				"Filter by leaf status",
+				"Escape restores focus",
+			);
+			await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
+			await until(
+				'document.querySelectorAll(".react-flow__node").length === 2',
+				"filtered node view",
+			);
+			assert.deepEqual(
+				await host(
+					'[...document.querySelectorAll(".session-graph-node-main strong")].map(node => node.textContent)',
+				),
+				["Shared context", "Explain: decoder-only architecture"],
+				"node view shares the filter and contextual titles",
+			);
+			await open();
+			await choose("All statuses");
+			await choose("On hold");
+			assert.equal(
+				await host('Boolean(document.querySelector(".session-graph-page .session-filter-empty"))'),
+				true,
+				"non-leaf status alone must not match",
+			);
+			await close();
+			await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
+			await settle();
+			assert.deepEqual(await visibleIds(), []);
+			await host('document.querySelector(".session-tree .session-filter-empty button").click()');
+			await settle();
+			assert.equal((await visibleIds()).length, 4);
+			await open();
+			await choose("Unmarked");
+			assert.deepEqual(await visibleIds(), ["empty:filter-empty"]);
+			await choose("Unmarked");
+			assert.equal((await visibleIds()).length, 4, "clearing the last status restores all");
+			await host(
+				'document.querySelector(".chat-topbar").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))',
+			);
+			await until('!document.querySelector(".session-filter-menu")', "outside click dismissal");
+		}
+		await seedContent();
+		await setAppearance("dark", { reduceMotion: false });
 	}
 
 	async function checkPageControls() {
@@ -640,6 +810,7 @@ if (!process.versions.electron) {
 			await setAppearance(theme, { fontScale: 1, highContrast: false, reduceMotion: false });
 		}
 		await checkInteractions();
+		await checkSidebarFilter();
 		await checkPageControls();
 		await checkChatActionContrast();
 		assert.deepEqual(rendererErrors, [], "renderer console errors");
