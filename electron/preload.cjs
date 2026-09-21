@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Keep this allowlist synchronized with src/shared/ipc.ts and electron/preload.ts.
 
 const ipcChannels = {
+	azureOpenAIConfigGet: "rhyza:azure-openai-config-get",
+	azureOpenAIConfigSet: "rhyza:azure-openai-config-set",
 	providerStatus: "rhyza:provider-status",
 	providerLogin: "rhyza:provider-login",
 	providerLogout: "rhyza:provider-logout",
@@ -40,6 +42,8 @@ const ipcChannels = {
 
 contextBridge.exposeInMainWorld("rhyza", {
 	isElectron: true,
+	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
+	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request) => ipcRenderer.invoke(ipcChannels.providerStatus, request),
 	providerLogin: (request) => ipcRenderer.invoke(ipcChannels.providerLogin, request),
 	providerLogout: (request) => ipcRenderer.invoke(ipcChannels.providerLogout, request),

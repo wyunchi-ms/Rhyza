@@ -37,6 +37,8 @@ import type {
 	WorkspaceDiffResponse,
 	WorkspaceTodosResponse,
 } from "../../src/shared/ipc.js";
+import { AzureOpenAIProvider } from "./azure-openai-provider.js";
+import type { AzureOpenAIConfig } from "../../src/shared/ipc.js";
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
@@ -87,6 +89,9 @@ export class PiService {
 	private readonly pendingAuxiliaryCancels = new Map<string, NodeJS.Timeout>();
 	protected readonly worktreeService: WorktreeService;
 	private readonly codexAppServer = new CodexAppServer();
+	private readonly azureOpenAI: AzureOpenAIProvider;
+	private azureConfigSaving = false;
+	private activeInferenceCount = 0;
 
 	constructor(
 		userDataPath: string,
@@ -96,8 +101,35 @@ export class PiService {
 		protected readonly sourceService?: SourceService,
 	) {
 		this.agentDir = agentDir;
+		this.azureOpenAI = new AzureOpenAIProvider(userDataPath);
 		this.requestDumpDir = path.join(userDataPath, "model-request-dumps");
 		this.worktreeService = new WorktreeService(userDataPath);
+	}
+
+	async getAzureOpenAIConfig(): Promise<AzureOpenAIConfig | null> {
+		return this.azureOpenAI.getConfig();
+	}
+
+	async setAzureOpenAIConfig(config: AzureOpenAIConfig): Promise<AzureOpenAIConfig> {
+		if (this.azureConfigSaving || this.activeInferenceCount > 0) {
+			throw new Error(
+				"Wait for the current response or configuration save to finish, then try again.",
+			);
+		}
+		this.azureConfigSaving = true;
+		try {
+			await this.azureOpenAI.setConfig(config);
+			const runtime = await this.getModelRuntime();
+			const provider = await this.azureOpenAI.createProvider();
+			if (!provider) throw new Error("Azure OpenAI configuration is missing.");
+			runtime.registerNativeProvider(provider);
+			for (const [id, active] of this.activeSessions) {
+				if (active.modelKey?.startsWith("azure-openai/")) this.disposeSession(id);
+			}
+			return (await this.azureOpenAI.getConfig())!;
+		} finally {
+			this.azureConfigSaving = false;
+		}
 	}
 
 	async getModelRequestHistory(frontendSessionId: string): Promise<ModelRequestHistoryResponse> {
@@ -151,6 +183,7 @@ export class PiService {
 		providerId: ProviderId = defaultProviderId,
 	): Promise<ProviderStatusResponse> {
 		try {
+			if (providerId === "azure-openai") return await this.azureOpenAI.getStatus();
 			if (providerId === codexAppServerProviderId) {
 				const account = await this.codexAppServer.account(false);
 				return {
@@ -178,6 +211,13 @@ export class PiService {
 	}
 
 	async loginProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
+		if (providerId === "azure-openai") {
+			return {
+				ok: false,
+				status: await this.getProviderStatus(providerId),
+				error: "Sign in with az login outside Rhyza, then check the connection.",
+			};
+		}
 		try {
 			if (providerId === codexAppServerProviderId) {
 				const existingAccount = await this.codexAppServer.account(false);
@@ -239,6 +279,14 @@ export class PiService {
 	}
 
 	async logoutProvider(providerId: ProviderId): Promise<ProviderActionResponse> {
+		if (providerId === "azure-openai") {
+			return {
+				ok: false,
+				status: await this.getProviderStatus(providerId),
+				error:
+					"Azure CLI sign-in is shared with other applications. Sign out with az logout outside Rhyza.",
+			};
+		}
 		try {
 			if (providerId === codexAppServerProviderId) {
 				await this.codexAppServer.logout();
@@ -273,6 +321,14 @@ export class PiService {
 					configured: account !== null,
 				};
 			}
+			if (providerId === "azure-openai") {
+				const status = await this.azureOpenAI.getStatus();
+				return {
+					models: runtime.getModels(providerId).map(toModelInfo),
+					configured: status.configured,
+					error: status.error,
+				};
+			}
 			const status = runtime.getProviderAuthStatus(providerId);
 			if (request.refresh && status.configured) {
 				await runtime.refresh({ allowNetwork: true, force: true });
@@ -295,7 +351,18 @@ export class PiService {
 
 	async promptAgent(request: PiPromptRequest, workspacePath: string): Promise<AgentPromptResponse> {
 		const promptUsage = emptyAgentUsage();
+		this.activeInferenceCount++;
 		try {
+			if (this.azureConfigSaving)
+				throw new Error("Wait for the Azure configuration save to finish.");
+			if (
+				request.model?.providerId === "azure-openai" &&
+				(request.images?.length || request.transcript.some((turn) => turn.images?.length))
+			) {
+				throw new Error(
+					"Azure OpenAI currently supports text-only conversations. Remove attached images or start a conversation without images in its history.",
+				);
+			}
 			const runtime = await this.getModelRuntime();
 			const model = await resolveRequestedModel(runtime, request.model);
 			const active = await this.getSession(workspacePath, request, model);
@@ -350,6 +417,8 @@ export class PiService {
 				error: errorToMessage(error),
 				usage: hasUsage(promptUsage) ? promptUsage : undefined,
 			};
+		} finally {
+			this.activeInferenceCount--;
 		}
 	}
 
@@ -394,7 +463,10 @@ export class PiService {
 	}
 
 	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
+		this.activeInferenceCount++;
 		try {
+			if (this.azureConfigSaving)
+				throw new Error("Wait for the Azure configuration save to finish.");
 			const runtime = await this.getModelRuntime();
 			const model = await resolveRequestedModel(runtime, request.model);
 			if (!model) throw new Error("No configured model is available for summary generation.");
@@ -437,6 +509,8 @@ export class PiService {
 			}
 		} catch (error) {
 			return { error: errorToMessage(error) };
+		} finally {
+			this.activeInferenceCount--;
 		}
 	}
 
@@ -444,7 +518,10 @@ export class PiService {
 		request: KnowledgeExtractionRequest,
 		workspacePath: string,
 	): Promise<KnowledgeExtractionResponse> {
+		this.activeInferenceCount++;
 		try {
+			if (this.azureConfigSaving)
+				throw new Error("Wait for the Azure configuration save to finish.");
 			const runtime = await this.getModelRuntime();
 			const model = await resolveRequestedModel(runtime, request.model);
 			if (!model) throw new Error("No configured model is available for knowledge extraction.");
@@ -496,6 +573,8 @@ export class PiService {
 				diagrams: extractDiagramCandidates(request),
 				error: errorToMessage(error),
 			};
+		} finally {
+			this.activeInferenceCount--;
 		}
 	}
 
@@ -512,6 +591,12 @@ export class PiService {
 			modelsStorePath: path.join(this.agentDir, "models-store.json"),
 			allowModelNetwork: false,
 		});
+		try {
+			const provider = await this.azureOpenAI.createProvider();
+			if (provider) runtime.registerNativeProvider(provider);
+		} catch {
+			// Surface invalid Azure configuration in its settings, without disabling other providers.
+		}
 		try {
 			if (await this.codexAppServer.account(false)) await this.refreshCodexProvider(runtime);
 		} catch {
@@ -913,6 +998,16 @@ async function resolveRequestedModel(
 	selection: AgentPromptRequest["model"],
 ): Promise<PiModel | undefined> {
 	if (!selection) return undefined;
+	if (selection.providerId === "azure-openai") {
+		const model = runtime.getModels("azure-openai")[0];
+		if (!model) {
+			throw new Error(
+				"Save a valid Azure OpenAI configuration in Settings before sending a request.",
+			);
+		}
+		// The global deployment may have changed since this workspace saved its model selection.
+		return model;
+	}
 	if (selection.modelId) {
 		const model = runtime.getModel(selection.providerId, selection.modelId);
 		if (!model) {

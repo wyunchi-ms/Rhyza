@@ -14,6 +14,8 @@ import {
 
 const bridge: RhyzaBridge = {
 	isElectron: true,
+	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
+	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request: ProviderStatusRequest) =>
 		ipcRenderer.invoke(ipcChannels.providerStatus, request),
 	providerLogin: (request: ProviderLoginRequest) =>

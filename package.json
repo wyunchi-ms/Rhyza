@@ -68,6 +68,7 @@
 	},
 	"homepage": "https://github.com/wyunchi-ms/Rhyza#readme",
 	"dependencies": {
+		"@azure/identity": "4.13.3",
 		"@earendil-works/pi-ai": "0.82.1",
 		"@earendil-works/pi-coding-agent": "0.82.1",
 		"@modelcontextprotocol/sdk": "^1.25.3",
@@ -80,6 +81,7 @@
 		"katex": "^0.18.7",
 		"lucide-react": "^1.28.0",
 		"mermaid": "11.16.0",
+		"openai": "6.26.0",
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
 		"react-icons": "^5.7.0",

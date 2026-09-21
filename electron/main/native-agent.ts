@@ -6,7 +6,7 @@ import type {
 	ProviderId,
 } from "../../src/shared/ipc.js";
 
-export type NativeProviderId = Exclude<ProviderId, "github-copilot">;
+export type NativeProviderId = Extract<ProviderId, "codex" | "claude-code">;
 export type NativePromptPart =
 	{ type: "text"; text: string } | { type: "image"; image: AgentPromptImage };
 

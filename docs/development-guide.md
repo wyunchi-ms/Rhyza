@@ -23,7 +23,7 @@ npm ci
 npm run electron:dev
 ```
 
-使用 Node.js `22.12+`（也支持 `20.19+`）。`npm ci` 会安装 Electron、Pi SDK、Codex SDK 和前端依赖，并运行 `postinstall` 修补 Pi cache metadata。Claude Code CLI 需单独安装。
+使用 Node.js `22.12+`（也支持 `20.19+`）。`npm ci` 会安装 Electron、Pi SDK、Codex SDK 和前端依赖，并运行 `postinstall` 修补 Pi cache metadata。Claude Code CLI 需单独安装；使用 Azure OpenAI 时还需单独安装 Azure CLI，并按[使用指南](user-guide.md#22-连接-ai-provider)完成登录与资源配置。
 
 开发服务固定使用 `127.0.0.1:5175` 和 `strictPort`。Main Process 会等待该地址可访问后加载 Renderer；Electron 使用 single-instance lock。
 
@@ -79,7 +79,7 @@ Zustand Store 管理 Session、Turn、Knowledge、Settings 和布局。持久化
 
 ### Agent 与 Provider
 
-`electron/main/agent-service.ts` 继承 PiService：GitHub Copilot 和 Codex 请求进入 PiService，Claude Code 请求进入本机 CLI 适配器。Codex 在 Pi model runtime 中注册 App Server Provider，模型请求由官方 App Server 执行。
+`electron/main/agent-service.ts` 继承 PiService：GitHub Copilot、Codex 和 Azure OpenAI 请求进入 PiService，Claude Code 请求进入本机 CLI 适配器。Codex 在 Pi model runtime 中注册 App Server Provider，模型请求由官方 App Server 执行。
 
 `electron/main/pi-service.ts` 负责：
 
@@ -92,7 +92,11 @@ Zustand Store 管理 Session、Turn、Knowledge、Settings 和布局。持久化
 
 GitHub Copilot 的 credentials 和 Pi package settings 使用 `~\.pi\agent`。Codex 由 `electron/main/codex-app-server.ts` 启动官方 `codex app-server`，通过 `account/read` 和 `model/list` 使用 Codex 配置目录；Claude Code 由 `electron/main/claude-agent.ts` 调用用户已安装并登录的 CLI。登录步骤和路径覆盖变量见[使用指南](user-guide.md#22-连接-ai-provider)。不得把 Token 传入 Renderer、日志或仓库。
 
-Pi 插件的设置入口面向 GitHub Copilot。Codex 当前复用 Pi 的会话创建路径，但不应据此承诺与 Copilot 相同的插件工具行为；Claude Code 不加载 Pi 插件。修改 Provider 路由时需同步核对 UI 文案与功能文档。
+Azure OpenAI 使用 `azure-openai` Provider ID 和外部认证。Renderer 通过 `azureOpenAIConfigGet` / `azureOpenAIConfigSet` 读取和保存 endpoint、deployment、subscriptionId、contextWindow 与 maxTokens；Main 校验并规范化后持久化到 `~/.pi-graph/azure-openai.json`，同时更新 runtime。保存后的 endpoint 统一为无末尾斜杠的 `/openai/v1`。Pi 聊天、标题生成或知识提取进行中时，保存操作会拒绝并提示等待响应完成后重试，避免更改运行中的配置。此文件不含凭据，Azure CLI 单独管理登录。状态检查只确认 CLI Token 可获取，deployment 访问在真实请求时验证；不得把已登录描述为已验证模型权限。
+
+Azure 默认模型来自保存的 deployment，不提供任意别名或自动能力发现。Context budget / Response token limit 默认 32768 / 4096，可配置为安全整数，范围分别为 1024–2000000 / 16–200000，且 response 不超过 context。它们是本地操作限制，不是模型能力声明。仅接受公共云 HTTPS Azure resource origin（`*.openai.azure.com` 或 `*.cognitiveservices.azure.com`，可带 `/openai/v1/`），通过 v1 Responses-compatible deployment 支持流式文本与工具，不声明图片或 reasoning 支持。聊天、标题与知识提取走同一 Provider 选择；凭据不得进入 Renderer 或持久化配置，Azure 用量与 Copilot 单独计费。
+
+Pi 插件的设置入口面向 GitHub Copilot。Codex 和 Azure OpenAI 当前复用 Pi 的会话创建路径，但不应据此承诺与 Copilot 相同的插件工具行为；Claude Code 不加载 Pi 插件。修改 Provider 路由时需同步核对 UI 文案与功能文档。
 
 ### Sources
 

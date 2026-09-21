@@ -3,6 +3,8 @@ import { isRecord } from "./value.js";
 export const RHYZA_BRIDGE_NAME = "rhyza" as const;
 
 export const ipcChannels = {
+	azureOpenAIConfigGet: "rhyza:azure-openai-config-get",
+	azureOpenAIConfigSet: "rhyza:azure-openai-config-set",
 	providerStatus: "rhyza:provider-status",
 	providerLogin: "rhyza:provider-login",
 	providerLogout: "rhyza:provider-logout",
@@ -40,7 +42,83 @@ export const ipcChannels = {
 
 export type RhyzaIpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
 
-export type ProviderId = "github-copilot" | "codex" | "claude-code";
+export type ProviderId = "github-copilot" | "codex" | "claude-code" | "azure-openai";
+
+export interface AzureOpenAIConfig {
+	endpoint: string;
+	deployment: string;
+	subscriptionId: string;
+	contextWindow: number;
+	maxTokens: number;
+}
+
+export function validateAzureOpenAIConfig(value: unknown): AzureOpenAIConfig {
+	if (!isRecord(value) || typeof value.endpoint !== "string" || value.endpoint.length > 2048) {
+		throw new Error("An Azure OpenAI endpoint is required.");
+	}
+	let endpoint: URL;
+	try {
+		endpoint = new URL(value.endpoint.trim());
+	} catch {
+		throw new Error("Enter a valid Azure OpenAI HTTPS endpoint.");
+	}
+	if (
+		endpoint.protocol !== "https:" ||
+		endpoint.username ||
+		endpoint.password ||
+		endpoint.port ||
+		endpoint.search ||
+		endpoint.hash ||
+		!/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.(openai|cognitiveservices)\.azure\.com$/.test(
+			endpoint.hostname,
+		) ||
+		!["/", "/openai/v1", "/openai/v1/"].includes(endpoint.pathname) ||
+		/[\u0000-\u001f\u007f\\]/.test(value.endpoint)
+	) {
+		throw new Error(
+			"Use a public Azure OpenAI resource HTTPS endpoint without credentials or query parameters.",
+		);
+	}
+	if (
+		typeof value.deployment !== "string" ||
+		/[\u0000-\u001f\u007f]/.test(value.deployment) ||
+		!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(value.deployment.trim())
+	) {
+		throw new Error("Enter a valid Azure deployment name.");
+	}
+	if (
+		typeof value.subscriptionId !== "string" ||
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+			value.subscriptionId.trim(),
+		)
+	) {
+		throw new Error("Enter the Azure subscription ID for this resource.");
+	}
+	const contextWindow = value.contextWindow ?? 32768;
+	const maxTokens = value.maxTokens ?? 4096;
+	if (
+		typeof contextWindow !== "number" ||
+		!Number.isSafeInteger(contextWindow) ||
+		contextWindow < 1024 ||
+		contextWindow > 2_000_000 ||
+		typeof maxTokens !== "number" ||
+		!Number.isSafeInteger(maxTokens) ||
+		maxTokens < 16 ||
+		maxTokens > 200_000 ||
+		maxTokens > contextWindow
+	) {
+		throw new Error(
+			"Use a context budget of 1,024–2,000,000 tokens and a response limit of 16–200,000 tokens no larger than the context budget.",
+		);
+	}
+	return {
+		endpoint: `${endpoint.origin}/openai/v1`,
+		deployment: value.deployment.trim(),
+		subscriptionId: value.subscriptionId.trim(),
+		contextWindow,
+		maxTokens,
+	};
+}
 
 export interface ProviderStatusRequest {
 	providerId: ProviderId;
@@ -446,6 +524,8 @@ export interface AgentBridgeEvent {
 
 export interface RhyzaBridge {
 	isElectron: true;
+	azureOpenAIConfigGet(): Promise<AzureOpenAIConfig | null>;
+	azureOpenAIConfigSet(config: AzureOpenAIConfig): Promise<AzureOpenAIConfig>;
 	providerStatus(request: ProviderStatusRequest): Promise<ProviderStatusResponse>;
 	providerLogin(request: ProviderLoginRequest): Promise<ProviderActionResponse>;
 	providerLogout(request: ProviderLogoutRequest): Promise<ProviderActionResponse>;
@@ -481,7 +561,7 @@ export interface RhyzaBridge {
 	onAgentEvent(listener: (event: AgentBridgeEvent) => void): () => void;
 }
 
-const providerIds = new Set<ProviderId>(["github-copilot", "codex", "claude-code"]);
+const providerIds = new Set<ProviderId>(["github-copilot", "codex", "claude-code", "azure-openai"]);
 
 function validateModelSelection(value: unknown): NonNullable<AgentPromptRequest["model"]> {
 	if (

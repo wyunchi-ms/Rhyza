@@ -382,7 +382,9 @@ export class AgentService extends PiService {
 			const parsed: unknown = JSON.parse(await readFile(filename, "utf8"));
 			if (
 				!isRecord(parsed) ||
-				!["github-copilot", "codex", "claude-code"].includes(String(parsed.providerId)) ||
+				!["github-copilot", "codex", "claude-code", "azure-openai"].includes(
+					String(parsed.providerId),
+				) ||
 				(parsed.copilotGeneration !== undefined && typeof parsed.copilotGeneration !== "string")
 			) {
 				throw new Error("Invalid provider session metadata.");
