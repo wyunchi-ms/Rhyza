@@ -12,6 +12,7 @@ import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
 import {
 	ipcChannels,
+	validateAzureOpenAIConfig,
 	validateAgentPromptRequest,
 	validateAuxiliaryRequestCancelRequest,
 	validateModelRequestHistoryRequest,
@@ -224,6 +225,14 @@ function registerIpcHandlers(): void {
 			await writeFile(filePath, `${JSON.stringify(request.snapshot, null, 2)}\n`, "utf8");
 			return { ok: true as const, path: filePath };
 		}),
+	);
+	ipcMain.handle(ipcChannels.azureOpenAIConfigGet, async (event) =>
+		withValidSender(event, () => piService.getAzureOpenAIConfig()),
+	);
+	ipcMain.handle(ipcChannels.azureOpenAIConfigSet, async (event, payload) =>
+		withValidSender(event, () =>
+			piService.setAzureOpenAIConfig(validateAzureOpenAIConfig(payload)),
+		),
 	);
 	ipcMain.handle(ipcChannels.providerStatus, async (event, payload) =>
 		withValidSender(event, () =>

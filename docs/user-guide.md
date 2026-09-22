@@ -56,7 +56,7 @@ Workspace 同时决定：
 
 进入 **Settings → AI Provider**：
 
-1. 在 **Provider** 下拉菜单中选择 GitHub Copilot、Codex 或 Claude Code。
+1. 在 **Provider** 下拉菜单中选择 GitHub Copilot、Codex、Claude Code 或 Azure OpenAI。
 2. 按下面对应的步骤完成登录，再检查界面上的连接状态。
 3. 在 **Default Model** 中选择模型，或保留 **Use provider default**。
 
@@ -92,6 +92,27 @@ claude auth status
 没有模型列表时可保留 Provider 默认值，或在 **Custom model ID or CLI alias** 输入 CLI 支持的别名或模型 ID。安装路径未被识别时，在启动前设置 `RHYZA_CLAUDE_PATH` 为可执行文件绝对路径。当前适配器要求 CLI 支持 `auth status --json`、`--input-format stream-json`、`--include-partial-messages`、`--permission-mode dontAsk` 和 `--effort`。
 
 Windows 上可写工作流需要 Git for Windows 提供的 Git Bash；必要时设置 `CLAUDE_CODE_GIT_BASH_PATH`。Claude Code 的 Worktree 不是操作系统沙箱，可写会话的 Bash 以当前用户权限执行。图片请使用 PNG、JPEG、GIF 或 WebP，Claude Code 不接受 BMP。
+
+#### Azure OpenAI
+
+先安装 Azure CLI，准备 Azure OpenAI v1 Responses-compatible deployment，并确保登录账号对资源具有 **Cognitive Services OpenAI User** 或等效权限。在终端执行：
+
+```powershell
+az login
+az account set --subscription "<your-subscription-id>"
+```
+
+选择资源所在的订阅，而不是其他可访问的订阅。然后在 **Settings → AI Provider → Azure OpenAI** 填写：
+
+- **Azure endpoint**：例如 `https://your-resource.openai.azure.com`。也支持 `https://your-resource.cognitiveservices.azure.com`，两者均可带 `/openai/v1/` 后缀；仅支持 HTTPS 公共云资源 endpoint。
+- **Deployment name**：Azure 中已创建的 deployment 名称，例如 `your-deployment`，不是任意模型别名。
+- **Subscription ID**：资源所在订阅的 ID。
+
+点击 **Save configuration** 后再 **Check sign-in**（已就绪时显示 **Refresh status**）。状态就绪表示 Azure CLI Token 可获取，不代表 deployment 权限已验证；实际访问、配额和网络错误在首次请求时显示。登录、Token 刷新和退出由 Azure CLI 管理，Rhyza 不保存 Azure 凭据。
+
+默认模型固定为保存的 deployment；聊天、分支标题和知识提取共用这一配置。当前支持流式文本和工具，不支持图片输入或 reasoning 控制。直接使用 Azure 模型的费用由 Azure 单独计费，不消耗 Copilot 套餐额度。
+
+**Advanced** 中的 **Context budget** 默认 `32768`，**Response token limit** 默认 `4096`。它们是本地操作限制，不是自动发现的模型能力；请按 deployment 的实际限制设置。两者必须为整数，范围分别为 `1024–2000000` 和 `16–200000`，且 Response token limit 不能大于 Context budget。非秘密配置保存在 `~/.pi-graph/azure-openai.json`，点击保存才生效；保存后的 endpoint 统一以 `/openai/v1` 结尾。若聊天、标题生成或知识提取正在进行，请等待响应完成后重试保存；未保存的输入会保留。若本地配置无法读取，可点击 **Retry loading**，或直接重新填写资源信息并点击 **Save configuration** 替换配置。
 
 #### Provider 使用差异
 
@@ -245,6 +266,7 @@ Windows 中的 `~` 表示当前用户目录，例如 `C:\Users\<username>`。
 | `~\.pi-graph\sources\<hash>.json`                      | Source Catalog 和文件清单                              |
 | `~\.pi-graph\worktrees\`                               | Rhyza 创建的 Git Worktree                              |
 | `~\.pi-graph\provider-sessions\`                       | Provider 切换及上下文代次，不含登录凭据                |
+| `~\.pi-graph\azure-openai.json`                         | Azure OpenAI 资源、deployment、订阅与 token 限制，不含凭据 |
 | `~\.pi-graph\model-request-dumps\`                     | 请求快照，可能包含对话和检索到的代码，不应公开分享     |
 | `~\.pi-graph\diagnostics\performance-YYYY-MM-DD.jsonl` | 结构化性能诊断                                         |
 | `~\.pi\agent\auth.json`                                | Pi Provider 凭据                                       |

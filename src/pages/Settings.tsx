@@ -1,4 +1,5 @@
 import type { PiPluginInfo } from "../shared/ipc";
+import { AzureOpenAISettings } from "../components/AzureOpenAISettings";
 import clsx from "clsx";
 import {
 	Accessibility,
@@ -60,9 +61,7 @@ const Settings: React.FC = () => {
 						<h2 id="plugins-heading">
 							<Package size={17} aria-hidden="true" /> Pi plugins
 						</h2>
-						<p>
-							These plugins run only with GitHub Copilot through Pi, not with Codex or Claude Code.
-						</p>
+						<p>These plugins are supported only with GitHub Copilot through Pi.</p>
 					</header>
 					<PluginSettings />
 				</section>
@@ -154,10 +153,14 @@ const Settings: React.FC = () => {
 										? electron.loading
 											? "Checking connection…"
 											: electron.providerStatus?.configured
-												? (electron.providerStatus.label ??
-													`Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`)
+												? provider.id === "azure-openai"
+													? "Azure CLI sign-in is ready. Deployment access is checked on your first request."
+													: (electron.providerStatus.label ??
+														`Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`)
 												: externalAuth
-													? "Local CLI sign-in is required. Follow the setup instructions below."
+													? provider.id === "azure-openai"
+														? "Save your resource details and sign in with Azure CLI, then check sign-in."
+														: "Local CLI sign-in is required. Follow the setup instructions below."
 													: "Not signed in. OAuth/device flow progress appears below."
 										: "Provider controls require the Electron desktop runtime."}
 								</p>
@@ -201,7 +204,9 @@ const Settings: React.FC = () => {
 										? "Checking…"
 										: electron.providerStatus?.configured
 											? "Refresh status"
-											: "Check connection"}
+											: provider.id === "azure-openai"
+												? "Check sign-in"
+												: "Check connection"}
 								</button>
 							</div>
 						</div>
@@ -223,32 +228,36 @@ const Settings: React.FC = () => {
 							</div>
 						)}
 
-						<div className="settings-row settings-row--field">
-							<div className="settings-row-copy">
-								<label htmlFor="model-select" className="settings-label">
-									Default model
-								</label>
-								<p id="model-help" className="settings-help">
-									Use the provider default or choose an available model.
-								</p>
+						{provider.id === "azure-openai" ? (
+							<AzureOpenAISettings onSaved={electron.refresh} connectionBusy={electron.loading} />
+						) : (
+							<div className="settings-row settings-row--field">
+								<div className="settings-row-copy">
+									<label htmlFor="model-select" className="settings-label">
+										Default model
+									</label>
+									<p id="model-help" className="settings-help">
+										Use the provider default or choose an available model.
+									</p>
+								</div>
+								<select
+									id="model-select"
+									value={selectedModel}
+									onChange={(e) => updateSettings({ defaultModel: e.target.value })}
+									aria-describedby="model-help"
+									className="field settings-input"
+								>
+									<option value="">Use provider default</option>
+									{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
+									{electron.models.map((model) => (
+										<option key={model.id} value={model.id}>
+											{model.name}
+										</option>
+									))}
+								</select>
 							</div>
-							<select
-								id="model-select"
-								value={selectedModel}
-								onChange={(e) => updateSettings({ defaultModel: e.target.value })}
-								aria-describedby="model-help"
-								className="field settings-input"
-							>
-								<option value="">Use provider default</option>
-								{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
-								{electron.models.map((model) => (
-									<option key={model.id} value={model.id}>
-										{model.name}
-									</option>
-								))}
-							</select>
-						</div>
-						{externalAuth && (
+						)}
+						{provider.id === "claude-code" && (
 							<div className="settings-row settings-row--field">
 								<div className="settings-row-copy">
 									<label htmlFor="custom-model-id" className="settings-label">

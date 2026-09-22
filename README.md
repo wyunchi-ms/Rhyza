@@ -35,7 +35,7 @@ Rhyza 是一个本地优先的 AI 桌面工作台，适合阅读代码、研究�
 | 把一次回答变成可复用资料   | Workspace 级 Entity、Relation、Diagram，保留来源与变更记录        |
 | 结合本地代码和文档提问     | 添加 Sources，搜索文本并读取相关片段                              |
 | 在项目中尝试修改           | Git Worktree、Diff 和 patch 导出；隔离是否成功可在 Changes 中查看 |
-| 使用已有的 AI 服务         | GitHub Copilot、Codex、Claude Code 三种 Provider                  |
+| 使用已有的 AI 服务         | GitHub Copilot、Codex、Claude Code、Azure OpenAI 四种 Provider                  |
 
 ## 快速开始
 
@@ -63,6 +63,9 @@ npm run electron:dev
 | GitHub Copilot | 点击 **Sign In**，按设备码提示完成授权                        | GitHub 账号具有 Copilot 权限；无需 Pi CLI 或 Copilot CLI    |
 | Codex          | 点击 **Sign In**，检测已有 Codex 登录或打开授权链接           | 安装 Codex Desktop 或 Codex CLI                             |
 | Claude Code    | 先在终端执行 `claude auth login`，再点击 **Check connection** | 单独安装 Claude Code CLI；Windows 可写工作流还需要 Git Bash |
+| Azure OpenAI   | 先执行 `az login`，填写资源信息并点击 **Save configuration → Check sign-in** | 预装 Azure CLI；Azure OpenAI v1 Responses-compatible deployment；Cognitive Services OpenAI User 或等效权限 |
+
+Azure OpenAI 的默认模型是保存的 deployment，Azure 用量与 Copilot 分开计费。当前仅支持公共云 HTTPS endpoint、文本和工具，不支持图片或 reasoning 控制；**Advanced** 可调整本地 context/response token 限制。Rhyza 不保存 Azure 凭据。
 
 详细步骤、凭据位置和 Provider 差异见[连接 AI Provider](docs/user-guide.md#22-连接-ai-provider)。
 

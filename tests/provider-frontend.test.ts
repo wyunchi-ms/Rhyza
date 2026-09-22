@@ -11,7 +11,9 @@ import type {
 	ProviderStatusResponse,
 } from "../src/shared/ipc.js";
 import {
+	azureOpenAIDefaultBudgets,
 	getProviderInfo,
+	parseAzureOpenAISettings,
 	normalizeProviderId,
 	normalizeProviderSettings,
 	providerModelSelection,
@@ -79,12 +81,17 @@ test("provider metadata uses canonical IDs and migrates legacy labels safely", (
 		[
 			["github-copilot", "GitHub Copilot"],
 			["codex", "Codex"],
+			["azure-openai", "Azure OpenAI"],
 			["claude-code", "Claude Code"],
 		],
 	);
 	assert.equal(normalizeProviderId(" GitHub Copilot "), "github-copilot");
 	assert.equal(normalizeProviderId("Claude Code"), "claude-code");
 	assert.equal(getProviderInfo("codex").externalAuth, false);
+	assert.equal(normalizeProviderId(" Azure OpenAI "), "azure-openai");
+	assert.equal(getProviderInfo("azure-openai").externalAuth, true);
+	assert.match(getProviderInfo("azure-openai").setupInstructions ?? "", /az login/);
+	assert.match(getProviderInfo("azure-openai").setupInstructions ?? "", /first request/);
 	assert.deepEqual(
 		normalizeProviderSettings({ provider: "GitHub Copilot", defaultModel: "gpt-4o" }),
 		{
@@ -153,6 +160,150 @@ test("every provider sends an explicit model selection even when using its defau
 	});
 });
 
+const azureDraft = {
+	endpoint: "https://your-resource.openai.azure.com",
+	deployment: "your-deployment",
+	subscriptionId: "00000000-0000-0000-0000-000000000000",
+	contextWindow: "32768",
+	maxTokens: "4096",
+};
+
+test("Azure configuration validates required details and supported public endpoints", () => {
+	assert.deepEqual(azureOpenAIDefaultBudgets, { contextWindow: 32768, maxTokens: 4096 });
+	for (const endpoint of [
+		"https://your-resource.openai.azure.com",
+		"https://your-resource.cognitiveservices.azure.com/",
+		"https://your-resource.openai.azure.com/openai/v1/",
+		"https://your-resource.openai.azure.com/openai/v1",
+	]) {
+		assert.deepEqual(
+			parseAzureOpenAISettings({
+				...azureDraft,
+				endpoint: ` ${endpoint} `,
+				deployment: " your-deployment ",
+			}),
+			{
+				...azureDraft,
+				endpoint: `${new URL(endpoint).origin}/openai/v1`,
+				contextWindow: 32768,
+				maxTokens: 4096,
+			},
+		);
+	}
+	for (const endpoint of [
+		"",
+		"not-a-url",
+		"http://your-resource.openai.azure.com",
+		"https://localhost",
+		"https://openai.azure.com",
+		"https://evil.example/openai.azure.com",
+		"https://your-resource.openai.azure.com.evil.example",
+		"https://your-resource.openai.azure.us",
+		"https://nested.resource.openai.azure.com",
+		"https://user:secret@your-resource.openai.azure.com",
+		"https://your-resource.openai.azure.com:8443",
+		"https://your-resource.openai.azure.com/openai/deployments/example",
+		"https://your-resource.openai.azure.com/?key=secret",
+		"https://your-resource.openai.azure.com/#fragment",
+	]) {
+		assert.throws(() => parseAzureOpenAISettings({ ...azureDraft, endpoint }), /Azure.*endpoint/);
+	}
+	assert.throws(
+		() => parseAzureOpenAISettings({ ...azureDraft, deployment: " " }),
+		/deployment name/,
+	);
+	assert.throws(
+		() => parseAzureOpenAISettings({ ...azureDraft, subscriptionId: " " }),
+		/subscription ID/,
+	);
+});
+
+test("Azure operating budgets are positive bounded integers with room for the response", () => {
+	for (const contextWindow of [
+		"",
+		"0",
+		"-1",
+		"1.5",
+		"1023",
+		"2000001",
+		"Infinity",
+		"NaN",
+		"9007199254740992",
+	]) {
+		assert.throws(
+			() => parseAzureOpenAISettings({ ...azureDraft, contextWindow, maxTokens: "16" }),
+			/context budget/i,
+		);
+	}
+	for (const maxTokens of [
+		"",
+		"0",
+		"-1",
+		"1.5",
+		"15",
+		"200001",
+		"Infinity",
+		"NaN",
+		"9007199254740992",
+	]) {
+		assert.throws(() => parseAzureOpenAISettings({ ...azureDraft, maxTokens }), /response limit/i);
+	}
+	assert.throws(
+		() => parseAzureOpenAISettings({ ...azureDraft, maxTokens: "32769" }),
+		/no larger than/,
+	);
+	for (const [contextWindow, maxTokens] of [
+		["1024", "16"],
+		["2000000", "200000"],
+		["32768", "32768"],
+	]) {
+		const config = parseAzureOpenAISettings({ ...azureDraft, contextWindow, maxTokens });
+		assert.equal(config.contextWindow, Number(contextWindow));
+		assert.equal(config.maxTokens, Number(maxTokens));
+	}
+});
+
+test("Azure settings use the saved deployment rather than a custom model alias", () => {
+	const config = parseAzureOpenAISettings(azureDraft);
+	const switched = updateProviderSettings(
+		{ provider: "claude-code", defaultModel: "sonnet" },
+		{ provider: "azure-openai" },
+	);
+	assert.deepEqual(switched, { provider: "azure-openai", defaultModel: "" });
+	assert.deepEqual(
+		providerModelSelection(updateProviderSettings(switched, { defaultModel: config.deployment })),
+		{
+			providerId: "azure-openai",
+			modelId: "your-deployment",
+		},
+	);
+	const source = readFileSync(path.join(process.cwd(), "src", "pages", "Settings.tsx"), "utf8");
+	assert.match(source, /provider\.id === "azure-openai" \? \(\s*<AzureOpenAISettings/);
+	assert.match(source, /provider\.id === "claude-code" && \(/);
+	assert.match(
+		source,
+		/Azure CLI sign-in is ready\. Deployment access is checked on your first request\./,
+	);
+});
+
+test("Azure recovery controls do not require a successful configuration read", () => {
+	const source = readFileSync(
+		path.join(process.cwd(), "src", "components", "AzureOpenAISettings.tsx"),
+		"utf8",
+	);
+	assert.match(source, /const disabled = !available \|\| loading \|\| saving;/);
+	const saveGuard = source.split("const save = async () => {")[1]?.split("setError(null)")[0];
+	assert.ok(saveGuard);
+	assert.doesNotMatch(saveGuard, /!loaded/);
+	assert.match(source, /setReadError\(errorToMessage\(reason\)\)/);
+	assert.match(source, /Could not load configuration/);
+	assert.match(source, /Retry loading/);
+	const editHandler = source.split("const updateDraft =")[1]?.split("const save =")[0];
+	assert.ok(editHandler);
+	assert.doesNotMatch(editHandler, /setReadError/);
+	assert.match(source, /if \(config && !edited\.current\)/);
+});
+
 test("workspace loading and hydration migrate and persist canonical provider settings", async () => {
 	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 	const originalState = useAppStore.getState();
@@ -207,11 +358,14 @@ test("workspace loading and hydration migrate and persist canonical provider set
 });
 
 test("external providers refresh local status with empty catalogs and never invoke login or logout", async () => {
-	for (const providerId of ["claude-code"] as const) {
+	for (const providerId of ["claude-code", "azure-openai"] as const) {
 		const { bridge, calls, listeners, emitAuth } = mockBridge();
 		const states: ProviderConnectionState[] = [];
 		const connection = createProviderConnection(bridge, providerId, (state) => states.push(state));
-		assert.match(getProviderInfo(providerId).setupInstructions ?? "", /claude auth login/);
+		assert.match(
+			getProviderInfo(providerId).setupInstructions ?? "",
+			providerId === "claude-code" ? /claude auth login/ : /az login/,
+		);
 		try {
 			await connection.refresh();
 			assert.deepEqual(calls, [`status:${providerId}`, `models:${providerId}:true`]);

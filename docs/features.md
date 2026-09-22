@@ -17,13 +17,14 @@
 | Conversation | 列表/节点视图           | Available | 左侧面板可切换树列表与 Session Graph                                          |
 | Conversation | 节点状态与恢复          | Available | 区分 queued、retrieving、running、complete、error 等活动状态                  |
 | Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F` 或侧栏搜索按钮                                                 |
-| Conversation | 图片输入                | Available | Composer 可附加图片，由所选模型决定是否支持                                   |
+| Conversation | 图片输入                | Available | Composer 可附加图片，由所选 Provider/模型决定是否支持；Azure OpenAI 当前仅支持文本                                   |
 | Conversation | 并发调度                | Available | 全局 1–10；同一 Conversation 严格有序                                         |
 | Conversation | Token/费用展示          | Partial   | 展示 Provider 返回的 usage；字段完整性取决于 Provider                         |
 | Agent        | Codex Provider          | Available | 通过官方 `codex app-server` 复用 Codex Desktop/CLI 登录与模型目录             |
 | Agent        | Claude Code Provider    | Available | 调用本机 Claude Code CLI；用户单独安装并通过 CLI 登录                         |
 | Agent        | GitHub Copilot Provider | Available | 通过 Pi SDK Device Flow/OAuth 连接                                            |
-| Agent        | 动态模型目录            | Partial   | Copilot/Codex 可刷新目录；Claude Code 使用默认模型或自定义别名                |
+| Agent        | Azure OpenAI Provider   | Available | Azure CLI 登录；保存公共云资源与 Responses-compatible deployment，支持流式文本和工具；Azure 单独计费 |
+| Agent        | 动态模型目录            | Partial   | Copilot/Codex 可刷新目录；Claude Code 支持别名；Azure OpenAI 使用保存的 deployment，无自动能力发现 |
 | Agent        | GitHub Enterprise 域名  | Planned   | 当前认证流程固定使用 `github.com`                                             |
 | Sources      | 本地目录索引            | Available | 代码/文本文件清单、Git revision 和状态持久化                                  |
 | Sources      | 文本搜索与片段读取      | Available | 确定性 keyword/path ranking；读取有路径和长度边界                             |

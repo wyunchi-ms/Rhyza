@@ -1,4 +1,4 @@
-import type { ProviderId } from "./ipc";
+import { validateAzureOpenAIConfig, type AzureOpenAIConfig, type ProviderId } from "./ipc";
 
 export interface ProviderInfo {
 	id: ProviderId;
@@ -20,6 +20,14 @@ export const providers: readonly ProviderInfo[] = [
 		label: "Codex",
 		runtimeLabel: "ChatGPT desktop / Codex",
 		externalAuth: false,
+	},
+	{
+		id: "azure-openai",
+		label: "Azure OpenAI",
+		runtimeLabel: "Azure OpenAI / Azure CLI",
+		externalAuth: true,
+		setupInstructions:
+			"Install Azure CLI and run az login in a terminal with an account that can use your Azure OpenAI resource. Save the resource details below, then check sign-in. Deployment access is checked on your first request.",
 	},
 	{
 		id: "claude-code",
@@ -45,6 +53,24 @@ export function normalizeProviderId(value: unknown): ProviderId {
 
 export function getProviderInfo(value: unknown): ProviderInfo {
 	return providers.find((provider) => provider.id === normalizeProviderId(value))!;
+}
+
+export type AzureOpenAISettingsInput = {
+	endpoint: string;
+	deployment: string;
+	subscriptionId: string;
+	contextWindow: string;
+	maxTokens: string;
+};
+
+export const azureOpenAIDefaultBudgets = { contextWindow: 32_768, maxTokens: 4_096 };
+
+export function parseAzureOpenAISettings(input: AzureOpenAISettingsInput): AzureOpenAIConfig {
+	return validateAzureOpenAIConfig({
+		...input,
+		contextWindow: Number(input.contextWindow),
+		maxTokens: Number(input.maxTokens),
+	});
 }
 
 type ProviderSettingsInput = { provider?: unknown; defaultModel?: unknown };
