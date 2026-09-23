@@ -1,0 +1,9 @@
+node_modules/
+out/
+build/
+.cache/
+public/recordings/*
+!public/recordings/.gitkeep
+!public/recordings/*.mp4
+# Reviewed narration is part of the review handoff. Raw synthesis stays in .cache/.
+public/audio/*.part

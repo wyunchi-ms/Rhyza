@@ -1,0 +1,23 @@
+[
+  {
+    "text": "长回答还有一个很实用的优化：Markdown 目录。",
+    "startMs": 0,
+    "endMs": 4150,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "先看标题层级，就知道这篇回答讲了哪些部分。",
+    "startMs": 4150,
+    "endMs": 8763,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "不用一路滚到底才发现重点。",
+    "startMs": 8763,
+    "endMs": 11816,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

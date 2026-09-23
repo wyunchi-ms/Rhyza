@@ -18,3 +18,6 @@ resources/skills/
 archify-extension/skills/
 extensions/*/skills/
 dist-extensions/
+
+# Generated Azure speech timing metadata; validated by remotion-video/scripts/check-audio.mjs.
+remotion-video/public/audio/**/*.json

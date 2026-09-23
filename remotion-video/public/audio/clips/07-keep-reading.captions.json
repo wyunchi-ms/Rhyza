@@ -1,0 +1,16 @@
+[
+  {
+    "text": "就算支线回答已经生成，也不会把阅读视角抢过去。",
+    "startMs": 0,
+    "endMs": 4750,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "我可以先把这一节看完，再决定要不要展开研究。",
+    "startMs": 4750,
+    "endMs": 9191,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

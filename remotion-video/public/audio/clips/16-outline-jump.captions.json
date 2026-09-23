@@ -1,0 +1,23 @@
+[
+  {
+    "text": "我想先看请求调度，就直接点这一节。",
+    "startMs": 0,
+    "endMs": 3575,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "正文跳到对应位置，目录也会标出正在阅读的章节。",
+    "startMs": 3575,
+    "endMs": 8688,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "在长回答里找内容会方便很多。",
+    "startMs": 8688,
+    "endMs": 11966,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

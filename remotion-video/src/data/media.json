@@ -1,0 +1,132 @@
+{
+	"01-workspace": {
+		"file": "recordings/01-workspace.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"02-sources": {
+		"file": "recordings/02-sources.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"03-first-question": {
+		"file": "recordings/03-first-question.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"04-reading-anchor": {
+		"file": "recordings/04-reading-anchor.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"05-explain": {
+		"file": "recordings/05-explain.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"06-select-ask": {
+		"file": "recordings/06-select-ask.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"07-keep-reading": {
+		"file": "recordings/07-keep-reading.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"08-revisit-branches": {
+		"file": "recordings/08-revisit-branches.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"09-node-view": {
+		"file": "recordings/09-node-view.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"10-list-compression": {
+		"file": "recordings/10-list-compression.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"11-switch-views": {
+		"file": "recordings/11-switch-views.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"12-mark-status": {
+		"file": "recordings/12-mark-status.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"13-filter-completed": {
+		"file": "recordings/13-filter-completed.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"14-filter-restore": {
+		"file": "recordings/14-filter-restore.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"15-answer-outline": {
+		"file": "recordings/15-answer-outline.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"16-outline-jump": {
+		"file": "recordings/16-outline-jump.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"17-section-collapse": {
+		"file": "recordings/17-section-collapse.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"18-organize-knowledge": {
+		"file": "recordings/18-organize-knowledge.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"19-knowledge-library": {
+		"file": "recordings/19-knowledge-library.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"20-entity-hover": {
+		"file": "recordings/20-entity-hover.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"21-diagram-link": {
+		"file": "recordings/21-diagram-link.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"22-mention-reuse": {
+		"file": "recordings/22-mention-reuse.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"23-edit-request": {
+		"file": "recordings/23-edit-request.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"24-diff-export": {
+		"file": "recordings/24-diff-export.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"25-providers": {
+		"file": "recordings/25-providers.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	},
+	"26-appearance": {
+		"file": "recordings/26-appearance.mp4",
+		"trimBefore": 0,
+		"playbackRate": 1
+	}
+}

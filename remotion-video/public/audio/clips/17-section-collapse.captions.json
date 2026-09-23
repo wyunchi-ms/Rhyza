@@ -1,0 +1,23 @@
+[
+  {
+    "text": "读过的部分可以先折叠起来。",
+    "startMs": 0,
+    "endMs": 2863,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "从目录再点回去，会展开需要的章节。",
+    "startMs": 2863,
+    "endMs": 6613,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "长回答就可以按自己的节奏来读。",
+    "startMs": 6613,
+    "endMs": 10079,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

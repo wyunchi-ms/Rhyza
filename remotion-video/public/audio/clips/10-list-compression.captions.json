@@ -1,0 +1,30 @@
+[
+  {
+    "text": "切到 List View，侧栏会紧凑很多。",
+    "startMs": 0,
+    "endMs": 3313,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "比如同一会话里连续问了 A、B、C，中间没有分叉，就合成一个列表项。",
+    "startMs": 3313,
+    "endMs": 10350,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "到了分叉的地方，新的方向仍然分开保留。",
+    "startMs": 10350,
+    "endMs": 14475,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "压缩的是列表里的显示，完整聊天内容都还在。",
+    "startMs": 14475,
+    "endMs": 18779,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

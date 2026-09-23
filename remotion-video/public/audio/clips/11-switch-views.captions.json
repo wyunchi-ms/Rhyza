@@ -1,0 +1,23 @@
+[
+  {
+    "text": "节点图帮我看清发散之后的路径和关系。",
+    "startMs": 0,
+    "endMs": 4075,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "列表把连续的讨论收紧，方便日常阅读。",
+    "startMs": 4075,
+    "endMs": 8013,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "两种视图，看的都是同一组探索。",
+    "startMs": 8013,
+    "endMs": 11341,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "text": "如果有更具体的问题，就用 Ask about this。",
+    "startMs": 0,
+    "endMs": 3900,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "例如这里换成消息队列会怎样？",
+    "startMs": 3900,
+    "endMs": 7100,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "把问题发出去，当前阅读路径仍然保持不变。",
+    "startMs": 7100,
+    "endMs": 11466,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

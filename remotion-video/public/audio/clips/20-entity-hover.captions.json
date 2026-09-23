@@ -1,0 +1,23 @@
+[
+  {
+    "text": "阅读时，你会看到一些带下划线的名称。",
+    "startMs": 0,
+    "endMs": 4037,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "当它关联到知识库里的概念，悬停就能先看摘要。",
+    "startMs": 4037,
+    "endMs": 8713,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "需要了解更多，再点开查看详情。",
+    "startMs": 8713,
+    "endMs": 12191,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

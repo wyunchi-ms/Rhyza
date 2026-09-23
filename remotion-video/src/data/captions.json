@@ -1,0 +1,478 @@
+[
+	{
+		"text": "现在很多 AI Chat，主要还是一问一答，沿着一条线往下聊。",
+		"startMs": 350,
+		"endMs": 5938,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "但思考经常会发散：这个概念是什么？换个方案呢？另一个方向又怎样？",
+		"startMs": 5938,
+		"endMs": 13038,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "有些工具也能分支，但来回探索、保留关系、回到主线，往往还不够顺手。",
+		"startMs": 13038,
+		"endMs": 19950,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "这就是我做 Rhyza 的出发点：让对话跟得上发散的思路。",
+		"startMs": 19950,
+		"endMs": 24891,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "这次拿 Rhyza 自己的源码演示。先选好项目工作区。",
+		"startMs": 30350,
+		"endMs": 35454,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "把源码加到 Sources，就能搜索和读取相关片段。",
+		"startMs": 36350,
+		"endMs": 41116,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "先问清楚一条消息在系统里怎么流转。",
+		"startMs": 42350,
+		"endMs": 46038,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "这是一条主线。接下来，我们从其中的问题展开几个不同方向，再随时回到这里。",
+		"startMs": 46038,
+		"endMs": 53616,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "一条主线里，常常藏着值得展开的新问题。",
+		"startMs": 54350,
+		"endMs": 58513,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "这里我先从一个不懂的概念分出去。",
+		"startMs": 58513,
+		"endMs": 61566,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "选中它，点 Explain，就能直接请求解释。",
+		"startMs": 62350,
+		"endMs": 66750,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "新的问题会提交，但不会把我带离正在读的这段内容。",
+		"startMs": 66750,
+		"endMs": 71475,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "解释在旁边生成，我可以继续读下去。",
+		"startMs": 71475,
+		"endMs": 75054,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "如果有更具体的问题，就用 Ask about this。",
+		"startMs": 78350,
+		"endMs": 82250,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "例如这里换成消息队列会怎样？",
+		"startMs": 82250,
+		"endMs": 85450,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "把问题发出去，当前阅读路径仍然保持不变。",
+		"startMs": 85450,
+		"endMs": 89816,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "就算支线回答已经生成，也不会把阅读视角抢过去。",
+		"startMs": 94350,
+		"endMs": 99100,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "我可以先把这一节看完，再决定要不要展开研究。",
+		"startMs": 99100,
+		"endMs": 103541,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "读完这一段，再去看刚才展开的不同方向。",
+		"startMs": 106350,
+		"endMs": 110288,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "每条探索路径都保留下来，也随时能回到主线。",
+		"startMs": 110288,
+		"endMs": 114616,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "Node View 把每一轮探索展开成节点。",
+		"startMs": 118350,
+		"endMs": 121938,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "哪一轮接着哪一轮，在哪里分出新的方向，都能顺着连线看到。",
+		"startMs": 121938,
+		"endMs": 127404,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "切到 List View，侧栏会紧凑很多。",
+		"startMs": 132350,
+		"endMs": 135663,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "比如同一会话里连续问了 A、B、C，中间没有分叉，就合成一个列表项。",
+		"startMs": 135663,
+		"endMs": 142700,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "到了分叉的地方，新的方向仍然分开保留。",
+		"startMs": 142700,
+		"endMs": 146825,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "压缩的是列表里的显示，完整聊天内容都还在。",
+		"startMs": 146825,
+		"endMs": 151129,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "节点图帮我看清发散之后的路径和关系。",
+		"startMs": 156350,
+		"endMs": 160425,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "列表把连续的讨论收紧，方便日常阅读。",
+		"startMs": 160425,
+		"endMs": 164363,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "两种视图，看的都是同一组探索。",
+		"startMs": 164363,
+		"endMs": 167691,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "研究完的支线，我标成 Completed。",
+		"startMs": 170350,
+		"endMs": 173888,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "还没看完的，就标成待探索或进行中。",
+		"startMs": 173888,
+		"endMs": 177679,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "然后用筛选，只显示待探索和进行中的路径。",
+		"startMs": 180350,
+		"endMs": 184888,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "已完成的末端支线就先从视图里隐藏了。",
+		"startMs": 184888,
+		"endMs": 188875,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "屏幕上留下现在要看的内容，界面清爽，也更容易集中注意力。",
+		"startMs": 188875,
+		"endMs": 194616,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "筛选在两种视图之间也保持一致。",
+		"startMs": 196350,
+		"endMs": 199825,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "想回顾时恢复全部状态，之前的节点都还在。",
+		"startMs": 199825,
+		"endMs": 204466,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "长回答还有一个很实用的优化：Markdown 目录。",
+		"startMs": 206350,
+		"endMs": 210500,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "先看标题层级，就知道这篇回答讲了哪些部分。",
+		"startMs": 210500,
+		"endMs": 215113,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "不用一路滚到底才发现重点。",
+		"startMs": 215113,
+		"endMs": 218166,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "我想先看请求调度，就直接点这一节。",
+		"startMs": 220350,
+		"endMs": 223925,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "正文跳到对应位置，目录也会标出正在阅读的章节。",
+		"startMs": 223925,
+		"endMs": 229038,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "在长回答里找内容会方便很多。",
+		"startMs": 229038,
+		"endMs": 232316,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "读过的部分可以先折叠起来。",
+		"startMs": 234350,
+		"endMs": 237213,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "从目录再点回去，会展开需要的章节。",
+		"startMs": 237213,
+		"endMs": 240963,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "长回答就可以按自己的节奏来读。",
+		"startMs": 240963,
+		"endMs": 244429,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "发散探索之后，有用的结论还可以整理进 Knowledge。",
+		"startMs": 246350,
+		"endMs": 251050,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "把稳定的概念、关系和流程图留下来，供下一次探索使用。",
+		"startMs": 251050,
+		"endMs": 256391,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "概念和模块保存为 Entity，流程可以保存为 Diagram。",
+		"startMs": 258350,
+		"endMs": 263500,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "它们属于这个工作区，后面的对话还能继续用。",
+		"startMs": 263500,
+		"endMs": 267854,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "阅读时，你会看到一些带下划线的名称。",
+		"startMs": 272350,
+		"endMs": 276387,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "当它关联到知识库里的概念，悬停就能先看摘要。",
+		"startMs": 276387,
+		"endMs": 281063,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "需要了解更多，再点开查看详情。",
+		"startMs": 281063,
+		"endMs": 284541,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "图表名称也能这样用：悬停先看说明，点击再打开图。",
+		"startMs": 286350,
+		"endMs": 291675,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "查完关掉预览，就可以接着读这篇回答。",
+		"startMs": 291675,
+		"endMs": 295400,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "知识库里的内容，会在用到的时候重新出现。",
+		"startMs": 295400,
+		"endMs": 299541,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "如果要继续研究，还可以用 @ 把这些知识带进新问题。",
+		"startMs": 300350,
+		"endMs": 306213,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "前面的探索，就成了后面思考的起点。",
+		"startMs": 306213,
+		"endMs": 309829,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "需要动手时，也能让 Agent 做一个范围明确的小修改。",
+		"startMs": 314350,
+		"endMs": 319125,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "比如只给 README 补一段刚才梳理出的流程说明。",
+		"startMs": 319125,
+		"endMs": 323554,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "修改后先确认当前目录和隔离标记，再看 Diff。",
+		"startMs": 328350,
+		"endMs": 333125,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "检查没问题，也可以导出 patch，留给后续处理。",
+		"startMs": 333125,
+		"endMs": 337554,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "Rhyza 目前可以接入 Copilot、Codex、Claude Code 和 Azure OpenAI。",
+		"startMs": 342350,
+		"endMs": 348625,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "根据自己的账号和服务选择模型，具体能力和用量取决于 Provider。",
+		"startMs": 348625,
+		"endMs": 354841,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "主题和字体大小，也可以按阅读习惯调整。",
+		"startMs": 356350,
+		"endMs": 360036,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "会话与知识保存在本地；调用 AI 时，相关内容会发给所选服务。",
+		"startMs": 360036,
+		"endMs": 365682,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "Rhyza 最初想解决的，就是线性聊天难以承接发散思考的问题。",
+		"startMs": 366350,
+		"endMs": 372063,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "让每个方向都能展开，也能随时回到主线。",
+		"startMs": 372063,
+		"endMs": 376000,
+		"timestampMs": null,
+		"confidence": null
+	},
+	{
+		"text": "让问题自由分叉，让知识持续积累。",
+		"startMs": 376000,
+		"endMs": 379566,
+		"timestampMs": null,
+		"confidence": null
+	}
+]

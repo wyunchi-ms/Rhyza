@@ -1,0 +1,8 @@
+# Reviewable video assets live in Git LFS; source, captions and manifests remain regular Git.
+remotion-video/public/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.wav filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.zip filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.webm filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.mov filter=lfs diff=lfs merge=lfs -text
+remotion-video/public/**/*.png filter=lfs diff=lfs merge=lfs -text

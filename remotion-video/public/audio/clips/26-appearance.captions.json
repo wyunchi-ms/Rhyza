@@ -1,0 +1,16 @@
+[
+  {
+    "text": "主题和字体大小，也可以按阅读习惯调整。",
+    "startMs": 0,
+    "endMs": 3686,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "会话与知识保存在本地；调用 AI 时，相关内容会发给所选服务。",
+    "startMs": 3686,
+    "endMs": 9332,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

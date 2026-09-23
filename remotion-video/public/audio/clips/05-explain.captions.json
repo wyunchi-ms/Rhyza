@@ -1,0 +1,23 @@
+[
+  {
+    "text": "选中它，点 Explain，就能直接请求解释。",
+    "startMs": 0,
+    "endMs": 4400,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "新的问题会提交，但不会把我带离正在读的这段内容。",
+    "startMs": 4400,
+    "endMs": 9125,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "解释在旁边生成，我可以继续读下去。",
+    "startMs": 9125,
+    "endMs": 12704,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

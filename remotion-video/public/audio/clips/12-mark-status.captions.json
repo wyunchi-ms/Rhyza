@@ -1,0 +1,16 @@
+[
+  {
+    "text": "研究完的支线，我标成 Completed。",
+    "startMs": 0,
+    "endMs": 3538,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "还没看完的，就标成待探索或进行中。",
+    "startMs": 3538,
+    "endMs": 7329,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

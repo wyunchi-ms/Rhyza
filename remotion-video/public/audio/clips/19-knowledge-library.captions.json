@@ -1,0 +1,16 @@
+[
+  {
+    "text": "概念和模块保存为 Entity，流程可以保存为 Diagram。",
+    "startMs": 0,
+    "endMs": 5150,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "它们属于这个工作区，后面的对话还能继续用。",
+    "startMs": 5150,
+    "endMs": 9504,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

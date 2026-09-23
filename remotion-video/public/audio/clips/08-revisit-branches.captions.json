@@ -1,0 +1,16 @@
+[
+  {
+    "text": "读完这一段，再去看刚才展开的不同方向。",
+    "startMs": 0,
+    "endMs": 3938,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "每条探索路径都保留下来，也随时能回到主线。",
+    "startMs": 3938,
+    "endMs": 8266,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

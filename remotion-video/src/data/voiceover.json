@@ -1,0 +1,7 @@
+{
+	"generated": true,
+	"voice": "zh-CN-XiaoxiaoNeural",
+	"style": "chat",
+	"clips": 28,
+	"alignment": "measured-sentence-audio"
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "text": "修改后先确认当前目录和隔离标记，再看 Diff。",
+    "startMs": 0,
+    "endMs": 4775,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "检查没问题，也可以导出 patch，留给后续处理。",
+    "startMs": 4775,
+    "endMs": 9204,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

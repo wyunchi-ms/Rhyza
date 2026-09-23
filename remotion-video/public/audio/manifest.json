@@ -1,0 +1,936 @@
+{
+  "provider": "Azure AI Speech",
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "style": "chat",
+  "language": "zh-CN",
+  "sampleRate": 48000,
+  "mp3Bitrate": 192000,
+  "totalSeconds": 380,
+  "alignment": "Measured durations of independently synthesized Azure sentences, adjusted for tempo and shot placement",
+  "clips": [
+    {
+      "id": "00-intro",
+      "title": "让对话跟得上发散的思路",
+      "chapterId": "intro",
+      "file": "audio/clips/00-intro.mp3",
+      "startMs": 0,
+      "slotSeconds": 30,
+      "narrationStartsAtMs": 350,
+      "sourceSeconds": 24.5625,
+      "spokenSeconds": 24.541167,
+      "mp3Seconds": 24.576,
+      "tempo": 1,
+      "hash": "79124f95fcdd4c5c",
+      "captions": [
+        {
+          "text": "现在很多 AI Chat，主要还是一问一答，沿着一条线往下聊。",
+          "startMs": 0,
+          "endMs": 5588,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "但思考经常会发散：这个概念是什么？换个方案呢？另一个方向又怎样？",
+          "startMs": 5588,
+          "endMs": 12688,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "有些工具也能分支，但来回探索、保留关系、回到主线，往往还不够顺手。",
+          "startMs": 12688,
+          "endMs": 19600,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "这就是我做 Rhyza 的出发点：让对话跟得上发散的思路。",
+          "startMs": 19600,
+          "endMs": 24541,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "01-workspace",
+      "title": "一个项目，一个工作区",
+      "chapterId": "sources",
+      "file": "audio/clips/01-workspace.mp3",
+      "startMs": 30000,
+      "slotSeconds": 6,
+      "narrationStartsAtMs": 30350,
+      "sourceSeconds": 5.125,
+      "spokenSeconds": 5.103667,
+      "mp3Seconds": 5.136,
+      "tempo": 1,
+      "hash": "1131a3b0beb3621f",
+      "captions": [
+        {
+          "text": "这次拿 Rhyza 自己的源码演示。先选好项目工作区。",
+          "startMs": 0,
+          "endMs": 5104,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "02-sources",
+      "title": "添加源码和文档",
+      "chapterId": "sources",
+      "file": "audio/clips/02-sources.mp3",
+      "startMs": 36000,
+      "slotSeconds": 6,
+      "narrationStartsAtMs": 36350,
+      "sourceSeconds": 4.7875,
+      "spokenSeconds": 4.766167,
+      "mp3Seconds": 4.8,
+      "tempo": 1,
+      "hash": "1c26d98572303aa7",
+      "captions": [
+        {
+          "text": "把源码加到 Sources，就能搜索和读取相关片段。",
+          "startMs": 0,
+          "endMs": 4766,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "03-first-question",
+      "title": "准备一篇有层次的回答",
+      "chapterId": "sources",
+      "file": "audio/clips/03-first-question.mp3",
+      "startMs": 42000,
+      "slotSeconds": 12,
+      "narrationStartsAtMs": 42350,
+      "sourceSeconds": 11.2875,
+      "spokenSeconds": 11.266167,
+      "mp3Seconds": 11.304,
+      "tempo": 1,
+      "hash": "7e40eee2378d96c2",
+      "captions": [
+        {
+          "text": "先问清楚一条消息在系统里怎么流转。",
+          "startMs": 0,
+          "endMs": 3688,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "这是一条主线。接下来，我们从其中的问题展开几个不同方向，再随时回到这里。",
+          "startMs": 3688,
+          "endMs": 11266,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "04-reading-anchor",
+      "title": "在阅读途中发现一个疑问",
+      "chapterId": "branching",
+      "file": "audio/clips/04-reading-anchor.mp3",
+      "startMs": 54000,
+      "slotSeconds": 8,
+      "narrationStartsAtMs": 54350,
+      "sourceSeconds": 7.2375,
+      "spokenSeconds": 7.216167,
+      "mp3Seconds": 7.248,
+      "tempo": 1,
+      "hash": "34913bd2c1d489cb",
+      "captions": [
+        {
+          "text": "一条主线里，常常藏着值得展开的新问题。",
+          "startMs": 0,
+          "endMs": 4163,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "这里我先从一个不懂的概念分出去。",
+          "startMs": 4163,
+          "endMs": 7216,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "05-explain",
+      "title": "Explain：先创建解释节点",
+      "chapterId": "branching",
+      "file": "audio/clips/05-explain.mp3",
+      "startMs": 62000,
+      "slotSeconds": 16,
+      "narrationStartsAtMs": 62350,
+      "sourceSeconds": 12.725,
+      "spokenSeconds": 12.703667,
+      "mp3Seconds": 12.744,
+      "tempo": 1,
+      "hash": "db9ec5b859bce828",
+      "captions": [
+        {
+          "text": "选中它，点 Explain，就能直接请求解释。",
+          "startMs": 0,
+          "endMs": 4400,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "新的问题会提交，但不会把我带离正在读的这段内容。",
+          "startMs": 4400,
+          "endMs": 9125,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "解释在旁边生成，我可以继续读下去。",
+          "startMs": 9125,
+          "endMs": 12704,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "06-select-ask",
+      "title": "Ask：把自己的问题放进支线",
+      "chapterId": "branching",
+      "file": "audio/clips/06-select-ask.mp3",
+      "startMs": 78000,
+      "slotSeconds": 16,
+      "narrationStartsAtMs": 78350,
+      "sourceSeconds": 11.4875,
+      "spokenSeconds": 11.466167,
+      "mp3Seconds": 11.496,
+      "tempo": 1,
+      "hash": "1fb933d4c0a7b5cb",
+      "captions": [
+        {
+          "text": "如果有更具体的问题，就用 Ask about this。",
+          "startMs": 0,
+          "endMs": 3900,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "例如这里换成消息队列会怎样？",
+          "startMs": 3900,
+          "endMs": 7100,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "把问题发出去，当前阅读路径仍然保持不变。",
+          "startMs": 7100,
+          "endMs": 11466,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "07-keep-reading",
+      "title": "新回答完成，也不抢走阅读位置",
+      "chapterId": "branching",
+      "file": "audio/clips/07-keep-reading.mp3",
+      "startMs": 94000,
+      "slotSeconds": 12,
+      "narrationStartsAtMs": 94350,
+      "sourceSeconds": 9.2125,
+      "spokenSeconds": 9.191167,
+      "mp3Seconds": 9.216,
+      "tempo": 1,
+      "hash": "1f9b79e6ce562356",
+      "captions": [
+        {
+          "text": "就算支线回答已经生成，也不会把阅读视角抢过去。",
+          "startMs": 0,
+          "endMs": 4750,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "我可以先把这一节看完，再决定要不要展开研究。",
+          "startMs": 4750,
+          "endMs": 9191,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "08-revisit-branches",
+      "title": "看完这一段，再回头看支线",
+      "chapterId": "branching",
+      "file": "audio/clips/08-revisit-branches.mp3",
+      "startMs": 106000,
+      "slotSeconds": 12,
+      "narrationStartsAtMs": 106350,
+      "sourceSeconds": 8.2875,
+      "spokenSeconds": 8.266167,
+      "mp3Seconds": 8.304,
+      "tempo": 1,
+      "hash": "0dba0f4d00151b82",
+      "captions": [
+        {
+          "text": "读完这一段，再去看刚才展开的不同方向。",
+          "startMs": 0,
+          "endMs": 3938,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "每条探索路径都保留下来，也随时能回到主线。",
+          "startMs": 3938,
+          "endMs": 8266,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "09-node-view",
+      "title": "Node View：展开每一轮探索",
+      "chapterId": "views",
+      "file": "audio/clips/09-node-view.mp3",
+      "startMs": 118000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 118350,
+      "sourceSeconds": 9.075,
+      "spokenSeconds": 9.053667,
+      "mp3Seconds": 9.096,
+      "tempo": 1,
+      "hash": "d94af95d13836fb3",
+      "captions": [
+        {
+          "text": "Node View 把每一轮探索展开成节点。",
+          "startMs": 0,
+          "endMs": 3588,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "哪一轮接着哪一轮，在哪里分出新的方向，都能顺着连线看到。",
+          "startMs": 3588,
+          "endMs": 9054,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "10-list-compression",
+      "title": "List View：把没有分叉的一段收成一项",
+      "chapterId": "views",
+      "file": "audio/clips/10-list-compression.mp3",
+      "startMs": 132000,
+      "slotSeconds": 24,
+      "narrationStartsAtMs": 132350,
+      "sourceSeconds": 18.8,
+      "spokenSeconds": 18.778667,
+      "mp3Seconds": 18.816,
+      "tempo": 1,
+      "hash": "245a76aa5c075cdb",
+      "captions": [
+        {
+          "text": "切到 List View，侧栏会紧凑很多。",
+          "startMs": 0,
+          "endMs": 3313,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "比如同一会话里连续问了 A、B、C，中间没有分叉，就合成一个列表项。",
+          "startMs": 3313,
+          "endMs": 10350,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "到了分叉的地方，新的方向仍然分开保留。",
+          "startMs": 10350,
+          "endMs": 14475,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "压缩的是列表里的显示，完整聊天内容都还在。",
+          "startMs": 14475,
+          "endMs": 18779,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "11-switch-views",
+      "title": "看全貌用节点，日常阅读用列表",
+      "chapterId": "views",
+      "file": "audio/clips/11-switch-views.mp3",
+      "startMs": 156000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 156350,
+      "sourceSeconds": 11.3625,
+      "spokenSeconds": 11.341167,
+      "mp3Seconds": 11.376,
+      "tempo": 1,
+      "hash": "fba388e86d0e285b",
+      "captions": [
+        {
+          "text": "节点图帮我看清发散之后的路径和关系。",
+          "startMs": 0,
+          "endMs": 4075,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "列表把连续的讨论收紧，方便日常阅读。",
+          "startMs": 4075,
+          "endMs": 8013,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "两种视图，看的都是同一组探索。",
+          "startMs": 8013,
+          "endMs": 11341,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "12-mark-status",
+      "title": "给探索进度做标记",
+      "chapterId": "filtering",
+      "file": "audio/clips/12-mark-status.mp3",
+      "startMs": 170000,
+      "slotSeconds": 10,
+      "narrationStartsAtMs": 170350,
+      "sourceSeconds": 7.35,
+      "spokenSeconds": 7.328667,
+      "mp3Seconds": 7.368,
+      "tempo": 1,
+      "hash": "e3d4d1fdac6efa5b",
+      "captions": [
+        {
+          "text": "研究完的支线，我标成 Completed。",
+          "startMs": 0,
+          "endMs": 3538,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "还没看完的，就标成待探索或进行中。",
+          "startMs": 3538,
+          "endMs": 7329,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "13-filter-completed",
+      "title": "只留下现在还要看的路径",
+      "chapterId": "filtering",
+      "file": "audio/clips/13-filter-completed.mp3",
+      "startMs": 180000,
+      "slotSeconds": 16,
+      "narrationStartsAtMs": 180350,
+      "sourceSeconds": 14.2875,
+      "spokenSeconds": 14.266167,
+      "mp3Seconds": 14.304,
+      "tempo": 1,
+      "hash": "2c3d7ff20c7080b4",
+      "captions": [
+        {
+          "text": "然后用筛选，只显示待探索和进行中的路径。",
+          "startMs": 0,
+          "endMs": 4538,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "已完成的末端支线就先从视图里隐藏了。",
+          "startMs": 4538,
+          "endMs": 8525,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "屏幕上留下现在要看的内容，界面清爽，也更容易集中注意力。",
+          "startMs": 8525,
+          "endMs": 14266,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "14-filter-restore",
+      "title": "隐藏不是删除，随时恢复",
+      "chapterId": "filtering",
+      "file": "audio/clips/14-filter-restore.mp3",
+      "startMs": 196000,
+      "slotSeconds": 10,
+      "narrationStartsAtMs": 196350,
+      "sourceSeconds": 8.1375,
+      "spokenSeconds": 8.116167,
+      "mp3Seconds": 8.16,
+      "tempo": 1,
+      "hash": "6cc332d2d6891f6b",
+      "captions": [
+        {
+          "text": "筛选在两种视图之间也保持一致。",
+          "startMs": 0,
+          "endMs": 3475,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "想回顾时恢复全部状态，之前的节点都还在。",
+          "startMs": 3475,
+          "endMs": 8116,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "15-answer-outline",
+      "title": "Outline：先看到回答的结构",
+      "chapterId": "reading",
+      "file": "audio/clips/15-answer-outline.mp3",
+      "startMs": 206000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 206350,
+      "sourceSeconds": 11.8375,
+      "spokenSeconds": 11.816167,
+      "mp3Seconds": 11.856,
+      "tempo": 1,
+      "hash": "62af031d0a1e796d",
+      "captions": [
+        {
+          "text": "长回答还有一个很实用的优化：Markdown 目录。",
+          "startMs": 0,
+          "endMs": 4150,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "先看标题层级，就知道这篇回答讲了哪些部分。",
+          "startMs": 4150,
+          "endMs": 8763,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "不用一路滚到底才发现重点。",
+          "startMs": 8763,
+          "endMs": 11816,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "16-outline-jump",
+      "title": "点目录，直接到关心的部分",
+      "chapterId": "reading",
+      "file": "audio/clips/16-outline-jump.mp3",
+      "startMs": 220000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 220350,
+      "sourceSeconds": 11.9875,
+      "spokenSeconds": 11.966167,
+      "mp3Seconds": 12,
+      "tempo": 1,
+      "hash": "a626f9de08de9e8d",
+      "captions": [
+        {
+          "text": "我想先看请求调度，就直接点这一节。",
+          "startMs": 0,
+          "endMs": 3575,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "正文跳到对应位置，目录也会标出正在阅读的章节。",
+          "startMs": 3575,
+          "endMs": 8688,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "在长回答里找内容会方便很多。",
+          "startMs": 8688,
+          "endMs": 11966,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "17-section-collapse",
+      "title": "读过的章节折叠，需要时再展开",
+      "chapterId": "reading",
+      "file": "audio/clips/17-section-collapse.mp3",
+      "startMs": 234000,
+      "slotSeconds": 12,
+      "narrationStartsAtMs": 234350,
+      "sourceSeconds": 10.1,
+      "spokenSeconds": 10.078667,
+      "mp3Seconds": 10.104,
+      "tempo": 1,
+      "hash": "04c554b98b4bdfb4",
+      "captions": [
+        {
+          "text": "读过的部分可以先折叠起来。",
+          "startMs": 0,
+          "endMs": 2863,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "从目录再点回去，会展开需要的章节。",
+          "startMs": 2863,
+          "endMs": 6613,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "长回答就可以按自己的节奏来读。",
+          "startMs": 6613,
+          "endMs": 10079,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "18-organize-knowledge",
+      "title": "让结论变成可复用的知识",
+      "chapterId": "knowledge",
+      "file": "audio/clips/18-organize-knowledge.mp3",
+      "startMs": 246000,
+      "slotSeconds": 12,
+      "narrationStartsAtMs": 246350,
+      "sourceSeconds": 10.0625,
+      "spokenSeconds": 10.041167,
+      "mp3Seconds": 10.08,
+      "tempo": 1,
+      "hash": "6481689f272067f1",
+      "captions": [
+        {
+          "text": "发散探索之后，有用的结论还可以整理进 Knowledge。",
+          "startMs": 0,
+          "endMs": 4700,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "把稳定的概念、关系和流程图留下来，供下一次探索使用。",
+          "startMs": 4700,
+          "endMs": 10041,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "19-knowledge-library",
+      "title": "概念和图表留在同一个工作区",
+      "chapterId": "knowledge",
+      "file": "audio/clips/19-knowledge-library.mp3",
+      "startMs": 258000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 258350,
+      "sourceSeconds": 9.525,
+      "spokenSeconds": 9.503667,
+      "mp3Seconds": 9.528,
+      "tempo": 1,
+      "hash": "36fccec6c75f337c",
+      "captions": [
+        {
+          "text": "概念和模块保存为 Entity，流程可以保存为 Diagram。",
+          "startMs": 0,
+          "endMs": 5150,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "它们属于这个工作区，后面的对话还能继续用。",
+          "startMs": 5150,
+          "endMs": 9504,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "20-entity-hover",
+      "title": "悬停下划线，先看概念摘要",
+      "chapterId": "reuse",
+      "file": "audio/clips/20-entity-hover.mp3",
+      "startMs": 272000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 272350,
+      "sourceSeconds": 12.2125,
+      "spokenSeconds": 12.191167,
+      "mp3Seconds": 12.216,
+      "tempo": 1,
+      "hash": "23b01a1242fe4608",
+      "captions": [
+        {
+          "text": "阅读时，你会看到一些带下划线的名称。",
+          "startMs": 0,
+          "endMs": 4037,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "当它关联到知识库里的概念，悬停就能先看摘要。",
+          "startMs": 4037,
+          "endMs": 8713,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "需要了解更多，再点开查看详情。",
+          "startMs": 8713,
+          "endMs": 12191,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "21-diagram-link",
+      "title": "图表也能从正文直接打开",
+      "chapterId": "reuse",
+      "file": "audio/clips/21-diagram-link.mp3",
+      "startMs": 286000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 286350,
+      "sourceSeconds": 13.2125,
+      "spokenSeconds": 13.191167,
+      "mp3Seconds": 13.224,
+      "tempo": 1,
+      "hash": "b587e76c55d41cea",
+      "captions": [
+        {
+          "text": "图表名称也能这样用：悬停先看说明，点击再打开图。",
+          "startMs": 0,
+          "endMs": 5325,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "查完关掉预览，就可以接着读这篇回答。",
+          "startMs": 5325,
+          "endMs": 9050,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "知识库里的内容，会在用到的时候重新出现。",
+          "startMs": 9050,
+          "endMs": 13191,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "22-mention-reuse",
+      "title": "新问题继续引用已有结论",
+      "chapterId": "reuse",
+      "file": "audio/clips/22-mention-reuse.mp3",
+      "startMs": 300000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 300350,
+      "sourceSeconds": 9.5,
+      "spokenSeconds": 9.478667,
+      "mp3Seconds": 9.504,
+      "tempo": 1,
+      "hash": "c5e47342de59d431",
+      "captions": [
+        {
+          "text": "如果要继续研究，还可以用 @ 把这些知识带进新问题。",
+          "startMs": 0,
+          "endMs": 5863,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "前面的探索，就成了后面思考的起点。",
+          "startMs": 5863,
+          "endMs": 9479,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "23-edit-request",
+      "title": "只做一个范围明确的修改",
+      "chapterId": "changes",
+      "file": "audio/clips/23-edit-request.mp3",
+      "startMs": 314000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 314350,
+      "sourceSeconds": 9.225,
+      "spokenSeconds": 9.203667,
+      "mp3Seconds": 9.24,
+      "tempo": 1,
+      "hash": "a9d296566896b0bf",
+      "captions": [
+        {
+          "text": "需要动手时，也能让 Agent 做一个范围明确的小修改。",
+          "startMs": 0,
+          "endMs": 4775,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "比如只给 README 补一段刚才梳理出的流程说明。",
+          "startMs": 4775,
+          "endMs": 9204,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "24-diff-export",
+      "title": "确认路径，检查 Diff",
+      "chapterId": "changes",
+      "file": "audio/clips/24-diff-export.mp3",
+      "startMs": 328000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 328350,
+      "sourceSeconds": 9.225,
+      "spokenSeconds": 9.203667,
+      "mp3Seconds": 9.24,
+      "tempo": 1,
+      "hash": "78e92f1d64daba07",
+      "captions": [
+        {
+          "text": "修改后先确认当前目录和隔离标记，再看 Diff。",
+          "startMs": 0,
+          "endMs": 4775,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "检查没问题，也可以导出 patch，留给后续处理。",
+          "startMs": 4775,
+          "endMs": 9204,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "25-providers",
+      "title": "选择 Provider 和模型",
+      "chapterId": "settings",
+      "file": "audio/clips/25-providers.mp3",
+      "startMs": 342000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 342350,
+      "sourceSeconds": 12.5125,
+      "spokenSeconds": 12.491167,
+      "mp3Seconds": 12.528,
+      "tempo": 1,
+      "hash": "1c41bb92f9c20666",
+      "captions": [
+        {
+          "text": "Rhyza 目前可以接入 Copilot、Codex、Claude Code 和 Azure OpenAI。",
+          "startMs": 0,
+          "endMs": 6275,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "根据自己的账号和服务选择模型，具体能力和用量取决于 Provider。",
+          "startMs": 6275,
+          "endMs": 12491,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "26-appearance",
+      "title": "调整阅读外观",
+      "chapterId": "settings",
+      "file": "audio/clips/26-appearance.mp3",
+      "startMs": 356000,
+      "slotSeconds": 10,
+      "narrationStartsAtMs": 356350,
+      "sourceSeconds": 10.4625,
+      "spokenSeconds": 9.331917,
+      "mp3Seconds": 9.36,
+      "tempo": 1.1189839572192515,
+      "hash": "a636620eed6ea6cf",
+      "captions": [
+        {
+          "text": "主题和字体大小，也可以按阅读习惯调整。",
+          "startMs": 0,
+          "endMs": 3686,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "会话与知识保存在本地；调用 AI 时，相关内容会发给所选服务。",
+          "startMs": 3686,
+          "endMs": 9332,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "id": "27-outro",
+      "title": "让对话跟随思考展开",
+      "chapterId": "outro",
+      "file": "audio/clips/27-outro.mp3",
+      "startMs": 366000,
+      "slotSeconds": 14,
+      "narrationStartsAtMs": 366350,
+      "sourceSeconds": 13.2375,
+      "spokenSeconds": 13.216167,
+      "mp3Seconds": 13.248,
+      "tempo": 1,
+      "hash": "6de81445d6f0a67b",
+      "captions": [
+        {
+          "text": "Rhyza 最初想解决的，就是线性聊天难以承接发散思考的问题。",
+          "startMs": 0,
+          "endMs": 5713,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "让每个方向都能展开，也能随时回到主线。",
+          "startMs": 5713,
+          "endMs": 9650,
+          "timestampMs": null,
+          "confidence": null
+        },
+        {
+          "text": "让问题自由分叉，让知识持续积累。",
+          "startMs": 9650,
+          "endMs": 13216,
+          "timestampMs": null,
+          "confidence": null
+        }
+      ]
+    }
+  ]
+}

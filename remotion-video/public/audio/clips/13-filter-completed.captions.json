@@ -1,0 +1,23 @@
+[
+  {
+    "text": "然后用筛选，只显示待探索和进行中的路径。",
+    "startMs": 0,
+    "endMs": 4538,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "已完成的末端支线就先从视图里隐藏了。",
+    "startMs": 4538,
+    "endMs": 8525,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "屏幕上留下现在要看的内容，界面清爽，也更容易集中注意力。",
+    "startMs": 8525,
+    "endMs": 14266,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

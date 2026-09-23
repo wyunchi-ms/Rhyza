@@ -1,0 +1,30 @@
+[
+  {
+    "text": "现在很多 AI Chat，主要还是一问一答，沿着一条线往下聊。",
+    "startMs": 0,
+    "endMs": 5588,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "但思考经常会发散：这个概念是什么？换个方案呢？另一个方向又怎样？",
+    "startMs": 5588,
+    "endMs": 12688,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "有些工具也能分支，但来回探索、保留关系、回到主线，往往还不够顺手。",
+    "startMs": 12688,
+    "endMs": 19600,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "这就是我做 Rhyza 的出发点：让对话跟得上发散的思路。",
+    "startMs": 19600,
+    "endMs": 24541,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

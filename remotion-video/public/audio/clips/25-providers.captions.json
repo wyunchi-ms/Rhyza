@@ -1,0 +1,16 @@
+[
+  {
+    "text": "Rhyza 目前可以接入 Copilot、Codex、Claude Code 和 Azure OpenAI。",
+    "startMs": 0,
+    "endMs": 6275,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "根据自己的账号和服务选择模型，具体能力和用量取决于 Provider。",
+    "startMs": 6275,
+    "endMs": 12491,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

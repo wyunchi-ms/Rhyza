@@ -1,0 +1,23 @@
+[
+  {
+    "text": "图表名称也能这样用：悬停先看说明，点击再打开图。",
+    "startMs": 0,
+    "endMs": 5325,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "查完关掉预览，就可以接着读这篇回答。",
+    "startMs": 5325,
+    "endMs": 9050,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "知识库里的内容，会在用到的时候重新出现。",
+    "startMs": 9050,
+    "endMs": 13191,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

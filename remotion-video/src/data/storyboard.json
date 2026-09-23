@@ -1,0 +1,446 @@
+{
+	"title": "思考会发散，AI 对话也应该",
+	"fps": 30,
+	"width": 1920,
+	"height": 1080,
+	"status": "录制前分镜；已合成 Azure 中文女声，字幕按逐句音频实测时长对齐，尚无实机录屏",
+	"chapters": [
+		{
+			"id": "intro",
+			"title": "让对话跟得上发散的思路",
+			"seconds": 30,
+			"kind": "title",
+			"narration": [
+				"现在很多 AI Chat，主要还是一问一答，沿着一条线往下聊。",
+				"但思考经常会发散：这个概念是什么？换个方案呢？另一个方向又怎样？",
+				"有些工具也能分支，但来回探索、保留关系、回到主线，往往还不够顺手。",
+				"这就是我做 Rhyza 的出发点：让对话跟得上发散的思路。"
+			],
+			"shots": []
+		},
+		{
+			"id": "sources",
+			"title": "用一个真实项目开始",
+			"seconds": 24,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "01-workspace",
+					"seconds": 6,
+					"title": "一个项目，一个工作区",
+					"action": "打开 Settings → Workspace → Choose Folder，选择 Rhyza 仓库，再返回聊天页。",
+					"note": "提前登录 Provider；关闭通知；目录选择器不展示私人目录。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": ["这次拿 Rhyza 自己的源码演示。先选好项目工作区。"]
+				},
+				{
+					"id": "02-sources",
+					"seconds": 6,
+					"title": "添加源码和文档",
+					"action": "进入 Sources → Add sources，选择 Rhyza 仓库。停留在扫描完成后的文件数量和 indexed 状态。",
+					"note": "保留选择目录和扫描完成两个动作；较长等待剪掉。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": ["把源码加到 Sources，就能搜索和读取相关片段。"]
+				},
+				{
+					"id": "03-first-question",
+					"seconds": 12,
+					"title": "准备一篇有层次的回答",
+					"action": "新建 Chat，输入问题并发送；展示检索、流式回答与 Markdown 标题。",
+					"note": "录制前准备三轮同一会话连续问答；首轮按标题组织，后续从较早回答发起两条支线。",
+					"prompt": "请根据项目源码，用 Markdown 分级标题说明一条消息从输入、请求调度，到 AI Provider 返回回答的流程。请给出相关文件，并解释关键概念。",
+					"fallback": "workspace",
+					"narration": [
+						"先问清楚一条消息在系统里怎么流转。",
+						"这是一条主线。接下来，我们从其中的问题展开几个不同方向，再随时回到这里。"
+					]
+				}
+			]
+		},
+		{
+			"id": "branching",
+			"title": "问题先分出去，阅读继续",
+			"seconds": 64,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "04-reading-anchor",
+					"seconds": 8,
+					"title": "在阅读途中发现一个疑问",
+					"action": "打开已有后续消息的早期回答，滚动到中间章节，让一个小标题固定在屏幕上作为阅读位置参照。",
+					"note": "必须选择已有后续消息的历史回答；叶节点可能直接续聊。提前在同一 Session 连续完成 A、B、C、D 四轮；从 C 新建 Explain 分支 E 和 Ask 分支 F，D 保留为原后续路径。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"一条主线里，常常藏着值得展开的新问题。",
+						"这里我先从一个不懂的概念分出去。"
+					]
+				},
+				{
+					"id": "05-explain",
+					"seconds": 16,
+					"title": "Explain：先创建解释节点",
+					"action": "选中一个术语，点击 Explain；镜头保持在原段落，展示侧栏新增节点和生成状态。继续向下滚动一小段。",
+					"note": "当前按钮是 Explain，不是 Expand。保留一次连续录屏，能看出发送后没有跳到新回答。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"选中它，点 Explain，就能直接请求解释。",
+						"新的问题会提交，但不会把我带离正在读的这段内容。",
+						"解释在旁边生成，我可以继续读下去。"
+					]
+				},
+				{
+					"id": "06-select-ask",
+					"seconds": 16,
+					"title": "Ask：把自己的问题放进支线",
+					"action": "在同一历史回答里选中另一段，点击 Ask about this，输入问题后按 Ask；保留原段落和新节点出现的画面。",
+					"note": "Explain 与 Ask 共用分支语义；不要剪成发送后自动进入新节点。",
+					"prompt": "如果把选中的请求调度改成消息队列，会影响哪些模块？请只分析收益和风险，不修改文件。",
+					"fallback": "workspace",
+					"narration": [
+						"如果有更具体的问题，就用 Ask about this。",
+						"例如这里换成消息队列会怎样？",
+						"把问题发出去，当前阅读路径仍然保持不变。"
+					]
+				},
+				{
+					"id": "07-keep-reading",
+					"seconds": 12,
+					"title": "新回答完成，也不抢走阅读位置",
+					"action": "保持主线，继续读到本节结尾。拍到支线从运行中变成完成，而正文仍在原来的阅读路径。",
+					"note": "若实际生成耗时较长，等待可加速并标注；点击和滚动保持原速。不要用切换节点掩盖跳转。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"就算支线回答已经生成，也不会把阅读视角抢过去。",
+						"我可以先把这一节看完，再决定要不要展开研究。"
+					]
+				},
+				{
+					"id": "08-revisit-branches",
+					"seconds": 12,
+					"title": "看完这一段，再回头看支线",
+					"action": "读完一节后，主动点击 Explain 分支，再点击 Ask 分支，展示各自引用原文和回答；最后返回主线。",
+					"note": "每次切换保留清楚的鼠标点击；与前面“不自动切走”形成可见的先后顺序。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"读完这一段，再去看刚才展开的不同方向。",
+						"每条探索路径都保留下来，也随时能回到主线。"
+					]
+				}
+			]
+		},
+		{
+			"id": "views",
+			"title": "同一条思路，两种看法",
+			"seconds": 52,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "09-node-view",
+					"seconds": 14,
+					"title": "Node View：展开每一轮探索",
+					"action": "切换 Node view，展示同一会话 A → B → C，以及从 C 延伸的原后续 D、解释 E 和追问 F。鼠标依次经过 A、B、C 和分叉点。",
+					"note": "A、B、C 为剪辑标注，不需要改应用标题。准备真实连续三轮，保证同一 Session；图上展示真实节点。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"Node View 把每一轮探索展开成节点。",
+						"哪一轮接着哪一轮，在哪里分出新的方向，都能顺着连线看到。"
+					]
+				},
+				{
+					"id": "10-list-compression",
+					"seconds": 24,
+					"title": "List View：把没有分叉的一段收成一项",
+					"action": "在同一组对话上切换到 List view，展示 A、B、C 对应的单个列表项，以及 D、E、F 三条后续路径。停留时配合下方结构示意。",
+					"note": "仅同一 Session 内的单子节点连续路径会合并；会话边界保持可选。讲清这是显示压缩，不是删除、摘要改写或模型上下文压缩。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"切到 List View，侧栏会紧凑很多。",
+						"比如同一会话里连续问了 A、B、C，中间没有分叉，就合成一个列表项。",
+						"到了分叉的地方，新的方向仍然分开保留。",
+						"压缩的是列表里的显示，完整聊天内容都还在。"
+					]
+				},
+				{
+					"id": "11-switch-views",
+					"seconds": 14,
+					"title": "看全貌用节点，日常阅读用列表",
+					"action": "点击压缩后的列表项，在正文滚动回看 A、B、C；再切回 Node view，确认三轮节点与 D、E、F 后续路径仍然存在。",
+					"note": "不把列表折叠按钮当作路径压缩；通过同一数据的两种视图证明含义。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"节点图帮我看清发散之后的路径和关系。",
+						"列表把连续的讨论收紧，方便日常阅读。",
+						"两种视图，看的都是同一组探索。"
+					]
+				}
+			]
+		},
+		{
+			"id": "filtering",
+			"title": "把已经探索完的支线收起来",
+			"seconds": 36,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "12-mark-status",
+					"seconds": 10,
+					"title": "给探索进度做标记",
+					"action": "将已读完的 Explain 支线末端标记为 Completed；将另一个叶节点标记为 To explore，再准备一个 In progress 节点。",
+					"note": "展示的是用户设置的探索标记，区别于请求 running/complete 的运行状态。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": ["研究完的支线，我标成 Completed。", "还没看完的，就标成待探索或进行中。"]
+				},
+				{
+					"id": "13-filter-completed",
+					"seconds": 16,
+					"title": "只留下现在还要看的路径",
+					"action": "打开 Filter by leaf status，选择 To explore 和 In progress；展示已完成叶分支被隐藏，未完成分支及共同祖先仍保留。",
+					"note": "菜单是选择要显示的状态；All statuses 状态下不能只取消 Completed。可加选 Unmarked 和 On hold；不要宣称祖先中所有 Completed 都消失。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"然后用筛选，只显示待探索和进行中的路径。",
+						"已完成的末端支线就先从视图里隐藏了。",
+						"屏幕上留下现在要看的内容，界面清爽，也更容易集中注意力。"
+					]
+				},
+				{
+					"id": "14-filter-restore",
+					"seconds": 10,
+					"title": "隐藏不是删除，随时恢复",
+					"action": "保持筛选切换 List view 和 Node view，展示共同筛选结果；点击 All statuses 恢复全部节点。",
+					"note": "筛选命中叶节点并保留祖先路径；不会删除消息，也不会主动切换当前阅读会话。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"筛选在两种视图之间也保持一致。",
+						"想回顾时恢复全部状态，之前的节点都还在。"
+					]
+				}
+			]
+		},
+		{
+			"id": "reading",
+			"title": "让长回答更容易读",
+			"seconds": 40,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "15-answer-outline",
+					"seconds": 14,
+					"title": "Outline：先看到回答的结构",
+					"action": "宽屏打开带多级标题的长回答，聚焦该 Assistant 回答；展示正文左侧 In this answer 目录和层级。",
+					"note": "目录需要正文外有足够空间；录制前确认窗口宽度。目录对应当前聚焦回答，而非整条聊天。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"长回答还有一个很实用的优化：Markdown 目录。",
+						"先看标题层级，就知道这篇回答讲了哪些部分。",
+						"不用一路滚到底才发现重点。"
+					]
+				},
+				{
+					"id": "16-outline-jump",
+					"seconds": 14,
+					"title": "点目录，直接到关心的部分",
+					"action": "点击“请求调度”或对应标题，正文跳转后停留；继续滚动一小段，展示当前章节高亮随阅读更新。",
+					"note": "使用实际生成的标题。镜头同时保留目录点击和正文落点，不用剪辑跳转代替真实操作。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"我想先看请求调度，就直接点这一节。",
+						"正文跳到对应位置，目录也会标出正在阅读的章节。",
+						"在长回答里找内容会方便很多。"
+					]
+				},
+				{
+					"id": "17-section-collapse",
+					"seconds": 12,
+					"title": "读过的章节折叠，需要时再展开",
+					"action": "折叠一个读过的章节，再点击目录中的子标题，展示所需父章节展开并定位目标。",
+					"note": "展开与折叠属于 Markdown 阅读操作；与选区 Explain 的解释功能分开讲。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"读过的部分可以先折叠起来。",
+						"从目录再点回去，会展开需要的章节。",
+						"长回答就可以按自己的节奏来读。"
+					]
+				}
+			]
+		},
+		{
+			"id": "knowledge",
+			"title": "把研究结论沉淀下来",
+			"seconds": 26,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "18-organize-knowledge",
+					"seconds": 12,
+					"title": "让结论变成可复用的知识",
+					"action": "展示整理请求、回答中的 Mermaid 图和知识提取完成状态。",
+					"note": "录制前已准备好提取结果；不拍 ChangeSet、Accept/Reject、事务记录或 History。",
+					"prompt": "请把刚才已由源码确认的核心概念、模块关系整理出来，再用 Mermaid 画出消息处理流程。保留实际名称和来源，不添加没有证据的模块。",
+					"fallback": "workspace",
+					"narration": [
+						"发散探索之后，有用的结论还可以整理进 Knowledge。",
+						"把稳定的概念、关系和流程图留下来，供下一次探索使用。"
+					]
+				},
+				{
+					"id": "19-knowledge-library",
+					"seconds": 14,
+					"title": "概念和图表留在同一个工作区",
+					"action": "打开 Knowledge，展示一个 Entity 的摘要、关系；切到 Diagrams，展示刚才生成的 Mermaid 图。随后回到对话。",
+					"note": "使用真实提取结果；跳过知识审核、编辑历史和事务解释。",
+					"prompt": "",
+					"fallback": "knowledge",
+					"narration": [
+						"概念和模块保存为 Entity，流程可以保存为 Diagram。",
+						"它们属于这个工作区，后面的对话还能继续用。"
+					]
+				}
+			]
+		},
+		{
+			"id": "reuse",
+			"title": "下划线，把回答和知识连起来",
+			"seconds": 42,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "20-entity-hover",
+					"seconds": 14,
+					"title": "悬停下划线，先看概念摘要",
+					"action": "在回答正文中找到已匹配知识库实体的下划线名称，悬停展示名称、类型和摘要卡；再点击打开实体详情，关闭后回到正文。",
+					"note": "录制前确保名称或别名确实匹配已有 Entity；不要把普通网页链接当知识链接，也不声称任意术语都会识别。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"阅读时，你会看到一些带下划线的名称。",
+						"当它关联到知识库里的概念，悬停就能先看摘要。",
+						"需要了解更多，再点开查看详情。"
+					]
+				},
+				{
+					"id": "21-diagram-link",
+					"seconds": 14,
+					"title": "图表也能从正文直接打开",
+					"action": "将鼠标移到回答正文里已匹配 Diagram 的名称，展示悬停摘要；点击打开图表预览，关闭后继续阅读当前回答。",
+					"note": "悬停显示摘要，完整图表通过点击预览；不要配成悬停自动展开整张图。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"图表名称也能这样用：悬停先看说明，点击再打开图。",
+						"查完关掉预览，就可以接着读这篇回答。",
+						"知识库里的内容，会在用到的时候重新出现。"
+					]
+				},
+				{
+					"id": "22-mention-reuse",
+					"seconds": 14,
+					"title": "新问题继续引用已有结论",
+					"action": "在新 Chat 输入 @，从菜单选择已有实体和流程图；输入简短问题并发送，展示引用标签和回答开头。",
+					"note": "确实选择菜单项；不只输入普通 @ 文本。保留 2 秒真实生成过程。",
+					"prompt": "根据引用的模块和流程图，解释请求失败时的处理路径。区分已知结论和还需检查源码的部分，只分析，不修改文件。",
+					"fallback": "workspace",
+					"narration": [
+						"如果要继续研究，还可以用 @ 把这些知识带进新问题。",
+						"前面的探索，就成了后面思考的起点。"
+					]
+				}
+			]
+		},
+		{
+			"id": "changes",
+			"title": "顺手检查一次代码修改",
+			"seconds": 28,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "23-edit-request",
+					"seconds": 14,
+					"title": "只做一个范围明确的修改",
+					"action": "在公开 Demo Git 仓库或干净的 Rhyza 演示副本中发送修改请求，录下实际文件修改工具和完成说明。",
+					"note": "提前验证 Provider 的可写权限和 Worktree 路径；此脚本本身不执行修改。",
+					"prompt": "请只在 README.md 末尾追加一小段“消息处理流程”，根据刚才确认的源码说明核心步骤。不要修改其他文件，不要提交 Git commit。完成后说明修改内容。",
+					"fallback": "workspace",
+					"narration": [
+						"需要动手时，也能让 Agent 做一个范围明确的小修改。",
+						"比如只给 README 补一段刚才梳理出的流程说明。"
+					]
+				},
+				{
+					"id": "24-diff-export",
+					"seconds": 14,
+					"title": "确认路径，检查 Diff",
+					"action": "打开 Changes → Code，展示实际工作目录和隔离标记；查看 README Diff，再快速展示 Export patch 入口或成功反馈。",
+					"note": "仅简要保留代码修改功能；不进入 Knowledge 事务或历史页。Worktree 失败时按实际状态展示。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"修改后先确认当前目录和隔离标记，再看 Diff。",
+						"检查没问题，也可以导出 patch，留给后续处理。"
+					]
+				}
+			]
+		},
+		{
+			"id": "settings",
+			"title": "选择适合自己的服务和外观",
+			"seconds": 24,
+			"kind": "recording",
+			"shots": [
+				{
+					"id": "25-providers",
+					"seconds": 14,
+					"title": "选择 Provider 和模型",
+					"action": "打开 Provider 菜单展示四个选项，保持原已登录 Provider；展示模型选择与 Thinking level。",
+					"note": "不切换到未连接服务，不录登录凭据；各 Provider 能力不同。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"Rhyza 目前可以接入 Copilot、Codex、Claude Code 和 Azure OpenAI。",
+						"根据自己的账号和服务选择模型，具体能力和用量取决于 Provider。"
+					]
+				},
+				{
+					"id": "26-appearance",
+					"seconds": 10,
+					"title": "调整阅读外观",
+					"action": "展示明暗主题和字体缩放，回到刚才的长回答；需要时一闪而过 Copilot 的 Pi Plugins 入口，不讲安装过程。",
+					"note": "保持当前已登录 Provider；不展示凭据。",
+					"prompt": "",
+					"fallback": "workspace",
+					"narration": [
+						"主题和字体大小，也可以按阅读习惯调整。",
+						"会话与知识保存在本地；调用 AI 时，相关内容会发给所选服务。"
+					]
+				}
+			]
+		},
+		{
+			"id": "outro",
+			"title": "让对话跟随思考展开",
+			"seconds": 14,
+			"kind": "title",
+			"narration": [
+				"Rhyza 最初想解决的，就是线性聊天难以承接发散思考的问题。",
+				"让每个方向都能展开，也能随时回到主线。",
+				"让问题自由分叉，让知识持续积累。"
+			],
+			"shots": []
+		}
+	]
+}

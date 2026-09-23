@@ -1,0 +1,16 @@
+[
+  {
+    "text": "Node View 把每一轮探索展开成节点。",
+    "startMs": 0,
+    "endMs": 3588,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "哪一轮接着哪一轮，在哪里分出新的方向，都能顺着连线看到。",
+    "startMs": 3588,
+    "endMs": 9054,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

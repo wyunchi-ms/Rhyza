@@ -1,0 +1,29 @@
+{
+	"name": "rhyza-remotion-walkthrough",
+	"private": true,
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"studio": "remotion studio src/index.ts --no-open --port=3100",
+		"typecheck": "tsc --noEmit",
+		"script": "node scripts/export-script.mjs",
+		"check": "npm run typecheck && node scripts/check-video.mjs",
+		"check:audio": "node scripts/check-audio.mjs",
+		"check:media": "node scripts/check-video.mjs --require-media"
+	},
+	"dependencies": {
+		"@remotion/captions": "4.0.527",
+		"@remotion/cli": "4.0.527",
+		"@remotion/media": "4.0.527",
+		"@remotion/transitions": "4.0.527",
+		"react": "19.2.3",
+		"react-dom": "19.2.3",
+		"remotion": "4.0.527"
+	},
+	"devDependencies": {
+		"@types/node": "22.19.15",
+		"@types/react": "19.2.14",
+		"@types/react-dom": "19.2.3",
+		"typescript": "5.9.3"
+	}
+}

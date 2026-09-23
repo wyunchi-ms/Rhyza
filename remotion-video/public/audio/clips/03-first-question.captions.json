@@ -1,0 +1,16 @@
+[
+  {
+    "text": "先问清楚一条消息在系统里怎么流转。",
+    "startMs": 0,
+    "endMs": 3688,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "这是一条主线。接下来，我们从其中的问题展开几个不同方向，再随时回到这里。",
+    "startMs": 3688,
+    "endMs": 11266,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

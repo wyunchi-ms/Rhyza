@@ -1,0 +1,16 @@
+[
+  {
+    "text": "需要动手时，也能让 Agent 做一个范围明确的小修改。",
+    "startMs": 0,
+    "endMs": 4775,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "比如只给 README 补一段刚才梳理出的流程说明。",
+    "startMs": 4775,
+    "endMs": 9204,
+    "timestampMs": null,
+    "confidence": null
+  }
+]
