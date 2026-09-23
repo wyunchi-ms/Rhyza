@@ -100,16 +100,6 @@ const Layout: React.FC = () => {
 	}, []);
 	return (
 		<div className={clsx("app-shell", !sidebarVisible && "has-collapsed-sidebar")}>
-			<a
-				className="skip-to-content"
-				href="#main-content"
-				onClick={(event) => {
-					event.preventDefault();
-					document.getElementById("main-content")?.focus();
-				}}
-			>
-				Skip to content
-			</a>
 			<aside
 				className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
 				aria-label="Workspace sidebar"

@@ -40,23 +40,6 @@ input[type="radio"] {
 	accent-color: var(--ui-brand-accent);
 }
 
-.skip-to-content {
-	position: fixed;
-	z-index: 1300;
-	top: 0.75rem;
-	left: 0.75rem;
-	transform: translateY(-180%);
-	border-radius: 8px;
-	background: var(--ui-action);
-	padding: 0.65rem 1rem;
-	color: var(--ui-on-action);
-	font-size: 0.875rem;
-}
-
-.skip-to-content:focus {
-	transform: translateY(0);
-}
-
 .app-main:focus {
 	outline: none;
 }
