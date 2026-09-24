@@ -37,6 +37,12 @@ import {
 } from "../utils/knowledgeExtraction";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { distinctStorage } from "../utils/distinctStorage";
+import {
+	defaultLanguage,
+	normalizeLanguage,
+	readLanguagePreference,
+	saveLanguagePreference,
+} from "../i18n/language";
 
 interface AppState {
 	sessions: SessionNode[];
@@ -110,6 +116,7 @@ interface AppState {
 }
 
 const defaultSettings: Settings = {
+	language: readLanguagePreference() ?? defaultLanguage,
 	theme: "light",
 	provider: "github-copilot",
 	defaultModel: "",
@@ -1033,7 +1040,8 @@ export const useAppStore = create<AppState>()(
 					),
 				}));
 			},
-			updateSettings: (newSettings) =>
+			updateSettings: (newSettings) => {
+				if (newSettings.language) saveLanguagePreference(newSettings.language);
 				set((state) => ({
 					settings: {
 						...state.settings,
@@ -1049,7 +1057,8 @@ export const useAppStore = create<AppState>()(
 							),
 						),
 					},
-				})),
+				}));
+			},
 			reconcileKnowledge: () => {
 				const state = get();
 				const timestamp = new Date().toISOString();
@@ -1162,7 +1171,8 @@ export function loadWorkspaceState(serialized: string | null): void {
 function normalizeSettings(settings: Partial<Settings> | undefined): Settings {
 	const current = settings ?? {};
 	const theme = current.theme === "dark" ? "dark" : "light";
-	return { ...defaultSettings, ...current, ...normalizeProviderSettings(current), theme };
+	const language = readLanguagePreference() ?? normalizeLanguage(current.language);
+	return { ...defaultSettings, ...current, ...normalizeProviderSettings(current), theme, language };
 }
 
 function recoverInterruptedTurns(turns: Turn[]): Turn[] {

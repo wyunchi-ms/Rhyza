@@ -1,4 +1,5 @@
 import type { AgentCacheRequest, AgentModelRequestSnapshot, ProviderId } from "../shared/ipc";
+import type { Language } from "../i18n/language";
 
 export type Confidence = "confirmed" | "inferred" | "disputed";
 
@@ -222,6 +223,7 @@ export interface ChangeSet {
 }
 
 export interface Settings {
+	language: Language;
 	theme: "light" | "dark";
 	provider: ProviderId;
 	defaultModel: string;

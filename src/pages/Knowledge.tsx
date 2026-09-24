@@ -33,8 +33,10 @@ import {
 	sourceHitsToRefs,
 } from "../utils/knowledgeExtraction";
 import { errorToMessage } from "../shared/value";
+import { useTranslation } from "../i18n";
 
 const Knowledge = () => {
+	const { t } = useTranslation();
 	const store = useAppStore();
 	const [mode, setMode] = useState<"entities" | "diagrams">("entities");
 	const [historyTarget, setHistoryTarget] = useState<{
@@ -131,13 +133,13 @@ const Knowledge = () => {
 		<div className="knowledge-page library-page flex-1 overflow-hidden">
 			<header className="knowledge-page-header">
 				<div>
-					<p className="knowledge-eyebrow">Workspace library</p>
-					<h1 className="page-title">Knowledge</h1>
+					<p className="knowledge-eyebrow">{t("Workspace library")}</p>
+					<h1 className="page-title">{t("Knowledge")}</h1>
 				</div>
 				<div
 					className="knowledge-tabs"
 					role="tablist"
-					aria-label="Knowledge resource type"
+					aria-label={t("Knowledge resource type")}
 					onKeyDown={(event) => {
 						if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 						event.preventDefault();
@@ -170,7 +172,7 @@ const Knowledge = () => {
 						}}
 					>
 						<Database size={17} />
-						<span>Entities</span>
+						<span>{t("Entities")}</span>
 						<small>{activeEntities.length}</small>
 					</button>
 					<button
@@ -187,7 +189,7 @@ const Knowledge = () => {
 						}}
 					>
 						<Network size={17} />
-						<span>Diagrams</span>
+						<span>{t("Diagrams")}</span>
 						<small>{activeDiagrams.length}</small>
 					</button>
 				</div>

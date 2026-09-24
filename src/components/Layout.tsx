@@ -20,8 +20,10 @@ import { SessionGraph } from "./SessionGraph";
 import { IconSwitch } from "./IconSwitch";
 import { SessionStatusFilter } from "./SessionStatusFilter";
 import type { LeafStatusFilter } from "../utils/conversationFilter";
+import { useTranslation } from "../i18n";
 
 const Layout: React.FC = () => {
+	const { t } = useTranslation();
 	const sidebarOpen = useAppStore((state) => state.sidebarOpen);
 	const toggleSidebar = useAppStore((state) => state.toggleSidebar);
 	const viewportWidth = useViewportWidth();
@@ -108,11 +110,11 @@ const Layout: React.FC = () => {
 					document.getElementById("main-content")?.focus();
 				}}
 			>
-				Skip to content
+				{t("Skip to content")}
 			</a>
 			<aside
 				className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
-				aria-label="Workspace sidebar"
+				aria-label={t("Workspace sidebar")}
 				aria-hidden={!sidebarVisible}
 				inert={!sidebarVisible}
 				style={{
@@ -125,8 +127,8 @@ const Layout: React.FC = () => {
 						type="button"
 						className="sidebar-icon-button"
 						onClick={closeSidebar}
-						title="Close sidebar"
-						aria-label="Close sidebar"
+						title={t("Close sidebar")}
+						aria-label={t("Close sidebar")}
 					>
 						<PanelLeftClose size={17} />
 					</button>
@@ -135,16 +137,16 @@ const Layout: React.FC = () => {
 							type="button"
 							className="sidebar-icon-button"
 							onClick={() => setGlobalSearchOpen(true)}
-							title="Search chats (Ctrl+Shift+F)"
-							aria-label="Search all chats"
+							title={t("Search chats (Ctrl+Shift+F)")}
+							aria-label={t("Search all chats")}
 						>
 							<Search size={16} />
 						</button>
-						<nav className="sidebar-header-navigation" aria-label="Workspace navigation">
-							<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label="Knowledge" />
-							<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label="Sources" />
-							<SidebarNavIcon to="/changes" icon={<History size={16} />} label="Changes" />
-							<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label="Settings" />
+						<nav className="sidebar-header-navigation" aria-label={t("Workspace navigation")}>
+							<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label={t("Knowledge")} />
+							<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label={t("Sources")} />
+							<SidebarNavIcon to="/changes" icon={<History size={16} />} label={t("Changes")} />
+							<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label={t("Settings")} />
 						</nav>
 					</div>
 				</div>
@@ -161,8 +163,10 @@ const Layout: React.FC = () => {
 									checked={false}
 									onChange={setGraphMode}
 									icon={GitBranch}
-									label="Node view"
-									description="On: preview each conversation round as a node. Off: return to the chat list."
+									label={t("Node view")}
+									description={t(
+										"On: preview each conversation round as a node. Off: return to the chat list.",
+									)}
 								/>
 							</>
 						}
@@ -181,8 +185,10 @@ const Layout: React.FC = () => {
 										checked
 										onChange={setGraphMode}
 										icon={GitBranch}
-										label="Node view"
-										description="On: preview each conversation round as a node. Off: return to the chat list."
+										label={t("Node view")}
+										description={t(
+											"On: preview each conversation round as a node. Off: return to the chat list.",
+										)}
 									/>
 								</>
 							}
@@ -195,13 +201,13 @@ const Layout: React.FC = () => {
 					type="button"
 					className="sidebar-scrim"
 					onClick={closeSidebar}
-					aria-label="Close navigation sidebar"
+					aria-label={t("Close navigation sidebar")}
 				/>
 			)}
 			{sidebarVisible && !isCompactViewport && (
 				<PanelResizeHandle
 					side="left"
-					label="Resize navigation sidebar"
+					label={t("Resize navigation sidebar")}
 					value={sidebarWidth}
 					min={graphMode ? 360 : 200}
 					max={currentMax}
@@ -215,8 +221,8 @@ const Layout: React.FC = () => {
 					type="button"
 					className="sidebar-reopen"
 					onClick={openSidebar}
-					title="Open sidebar"
-					aria-label="Open sidebar"
+					title={t("Open sidebar")}
+					aria-label={t("Open sidebar")}
 				>
 					<PanelLeftOpen size={18} />
 				</button>

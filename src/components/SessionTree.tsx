@@ -30,6 +30,7 @@ import { roundMetrics } from "../utils/roundMetrics";
 import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
+import { useTranslation } from "../i18n";
 
 export const SessionTree: React.FC<{
 	embedded?: boolean;
@@ -37,6 +38,7 @@ export const SessionTree: React.FC<{
 	leafStatuses?: readonly LeafStatusFilter[];
 	onClearFilter?: () => void;
 }> = ({ embedded = false, viewControl, leafStatuses = [], onClearFilter }) => {
+	const { t } = useTranslation();
 	const {
 		sessions,
 		turns,
@@ -171,8 +173,8 @@ export const SessionTree: React.FC<{
 		>
 			<div className="session-tree-header">
 				<div>
-					<h2>Chats</h2>
-					<UsageLabel usage={usage.total} prefix="Total" />
+					<h2>{t("Chats")}</h2>
+					<UsageLabel usage={usage.total} prefix={t("Total")} />
 				</div>
 				<div className="session-tree-header-actions">
 					{viewControl}
@@ -180,8 +182,8 @@ export const SessionTree: React.FC<{
 						type="button"
 						onClick={createSession}
 						className="sidebar-icon-button"
-						title="New chat"
-						aria-label="New chat"
+						title={t("New chat")}
+						aria-label={t("New chat")}
 					>
 						<Plus size={16} />
 					</button>
@@ -206,9 +208,9 @@ export const SessionTree: React.FC<{
 				))}
 				{leafStatuses.length > 0 && visibleRoots.length === 0 && (
 					<div className="session-filter-empty" role="status">
-						<p>No leaves match these statuses.</p>
+						<p>{t("No leaves match these statuses.")}</p>
 						<button type="button" className="secondary-button" onClick={onClearFilter}>
-							Clear filter
+							{t("Clear filter")}
 						</button>
 					</div>
 				)}
