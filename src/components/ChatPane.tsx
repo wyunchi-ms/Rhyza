@@ -39,10 +39,12 @@ import { isLightweightGreeting } from "../utils/promptWorkPolicy";
 import { buildComposerReferenceContext } from "../utils/composerInput";
 import { conversationTurnTitle } from "../utils/conversationTitle";
 import { AnswerOutline } from "./chat/AnswerOutline";
+import { useTranslation } from "../i18n";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
 export const ChatPane: React.FC = () => {
+	const { t } = useTranslation();
 	const renderStartedAt = performance.now();
 	const store = useAppStore();
 	const composerDraftRef = useRef<ComposerDraftHandle>(null);
@@ -523,7 +525,7 @@ export const ChatPane: React.FC = () => {
 			<ConversationFind turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
 			<header className="chat-topbar">
 				<div className="min-w-0">
-					<h1>{activeSession?.title ?? "New chat"}</h1>
+					<h1>{activeSession?.title ?? t("New chat")}</h1>
 				</div>
 				<button
 					type="button"
@@ -532,8 +534,8 @@ export const ChatPane: React.FC = () => {
 						store.rightPaneOpen && store.rightPaneView === "todo" && "is-active",
 					)}
 					onClick={store.toggleRightPane}
-					title="Show workspace TODOs"
-					aria-label="Show workspace TODOs"
+					title={t("Show workspace TODOs")}
+					aria-label={t("Show workspace TODOs")}
 					aria-pressed={store.rightPaneOpen && store.rightPaneView === "todo"}
 				>
 					<ListChecks size={17} />
@@ -543,8 +545,8 @@ export const ChatPane: React.FC = () => {
 				<div className="branch-switch-loading" role="status" aria-live="polite">
 					<LoaderCircle size={22} aria-hidden="true" />
 					<div>
-						<strong>Opening branch…</strong>
-						<span>Preparing the latest conversation</span>
+						<strong>{t("Opening branch…")}</strong>
+						<span>{t("Preparing the latest conversation")}</span>
 					</div>
 				</div>
 			)}
@@ -553,7 +555,7 @@ export const ChatPane: React.FC = () => {
 				className="chat-scroll"
 				tabIndex={0}
 				role="region"
-				aria-label="Conversation. Use up and down arrow keys to move between turns."
+				aria-label={t("Conversation. Use up and down arrow keys to move between turns.")}
 				onPointerDown={(event) => {
 					const target = event.target as Element | null;
 					if (target?.closest("button, a, input, textarea, select, [contenteditable='true']"))
@@ -592,11 +594,13 @@ export const ChatPane: React.FC = () => {
 				{sessionTurns.length === 0 && (
 					<div className="chat-empty">
 						<img className="brand-mark large" src={appIcon} alt="" width={40} height={40} />
-						<h2>What do you want to understand?</h2>
-						<p>Start with a question. Follow a new thread when an idea deserves a closer look.</p>
+						<h2>{t("What do you want to understand?")}</h2>
+						<p>
+							{t("Start with a question. Follow a new thread when an idea deserves a closer look.")}
+						</p>
 						<div className="chat-empty-hint">
-							<span>Use @ to reference knowledge</span>
-							<span>Use / for commands</span>
+							<span>{t("Use @ to reference knowledge")}</span>
+							<span>{t("Use / for commands")}</span>
 						</div>
 					</div>
 				)}
@@ -649,7 +653,7 @@ export const ChatPane: React.FC = () => {
 				runtimeCaption={
 					isElectronRuntime()
 						? getProviderInfo(store.settings.provider).runtimeLabel
-						: "Electron runtime required for agent execution"
+						: t("Electron runtime required for agent execution")
 				}
 				onError={setSendError}
 				onSend={() => void handleSend()}

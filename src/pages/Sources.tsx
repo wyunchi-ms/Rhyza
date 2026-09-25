@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import type { SourceSearchHit } from "../shared/ipc";
 import { useAppStore } from "../store";
+import { useTranslation } from "../i18n";
 
 const Sources = () => {
+	const { t } = useTranslation();
 	const { sources, entities, relations, diagrams, upsertSources, setSourceStatus, archiveSource } =
 		useAppStore();
 	const [busy, setBusy] = useState(false);
@@ -128,8 +130,10 @@ const Sources = () => {
 		<div className="page-shell library-page sources-page">
 			<header className="page-header library-page-header">
 				<div>
-					<h1 className="page-title">Sources</h1>
-					<p className="page-subtitle">Indexed repositories and documentation directories.</p>
+					<h1 className="page-title">{t("Sources")}</h1>
+					<p className="page-subtitle">
+						{t("Indexed repositories and documentation directories.")}
+					</p>
 				</div>
 				<button
 					type="button"
@@ -138,13 +142,13 @@ const Sources = () => {
 					className="command-button"
 				>
 					{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
-					{busy ? "Adding sources…" : "Add sources"}
+					{busy ? t("Adding sources…") : t("Add sources")}
 				</button>
 			</header>
 			<form
 				className="sources-search"
 				role="search"
-				aria-label="Search indexed sources"
+				aria-label={t("Search indexed sources")}
 				onSubmit={(event) => {
 					event.preventDefault();
 					void search();
@@ -153,14 +157,14 @@ const Sources = () => {
 				<div className="sources-search-field">
 					<Search size={17} aria-hidden="true" />
 					<label htmlFor="sources-query" className="sr-only">
-						Search indexed source text
+						{t("Search indexed source text")}
 					</label>
 					<input
 						id="sources-query"
 						type="search"
 						value={query}
 						onChange={(event) => updateQuery(event.target.value)}
-						placeholder="Search indexed source text"
+						placeholder={t("Search indexed source text")}
 						className="field field-with-icon"
 					/>
 					{query && (
@@ -168,15 +172,15 @@ const Sources = () => {
 							type="button"
 							className="sources-search-clear"
 							onClick={() => updateQuery("")}
-							aria-label="Clear search"
-							title="Clear search"
+							aria-label={t("Clear search")}
+							title={t("Clear search")}
 						>
 							<X size={15} />
 						</button>
 					)}
 				</div>
 				<button type="submit" className="secondary-button" disabled={!query.trim() || searching}>
-					{searching ? "Searching…" : "Search"}
+					{searching ? t("Searching…") : t("Search")}
 				</button>
 			</form>
 			{error && (
@@ -197,7 +201,7 @@ const Sources = () => {
 						aria-busy={searching}
 					>
 						<div className="library-section-heading">
-							<h2 id="sources-results-title">Search results</h2>
+							<h2 id="sources-results-title">{t("Search results")}</h2>
 							<span role="status">
 								{searching
 									? "Searching…"
@@ -207,9 +211,11 @@ const Sources = () => {
 						{searchedQuery !== null && hits.length === 0 && (
 							<div className="sources-no-results">
 								<Search size={20} aria-hidden="true" />
-								<h3>No matching source text</h3>
+								<h3>{t("No matching source text")}</h3>
 								<p>
-									No results for “{searchedQuery}”. Try a different term or reindex your sources.
+									{t("No results for “")}
+									{searchedQuery}
+									{t(". Try a different term or reindex your sources.")}
 								</p>
 							</div>
 						)}
@@ -233,11 +239,12 @@ const Sources = () => {
 				>
 					<div className="library-section-heading">
 						<h2 id="sources-catalog-title">
-							Workspace sources <span className="library-count">{activeSources.length}</span>
+							{t("Workspace sources")} <span className="library-count">{activeSources.length}</span>
 						</h2>
 						{activeSources.length > 0 && (
 							<span>
-								{indexedCount} indexed{scanningCount > 0 ? ` · ${scanningCount} scanning` : ""}
+								{indexedCount} {t("indexed")}
+								{scanningCount > 0 ? ` · ${scanningCount} ${t("scanning")}` : ""}
 							</span>
 						)}
 					</div>
@@ -257,7 +264,7 @@ const Sources = () => {
 											{source.path}
 										</p>
 										<p className="source-metadata">
-											<span>{source.type === "repo" ? "Repository" : "Documentation"}</span>
+											<span>{source.type === "repo" ? t("Repository") : t("Documentation")}</span>
 											<span>
 												{source.fileCount} text {source.fileCount === 1 ? "file" : "files"}
 											</span>
@@ -322,11 +329,11 @@ const Sources = () => {
 							<span className="library-empty-icon" aria-hidden="true">
 								<FolderGit2 size={24} />
 							</span>
-							<h2>{loading ? "Loading sources…" : "No sources yet"}</h2>
+							<h2>{loading ? t("Loading sources…") : t("No sources yet")}</h2>
 							<p>
 								{loading
-									? "Reading the workspace index."
-									: "Add a repository or documentation folder to build the workspace index."}
+									? t("Reading the workspace index.")
+									: t("Add a repository or documentation folder to build the workspace index.")}
 							</p>
 						</div>
 					)}

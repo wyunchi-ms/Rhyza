@@ -23,9 +23,12 @@ import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "..
 import type { AuthBridgeEvent } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
 import { getProviderInfo, normalizeProviderId, providers } from "../shared/providers";
+import { useTranslation } from "../i18n";
+import { isLanguage, languageOptions } from "../i18n/language";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
+	const { t } = useTranslation();
 	const provider = getProviderInfo(settings.provider);
 	const electron = useElectronProviderState(provider.id);
 	const externalAuth = provider.externalAuth || electron.providerStatus?.externalAuth === true;
@@ -51,17 +54,47 @@ const Settings: React.FC = () => {
 	return (
 		<div className="settings-page page-scroll">
 			<div className="page-header">
-				<h1 className="page-title">Settings</h1>
-				<p className="page-subtitle">Configure providers, models, and workspace preferences.</p>
+				<h1 className="page-title">{t("Settings")}</h1>
+				<p className="page-subtitle">
+					{t("Configure providers, models, and workspace preferences.")}
+				</p>
 			</div>
 
 			<div className="settings-sections">
+				<section className="settings-section" aria-labelledby="language-heading">
+					<header className="settings-section-header">
+						<h2 id="language-heading">{t("Language")}</h2>
+						<p>{t("Choose the language used throughout Rhyza.")}</p>
+					</header>
+					<div className="settings-panel">
+						<div className="settings-row settings-row--field">
+							<label htmlFor="language-select" className="settings-label">
+								{t("Language")}
+							</label>
+							<select
+								id="language-select"
+								className="field settings-input"
+								value={settings.language}
+								onChange={(event) => {
+									const language = event.target.value;
+									if (isLanguage(language)) updateSettings({ language });
+								}}
+							>
+								{languageOptions.map((option) => (
+									<option key={option.code} value={option.code}>
+										{option.label}
+									</option>
+								))}
+							</select>
+						</div>
+					</div>
+				</section>
 				<section className="settings-section" aria-labelledby="plugins-heading">
 					<header className="settings-section-header">
 						<h2 id="plugins-heading">
-							<Package size={17} aria-hidden="true" /> Pi plugins
+							<Package size={17} aria-hidden="true" /> {t("Pi plugins")}
 						</h2>
-						<p>These plugins are supported only with GitHub Copilot through Pi.</p>
+						<p>{t("These plugins are supported only with GitHub Copilot through Pi.")}</p>
 					</header>
 					<PluginSettings />
 				</section>
@@ -69,12 +102,12 @@ const Settings: React.FC = () => {
 				<section className="settings-section" aria-labelledby="appearance-heading">
 					<header className="settings-section-header">
 						<h2 id="appearance-heading">
-							<Palette size={17} aria-hidden="true" /> Appearance
+							<Palette size={17} aria-hidden="true" /> {t("Appearance")}
 						</h2>
-						<p>Choose a comfortable environment for your workspace.</p>
+						<p>{t("Choose a comfortable environment for your workspace.")}</p>
 					</header>
 					<fieldset className="settings-panel theme-settings">
-						<legend className="sr-only">App theme</legend>
+						<legend className="sr-only">{t("App theme")}</legend>
 						<div className="theme-options">
 							<label className={clsx(settings.theme === "light" && "is-selected")}>
 								<input
@@ -86,8 +119,8 @@ const Settings: React.FC = () => {
 								/>
 								<Sun size={18} aria-hidden="true" />
 								<span>
-									<strong>Light</strong>
-									<small>Bright surfaces and dark text</small>
+									<strong>{t("Light")}</strong>
+									<small>{t("Bright surfaces and dark text")}</small>
 								</span>
 							</label>
 							<label className={clsx(settings.theme === "dark" && "is-selected")}>
@@ -100,13 +133,13 @@ const Settings: React.FC = () => {
 								/>
 								<Moon size={18} aria-hidden="true" />
 								<span>
-									<strong>Dark</strong>
-									<small>Dim surfaces for low-light use</small>
+									<strong>{t("Dark")}</strong>
+									<small>{t("Dim surfaces for low-light use")}</small>
 								</span>
 							</label>
 						</div>
 						<p className="settings-help settings-theme-note">
-							Interactive diagrams follow the app theme automatically.
+							{t("Interactive diagrams follow the app theme automatically.")}
 						</p>
 					</fieldset>
 				</section>
@@ -114,15 +147,15 @@ const Settings: React.FC = () => {
 				<section className="settings-section" aria-labelledby="provider-heading">
 					<header className="settings-section-header">
 						<h2 id="provider-heading">
-							<Cloud size={17} aria-hidden="true" /> AI provider
+							<Cloud size={17} aria-hidden="true" /> {t("AI provider")}
 						</h2>
-						<p>Manage your connection and the model used for new requests.</p>
+						<p>{t("Manage your connection and the model used for new requests.")}</p>
 					</header>
 					<div className="settings-panel">
 						<div className="settings-row settings-row--field">
 							<div className="settings-row-copy">
 								<label htmlFor="provider-select" className="settings-label">
-									Provider
+									{t("Provider")}
 								</label>
 								<p id="provider-help" className="settings-help">
 									Used for new messages, titles, and knowledge extraction. Changing provider resets
@@ -234,10 +267,10 @@ const Settings: React.FC = () => {
 							<div className="settings-row settings-row--field">
 								<div className="settings-row-copy">
 									<label htmlFor="model-select" className="settings-label">
-										Default model
+										{t("Default model")}
 									</label>
 									<p id="model-help" className="settings-help">
-										Use the provider default or choose an available model.
+										{t("Use the provider default or choose an available model.")}
 									</p>
 								</div>
 								<select
@@ -247,7 +280,7 @@ const Settings: React.FC = () => {
 									aria-describedby="model-help"
 									className="field settings-input"
 								>
-									<option value="">Use provider default</option>
+									<option value="">{t("Use provider default")}</option>
 									{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
 									{electron.models.map((model) => (
 										<option key={model.id} value={model.id}>
@@ -273,7 +306,7 @@ const Settings: React.FC = () => {
 									type="text"
 									value={selectedModel}
 									onChange={(event) => updateSettings({ defaultModel: event.target.value })}
-									placeholder="Leave blank for provider default"
+									placeholder={t("Leave blank for provider default")}
 									aria-describedby="custom-model-help"
 									className="field settings-input"
 								/>
@@ -285,18 +318,18 @@ const Settings: React.FC = () => {
 				<section className="settings-section" aria-labelledby="workspace-heading">
 					<header className="settings-section-header">
 						<h2 id="workspace-heading">
-							<Settings2 size={17} aria-hidden="true" /> Workspace
+							<Settings2 size={17} aria-hidden="true" /> {t("Workspace")}
 						</h2>
-						<p>Set the working folder and how sessions use it.</p>
+						<p>{t("Set the working folder and how sessions use it.")}</p>
 					</header>
 					<div className="settings-panel">
 						<div className="settings-row settings-workspace-folder">
 							<div className="settings-row-copy">
-								<h3>Workspace folder</h3>
+								<h3>{t("Workspace folder")}</h3>
 								<p className="settings-help settings-workspace-path">
 									{electron.isElectron
-										? (electron.workspace.path ?? "No workspace selected.")
-										: "Workspace selection requires the Electron desktop runtime."}
+										? (electron.workspace.path ?? t("No workspace selected."))
+										: t("Workspace selection requires the Electron desktop runtime.")}
 								</p>
 								{electron.workspaceError && (
 									<p role="alert" className="settings-error">
@@ -310,15 +343,15 @@ const Settings: React.FC = () => {
 								disabled={!electron.isElectron}
 								className="secondary-button"
 							>
-								Choose Folder
+								{t("Choose Folder")}
 							</button>
 						</div>
 
 						<div className="settings-row">
 							<div className="settings-row-copy">
-								<h3 id="auto-extract-label">Auto-extract knowledge</h3>
+								<h3 id="auto-extract-label">{t("Auto-extract knowledge")}</h3>
 								<p id="auto-extract-help" className="settings-help">
-									Automatically propose ChangeSets after turns.
+									{t("Automatically propose ChangeSets after turns.")}
 								</p>
 							</div>
 							<button
@@ -336,10 +369,12 @@ const Settings: React.FC = () => {
 
 						<div className="settings-row">
 							<div className="settings-row-copy">
-								<h3>Worktree isolation</h3>
-								<p className="settings-help">Run writable sessions in separate Git worktrees.</p>
+								<h3>{t("Worktree isolation")}</h3>
+								<p className="settings-help">
+									{t("Run writable sessions in separate Git worktrees.")}
+								</p>
 							</div>
-							<span className="settings-status">Required for Git</span>
+							<span className="settings-status">{t("Required for Git")}</span>
 						</div>
 					</div>
 				</section>
@@ -347,14 +382,14 @@ const Settings: React.FC = () => {
 				<section className="settings-section" aria-labelledby="knowledge-heading">
 					<header className="settings-section-header">
 						<h2 id="knowledge-heading">
-							<Brain size={17} aria-hidden="true" /> Knowledge policy
+							<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
 						</h2>
-						<p>Control knowledge updates and request behavior.</p>
+						<p>{t("Control knowledge updates and request behavior.")}</p>
 					</header>
 					<div className="settings-panel">
 						<div className="settings-row settings-row--field">
 							<label htmlFor="knowledge-mode" className="settings-label">
-								Write mode
+								{t("Write mode")}
 							</label>
 							<select
 								id="knowledge-mode"
@@ -366,18 +401,19 @@ const Settings: React.FC = () => {
 									})
 								}
 							>
-								<option value="suggest">Suggest changes</option>
-								<option value="automatic">Automatic</option>
-								<option value="hybrid">Hybrid</option>
-								<option value="read_only">Read only</option>
+								<option value="suggest">{t("Suggest changes")}</option>
+								<option value="automatic">{t("Automatic")}</option>
+								<option value="hybrid">{t("Hybrid")}</option>
+								<option value="read_only">{t("Read only")}</option>
 							</select>
 						</div>
 						<div className="settings-row">
 							<div className="settings-row-copy">
-								<h3 id="knowledge-tools-label">Knowledge tools in chat</h3>
+								<h3 id="knowledge-tools-label">{t("Knowledge tools in chat")}</h3>
 								<p id="knowledge-tools-help" className="settings-help">
-									Let the main agent query the knowledge base when needed. The end-of-turn organizer
-									always has access.
+									{t(
+										"Let the main agent query the knowledge base when needed. The end-of-turn organizer always has access.",
+									)}
 								</p>
 							</div>
 							<button
@@ -394,7 +430,7 @@ const Settings: React.FC = () => {
 						</div>
 						<div className="settings-row settings-row--field">
 							<label htmlFor="thinking-level" className="settings-label">
-								Thinking level
+								{t("Thinking level")}
 							</label>
 							<select
 								id="thinking-level"
@@ -406,19 +442,19 @@ const Settings: React.FC = () => {
 									})
 								}
 							>
-								<option value="off">Off</option>
-								<option value="low">Low</option>
-								<option value="medium">Medium</option>
-								<option value="high">High</option>
+								<option value="off">{t("Off")}</option>
+								<option value="low">{t("Low")}</option>
+								<option value="medium">{t("Medium")}</option>
+								<option value="high">{t("High")}</option>
 							</select>
 						</div>
 						<div className="settings-row settings-row--field">
 							<div className="settings-row-copy">
 								<label htmlFor="concurrent-questions" className="settings-label">
-									Concurrent questions (1–10)
+									{t("Concurrent questions (1–10)")}
 								</label>
 								<p id="concurrent-questions-help" className="settings-help">
-									Default: 5. Requests in the same conversation stay ordered.
+									{t("Default: 5. Requests in the same conversation stay ordered.")}
 								</p>
 							</div>
 							<input
@@ -436,7 +472,7 @@ const Settings: React.FC = () => {
 						</div>
 						<div className="settings-row settings-row--field">
 							<label htmlFor="confidence-threshold" className="settings-label">
-								Confidence threshold
+								{t("Confidence threshold")}
 							</label>
 							<div className="settings-range-control">
 								<input
@@ -462,18 +498,18 @@ const Settings: React.FC = () => {
 				<section className="settings-section" aria-labelledby="accessibility-heading">
 					<header className="settings-section-header">
 						<h2 id="accessibility-heading">
-							<Accessibility size={17} aria-hidden="true" /> Accessibility
+							<Accessibility size={17} aria-hidden="true" /> {t("Accessibility")}
 						</h2>
-						<p>Adjust motion, contrast, and text size to suit you.</p>
+						<p>{t("Adjust motion, contrast, and text size to suit you.")}</p>
 					</header>
 					<div className="settings-panel">
 						<div className="settings-row">
 							<div className="settings-row-copy">
 								<label htmlFor="reduce-motion" className="settings-label">
-									Reduce motion
+									{t("Reduce motion")}
 								</label>
 								<p id="reduce-motion-help" className="settings-help">
-									Limit animations and animated transitions.
+									{t("Limit animations and animated transitions.")}
 								</p>
 							</div>
 							<input
@@ -489,10 +525,10 @@ const Settings: React.FC = () => {
 						<div className="settings-row">
 							<div className="settings-row-copy">
 								<label htmlFor="high-contrast" className="settings-label">
-									High contrast
+									{t("High contrast")}
 								</label>
 								<p id="high-contrast-help" className="settings-help">
-									Increase contrast for text and interface borders.
+									{t("Increase contrast for text and interface borders.")}
 								</p>
 							</div>
 							<input
@@ -507,7 +543,7 @@ const Settings: React.FC = () => {
 						</div>
 						<div className="settings-row settings-row--field">
 							<label htmlFor="font-scale" className="settings-label">
-								Font scale
+								{t("Font scale")}
 							</label>
 							<div className="settings-range-control">
 								<input
@@ -533,6 +569,7 @@ const Settings: React.FC = () => {
 };
 
 function PluginSettings() {
+	const { t } = useTranslation();
 	const bridge = getRhyzaBridge();
 	const [plugins, setPlugins] = useState<PiPluginInfo[]>([]);
 	const [source, setSource] = useState("");
@@ -611,8 +648,9 @@ function PluginSettings() {
 			<div className="pi-plugin-warning" role="note">
 				<ShieldAlert size={17} aria-hidden="true" />
 				<p>
-					Pi packages may execute code with full access to your computer. Install only packages
-					whose source you trust.
+					{t(
+						"Pi packages may execute code with full access to your computer. Install only packages whose source you trust.",
+					)}
 				</p>
 			</div>
 			<form
@@ -622,7 +660,7 @@ function PluginSettings() {
 					void install();
 				}}
 			>
-				<label htmlFor="pi-plugin-source">Package source</label>
+				<label htmlFor="pi-plugin-source">{t("Package source")}</label>
 				<div className="pi-plugin-source-row">
 					<input
 						id="pi-plugin-source"
@@ -645,11 +683,11 @@ function PluginSettings() {
 						) : (
 							<Package size={14} aria-hidden="true" />
 						)}
-						Install
+						{t("Install")}
 					</button>
 				</div>
 				<p id="pi-plugin-source-help">
-					Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.
+					{t("Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.")}
 				</p>
 				<button
 					type="button"
@@ -657,12 +695,12 @@ function PluginSettings() {
 					disabled={!bridge || busySource !== null}
 					onClick={() => void installLocal()}
 				>
-					<Package size={14} aria-hidden="true" /> Install from local folder…
+					<Package size={14} aria-hidden="true" /> {t("Install from local folder…")}
 				</button>
 			</form>
 			<div className="pi-plugin-list-header">
 				<h3 id="installed-packages-heading">
-					Installed packages {bridge && hasLoadedPlugins && <span>{plugins.length}</span>}
+					{t("Installed packages")} {bridge && hasLoadedPlugins && <span>{plugins.length}</span>}
 				</h3>
 				<button
 					type="button"
@@ -674,7 +712,7 @@ function PluginSettings() {
 					}
 					disabled={!bridge}
 				>
-					<ExternalLink size={14} aria-hidden="true" /> Browse packages
+					<ExternalLink size={14} aria-hidden="true" /> {t("Browse packages")}
 				</button>
 			</div>
 			{error && (
@@ -683,7 +721,9 @@ function PluginSettings() {
 				</p>
 			)}
 			{!bridge ? (
-				<p className="pi-plugin-empty">Package management requires the Electron desktop runtime.</p>
+				<p className="pi-plugin-empty">
+					{t("Package management requires the Electron desktop runtime.")}
+				</p>
 			) : busySource === "list" ? (
 				<p className="pi-plugin-empty" role="status">
 					<LoaderCircle className="pi-plugin-spinner" size={15} aria-hidden="true" /> Loading

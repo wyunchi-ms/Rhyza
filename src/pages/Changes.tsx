@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { KnowledgeChangeHistory } from "../components/KnowledgeChangeHistory";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { useAppStore } from "../store";
+import { useTranslation } from "../i18n";
 
 const Changes = () => {
+	const { t } = useTranslation();
 	const { activeSessionId, changesets } = useAppStore();
 	const [codeDiff, setCodeDiff] = useState<string | null>(null);
 	const [tab, setTab] = useState<"knowledge" | "code">("knowledge");
@@ -79,15 +81,15 @@ const Changes = () => {
 			<main className="page-shell">
 				<header className="page-header library-page-header">
 					<div>
-						<h1 className="page-title">Changes</h1>
+						<h1 className="page-title">{t("Changes")}</h1>
 						<p className="page-subtitle">
-							Audited knowledge transactions and session code changes.
+							{t("Audited knowledge transactions and session code changes.")}
 						</p>
 					</div>
 					<div
 						className="segmented changes-tabs"
 						role="tablist"
-						aria-label="Change type"
+						aria-label={t("Change type")}
 						onKeyDown={(event) => {
 							if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 							event.preventDefault();
@@ -115,7 +117,7 @@ const Changes = () => {
 							className={tab === "knowledge" ? "active" : ""}
 							onClick={() => setTab("knowledge")}
 						>
-							Knowledge <span className="library-count">{changesets.length}</span>
+							{t("Knowledge")} <span className="library-count">{changesets.length}</span>
 						</button>
 						<button
 							type="button"
@@ -127,7 +129,7 @@ const Changes = () => {
 							className={tab === "code" ? "active" : ""}
 							onClick={() => setTab("code")}
 						>
-							Code
+							{t("Code")}
 						</button>
 					</div>
 				</header>
@@ -139,10 +141,10 @@ const Changes = () => {
 						aria-labelledby="changes-knowledge-tab"
 					>
 						<div className="library-section-heading">
-							<h2>Knowledge history</h2>
+							<h2>{t("Knowledge history")}</h2>
 							<span>
-								{changesets.length} recorded
-								{proposedCount > 0 ? ` · ${proposedCount} awaiting review` : ""}
+								{changesets.length} {t("recorded")}
+								{proposedCount > 0 ? ` · ${proposedCount} ${t("awaiting review")}` : ""}
 							</span>
 						</div>
 						{changesets.length > 0 ? (
@@ -152,8 +154,8 @@ const Changes = () => {
 								<span className="library-empty-icon" aria-hidden="true">
 									<History size={24} />
 								</span>
-								<h2>No knowledge changes yet</h2>
-								<p>Knowledge updates from your sessions will appear here for review.</p>
+								<h2>{t("No knowledge changes yet")}</h2>
+								<p>{t("Knowledge updates from your sessions will appear here for review.")}</p>
 							</div>
 						)}
 					</section>
@@ -167,15 +169,15 @@ const Changes = () => {
 					>
 						<div className="changes-code-toolbar">
 							<div className="changes-workspace">
-								<h2>{workspace?.isolated ? "Isolated worktree" : "Session workspace"}</h2>
+								<h2>{workspace?.isolated ? t("Isolated worktree") : t("Session workspace")}</h2>
 								{workspace && <p title={workspace.path}>{workspace.path}</p>}
 							</div>
 							<div className="changes-code-actions">
 								<button
 									type="button"
 									className="icon-button"
-									title="Refresh code diff"
-									aria-label="Refresh code diff"
+									title={t("Refresh code diff")}
+									aria-label={t("Refresh code diff")}
 									onClick={() => setRefreshKey((key) => key + 1)}
 									disabled={!activeSessionId || !getRhyzaBridge() || diffLoading}
 								>
@@ -187,7 +189,7 @@ const Changes = () => {
 									className="secondary-button"
 									disabled={!workspace || diffLoading || exporting}
 								>
-									<Download size={14} /> {exporting ? "Exporting…" : "Export patch"}
+									<Download size={14} /> {exporting ? t("Exporting…") : t("Export patch")}
 								</button>
 							</div>
 						</div>
@@ -206,7 +208,7 @@ const Changes = () => {
 						) : diffLoading ? (
 							<div className="empty-state changes-code-empty" role="status">
 								<RefreshCw size={23} className="animate-spin" aria-hidden="true" />
-								<h2>Loading code changes…</h2>
+								<h2>{t("Loading code changes…")}</h2>
 							</div>
 						) : codeDiff ? (
 							<pre className="changes-code-diff" tabIndex={0} aria-label="Session code diff">
@@ -217,11 +219,11 @@ const Changes = () => {
 								<span className="library-empty-icon" aria-hidden="true">
 									<FileDiff size={24} />
 								</span>
-								<h2>{workspace ? "No code changes" : "No session diff"}</h2>
+								<h2>{workspace ? t("No code changes") : t("No session diff")}</h2>
 								<p>
 									{workspace
-										? "There are no uncommitted changes in this workspace."
-										: "Open and run a session before viewing its worktree diff."}
+										? t("There are no uncommitted changes in this workspace.")
+										: t("Open and run a session before viewing its worktree diff.")}
 								</p>
 							</div>
 						)}

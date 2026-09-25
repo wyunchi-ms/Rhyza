@@ -35,6 +35,7 @@ import type {
 	ProviderId,
 } from "../../shared/ipc";
 import type { Diagram, Entity } from "../../types";
+import { useTranslation } from "../../i18n";
 import {
 	composeInput,
 	stripReferences,
@@ -105,6 +106,7 @@ export function ChatComposer({
 	onError: (error: string | null) => void;
 	onSend: () => void;
 }) {
+	const { t } = useTranslation();
 	const renderStartedAt = performance.now();
 	// Keystrokes stay in this subtree; sending reads a committed snapshot once.
 	const [input, onInputChange] = useState("");
@@ -458,7 +460,7 @@ export function ChatComposer({
 							className="composer-mention-scroll"
 							id={menuId}
 							role="listbox"
-							aria-label={mention.kind === "mention" ? "References" : "Commands"}
+							aria-label={mention.kind === "mention" ? t("References") : t("Commands")}
 						>
 							{mentionItems.map((item, index) => (
 								<div key={item.id} role="presentation">
@@ -494,28 +496,31 @@ export function ChatComposer({
 							))}
 							{mentionItems.length === 0 && (
 								<div className="composer-mention-empty">
-									No results for “{mention.query}”. Try another name.
+									{t("No results for “")}
+									{mention.query}
+									{t("”. Try another name.")}
 								</div>
 							)}
 							{skillsLoading && !mention.page && (
 								<div className="composer-mention-empty" role="status">
-									Loading skills…
+									{t("Loading skills…")}
 								</div>
 							)}
 							{skillsError && !mention.page && (
 								<div className="composer-mention-empty" role="status">
-									Skills unavailable: {skillsError}
+									{t("Skills unavailable: ")}
+									{skillsError}
 								</div>
 							)}
 							{mention.page === "model" && (modelsLoading || modelError) && (
 								<div className="composer-mention-empty" role="status">
-									{modelError || "Loading models…"}
+									{modelError || t("Loading models…")}
 								</div>
 							)}
 						</div>
 						<div className="composer-mention-footer">
-							<span>↑ ↓ Navigate · Enter / Tab Select</span>
-							<span>Esc {mention.page ? "Back" : "Close"}</span>
+							<span>{t("↑ ↓ Navigate · Enter / Tab Select")}</span>
+							<span>Esc {mention.page ? t("Back") : t("Close")}</span>
 						</div>
 					</div>
 				)}
@@ -552,11 +557,11 @@ export function ChatComposer({
 							))}
 							{images.map((image) => (
 								<div key={image.id} className="composer-attachment">
-									<img src={image.preview} alt="Attached preview" />
+									<img src={image.preview} alt={t("Attached preview")} />
 									<button
 										type="button"
-										title="Remove image"
-										aria-label="Remove image"
+										title={t("Remove image")}
+										aria-label={t("Remove image")}
 										onClick={() => onImagesChange(images.filter((item) => item.id !== image.id))}
 									>
 										<X size={12} />
@@ -572,10 +577,10 @@ export function ChatComposer({
 								className="composer-input"
 								placeholder={
 									images.length
-										? "Add a question about the image"
-										: "Message Rhyza — @ to reference, / for commands"
+										? t("Add a question about the image")
+										: t("Message Rhyza — @ to reference, / for commands")
 								}
-								aria-label="Message Rhyza"
+								aria-label={t("Message Rhyza")}
 								aria-autocomplete="list"
 								aria-haspopup="listbox"
 								aria-expanded={mention !== null}
@@ -682,8 +687,8 @@ export function ChatComposer({
 						</div>
 						<button
 							type="button"
-							title="Attach image"
-							aria-label="Attach image"
+							title={t("Attach image")}
+							aria-label={t("Attach image")}
 							onClick={() => imageInputRef.current?.click()}
 							className="composer-attach"
 						>
@@ -702,8 +707,8 @@ export function ChatComposer({
 						/>
 						<button
 							type="button"
-							title={isSending ? "Queue message" : "Send"}
-							aria-label={isSending ? "Queue message" : "Send"}
+							title={isSending ? t("Queue message") : t("Send")}
+							aria-label={isSending ? t("Queue message") : t("Send")}
 							onClick={send}
 							disabled={!draft.trim() && references.length === 0 && images.length === 0}
 							className="composer-send"
