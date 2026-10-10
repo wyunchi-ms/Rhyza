@@ -10,7 +10,7 @@
 - React 19、React Router、Zustand
 - TypeScript 7
 - Vite 8、Tailwind CSS 4
-- Pi SDK (`@earendil-works/pi-*`)
+- Pi SDK 1.0.0 (`@earendil-works/pi-*`)
 - Mermaid、React Flow
 - Node test runner + `tsx`
 
@@ -23,7 +23,7 @@ npm ci
 npm run electron:dev
 ```
 
-使用 Node.js `22.12+`（也支持 `20.19+`）。`npm ci` 会安装 Electron、Pi SDK、Codex SDK 和前端依赖，并运行 `postinstall` 修补 Pi cache metadata。Claude Code CLI 需单独安装；使用 Azure OpenAI 时还需单独安装 Azure CLI，并按[使用指南](user-guide.md#22-连接-ai-provider)完成登录与资源配置。
+使用 Node.js `22.19+`。`npm ci` 会安装 Electron、Pi SDK、Codex SDK 和前端依赖。缓存 TTL 通过 Pi 1.0 的官方 `onProviderStreamEvent` 钩子读取，不再在安装或编译期间修改 SDK 文件。Claude Code CLI 需单独安装；使用 Azure OpenAI 时还需单独安装 Azure CLI，并按[使用指南](user-guide.md#22-连接-ai-provider)完成登录与资源配置。
 
 开发服务固定使用 `127.0.0.1:5175` 和 `strictPort`。Main Process 会等待该地址可访问后加载 Renderer；Electron 使用 single-instance lock。
 
@@ -97,6 +97,10 @@ Azure OpenAI 使用 `azure-openai` Provider ID 和外部认证。Renderer 通过
 Azure 默认模型来自保存的 deployment，不提供任意别名或自动能力发现。Context budget / Response token limit 默认 32768 / 4096，可配置为安全整数，范围分别为 1024–2000000 / 16–200000，且 response 不超过 context。它们是本地操作限制，不是模型能力声明。仅接受公共云 HTTPS Azure resource origin（`*.openai.azure.com` 或 `*.cognitiveservices.azure.com`，可带 `/openai/v1/`），通过 v1 Responses-compatible deployment 支持流式文本与工具，不声明图片或 reasoning 支持。聊天、标题与知识提取走同一 Provider 选择；凭据不得进入 Renderer 或持久化配置，Azure 用量与 Copilot 单独计费。
 
 Pi 插件的设置入口面向 GitHub Copilot。Codex 和 Azure OpenAI 当前复用 Pi 的会话创建路径，但不应据此承诺与 Copilot 相同的插件工具行为；Claude Code 不加载 Pi 插件。修改 Provider 路由时需同步核对 UI 文案与功能文档。
+
+Pi 1.0 的 Provider 收到规范化的 `TranscriptContext`；系统提示词与工具声明保存在 system messages 中，适配器使用 `getCurrentSystemPrompt()` / `getCurrentTools()` 读取。模型请求快照同时保留完整 transcript 和解析后的当前提示词、工具，兼容现有诊断界面。
+
+本次升级不自动加载 MCP、Codemode 或 Tool Search，不启用 PowerShell、路由、分类或出图。主聊天、标题生成和知识提取都将会话 settings 的 `getCacheWarmingMode()` 固定返回 `"off"`，因为 SDK 的保活读取只看全局设置、不接受 `applyOverrides`。该宿主策略跨 reload 保持关闭，不改用户的 Pi 全局设置。后续接入与费用统计的 TODO 见 [Pi SDK 待办](TODO-pi-sdk.md)。
 
 ### Sources
 

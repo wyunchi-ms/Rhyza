@@ -11,7 +11,7 @@
 ### 环境要求
 
 - Windows 10/11
-- Node.js `22.12+`；也支持 `20.19+`
+- Node.js `22.19+`
 - npm
 - Git 2.x
 - 可访问所选 AI Provider 和 npm registry 的网络
