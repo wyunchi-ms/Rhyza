@@ -22,6 +22,7 @@
 - `performance-diagnostics.md`：输入延迟采样、性能日志和诊断结果解释。
 - `product-memory-and-design-principles.md`：长期产品语义和设计约束，不替代用户手册。
 - `html-previews.md`：通用 HTML Preview 技术契约。
+- `TODO-pi-sdk.md`：Pi SDK 1.0 后续能力接入的待办与验收边界。
 - `images/README.md`：媒体文件命名、拍摄脚本和隐私要求。
 
 ## 维护约定

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Context } from "@earendil-works/pi-ai";
+import { normalizeContext, type Context } from "@earendil-works/pi-ai";
 import { contextToInput } from "../electron/main/codex-app-server.js";
 
 const context = {
@@ -35,4 +35,11 @@ test("fresh Codex threads receive history while reused threads receive only the 
 	assert.match(String(fresh), /first/);
 	assert.match(String(fresh), /second/);
 	assert.equal(reused, "second");
+});
+
+test("normalized system messages are not misrepresented as tool results in Codex history", () => {
+	const input = contextToInput(normalizeContext(context), true)[0]?.text;
+	assert.match(String(input), /first/);
+	assert.match(String(input), /answer/);
+	assert.doesNotMatch(String(input), /System|tool_result name="undefined"/);
 });

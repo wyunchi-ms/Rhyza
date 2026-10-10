@@ -1,6 +1,29 @@
 import type { AgentCacheEvidence } from "./ipc.js";
 import { isRecord } from "./value.js";
 
+export function providerStreamCacheEvidence(
+	event: unknown,
+	api: string,
+): AgentCacheEvidence | undefined {
+	if (
+		!isRecord(event) ||
+		!["response.completed", "response.incomplete"].includes(String(event.type)) ||
+		!isRecord(event.response) ||
+		!isRecord(event.response.prompt_cache_options)
+	) {
+		return;
+	}
+	return responseCacheEvidence({
+		role: "assistant",
+		api,
+		rhyzaPromptCache: {
+			ttl: event.response.prompt_cache_options.ttl,
+			mode: event.response.prompt_cache_options.mode,
+			createdAt: event.response.created_at,
+		},
+	});
+}
+
 export function responseCacheEvidence(message: unknown): AgentCacheEvidence | undefined {
 	if (!isRecord(message) || message.role !== "assistant") return;
 	if (

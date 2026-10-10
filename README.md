@@ -41,7 +41,7 @@ Rhyza 是一个本地优先的 AI 桌面工作台，适合阅读代码、研究�
 
 ### 1. 安装并启动
 
-准备 **Windows 10/11、Node.js 22.12+、npm 和 Git 2.x**，以及一个可用的 AI Provider 账号。项目也支持 Node.js 20.19+；需要能访问 npm、Electron 下载地址和所选模型服务。
+准备 **Windows 10/11、Node.js 22.19+、npm 和 Git 2.x**，以及一个可用的 AI Provider 账号。需要能访问 npm、Electron 下载地址和所选模型服务。
 
 ```powershell
 git clone https://github.com/wyunchi-ms/Rhyza.git
