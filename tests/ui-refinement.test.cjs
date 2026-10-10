@@ -134,7 +134,7 @@ if (!process.versions.electron) {
 			const sidebar = document.querySelector(".app-sidebar");
 			const sidebarRect = sidebar.getBoundingClientRect();
 			const clippedSidebarControls = sidebar.inert ? [] : [...sidebar.querySelectorAll(
-				".session-tree-header button, .sidebar-header-navigation a"
+				".session-tree-header button, .app-sidebar-footer .sidebar-nav-icon"
 			)].filter(element => {
 				const rect = element.getBoundingClientRect();
 				return rect.width > 0 && (rect.left < sidebarRect.left || rect.right > sidebarRect.right);
@@ -288,16 +288,41 @@ if (!process.versions.electron) {
 				.map(element => element.matches('[aria-label="Close sidebar"]')
 					? "toggle"
 					: element.className)`),
-			["toggle", "sidebar-header-actions"],
-			"sidebar toggle stays at the top-left before the navigation actions",
+			["toggle"],
+			"browser sidebar retains its toggle without the old header navigation",
 		);
 		assert.equal(
-			await host(
-				'document.querySelectorAll(".sidebar-header-actions .sidebar-header-navigation a").length',
-			),
-			4,
-			"search and the four icon-only destinations share one titlebar row",
+			await host('document.querySelectorAll(".app-sidebar-footer .sidebar-nav-icon").length'),
+			3,
+			"three destinations occupy the bottom-left navigation without a search button",
 		);
+		assert.equal(
+			await host('Boolean(document.querySelector(".app-sidebar-footer a[href=\\"#/changes\\"]"))'),
+			false,
+			"the changes shortcut is absent",
+		);
+		await host(
+			'document.querySelector(".app-sidebar-brand [aria-label=\\"Close sidebar\\"]").click()',
+		);
+		await until('document.querySelector(".app-sidebar").inert', "sidebar collapsed");
+		assert.equal(
+			await host('document.querySelectorAll(".app-sidebar-footer a:not([inert])").length'),
+			3,
+			"bottom navigation remains available after collapsing the sidebar",
+		);
+		assert.equal(
+			await host(`(() => {
+				const footer = document.querySelector(".app-sidebar-footer");
+				const rect = footer.getBoundingClientRect();
+				footer.querySelector("a").focus();
+				return rect.left === 0 && rect.width >= 90 && rect.bottom === innerHeight &&
+					document.activeElement === footer.querySelector("a");
+			})()`),
+			true,
+			"collapsed sidebar leaves a visible, keyboard-accessible bottom-left navigation",
+		);
+		await host('document.querySelector(".sidebar-reopen").click()');
+		await until('!document.querySelector(".app-sidebar").inert', "sidebar reopened");
 		assert.equal(
 			await host('document.querySelectorAll(".assistant-body .markdown-body li").length'),
 			3,
@@ -381,9 +406,7 @@ if (!process.versions.electron) {
 		assert.equal(await host('document.querySelector(".app-sidebar").inert'), true);
 		await host('document.querySelector(".sidebar-reopen").click()');
 		await until('!document.querySelector(".app-sidebar").inert', "compact sidebar opening");
-		await host(
-			'document.querySelector(".sidebar-header-navigation a[href=\\"#/sources\\"]").click()',
-		);
+		await host('document.querySelector(".app-sidebar-footer a[href=\\"#/sources\\"]").click()');
 		await until(
 			'document.querySelector(".app-sidebar").inert',
 			"navigation closes compact sidebar",
@@ -395,12 +418,11 @@ if (!process.versions.electron) {
 			'window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))',
 		);
 		await until('document.querySelector(".app-sidebar").inert', "sidebar Escape dismissal");
-		await host('document.querySelector(".skip-to-content").click()');
-		assert.equal(await host("document.activeElement.id"), "main-content");
+		assert.equal(await host('Boolean(document.querySelector(".skip-to-content"))'), false);
 		assert.equal(
 			await host("location.hash"),
 			"#/sources",
-			"skip link must not change HashRouter route",
+			"removing the skip link must not change the HashRouter route",
 		);
 	}
 
@@ -777,6 +799,7 @@ if (!process.versions.electron) {
 		await host(
 			'import("/src/store/index.ts").then(module => { window.uiStore = module.useAppStore; })',
 		);
+		await host('window.uiStore.getState().updateSettings({ language: "en" })');
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
 			for (const [route, heading] of routes) {

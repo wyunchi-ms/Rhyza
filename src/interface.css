@@ -1,4 +1,59 @@
 /* Shared product surfaces; page-specific layouts stay with their routes. */
+.app-frame {
+	display: flex;
+	height: 100dvh;
+	min-height: 0;
+	flex-direction: column;
+}
+
+.app-frame > .app-shell {
+	position: relative;
+	height: auto;
+	min-height: 0;
+	flex: 1;
+}
+
+.app-titlebar {
+	display: flex;
+	height: 32px;
+	flex: 0 0 32px;
+	align-items: center;
+	gap: 5px;
+	border-bottom: 1px solid #343639;
+	background: #242527;
+	padding: 0 140px 0 10px;
+	color: #d7dce2;
+	-webkit-app-region: drag;
+}
+
+.app-titlebar > img {
+	flex: 0 0 auto;
+	pointer-events: none;
+}
+
+.app-titlebar button {
+	display: grid;
+	width: 27px;
+	height: 26px;
+	flex: 0 0 auto;
+	place-items: center;
+	border-radius: 5px;
+	color: #aeb5bd;
+	-webkit-app-region: no-drag;
+}
+
+.app-titlebar button:hover,
+.app-titlebar button:focus-visible {
+	background: #383a3e;
+	color: #fff;
+}
+
+.app-titlebar [role="alert"] {
+	margin-left: 8px;
+	color: #ffc9c9;
+	font-size: 11px;
+}
+
 html[data-theme] :is(.app-shell, .app-main, .page-shell, .page-scroll, .knowledge-page) {
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -40,23 +95,6 @@ input[type="radio"] {
 	accent-color: var(--ui-brand-accent);
 }
 
-.skip-to-content {
-	position: fixed;
-	z-index: 1300;
-	top: 0.75rem;
-	left: 0.75rem;
-	transform: translateY(-180%);
-	border-radius: 8px;
-	background: var(--ui-action);
-	padding: 0.65rem 1rem;
-	color: var(--ui-on-action);
-	font-size: 0.875rem;
-}
-
-.skip-to-content:focus {
-	transform: translateY(0);
-}
-
 .app-main:focus {
 	outline: none;
 }
@@ -65,21 +103,6 @@ input[type="radio"] {
 	justify-content: space-between;
 	gap: 0.125rem;
 	padding-inline: 0.625rem;
-}
-
-.sidebar-header-actions {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 0.125rem;
-}
-
-.sidebar-header-navigation {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 0.125rem;
-	margin: 0;
 }
 
 html[data-theme] .sidebar-nav-icon {
@@ -100,6 +123,30 @@ html[data-theme] .sidebar-nav-icon {
 .app-sidebar-brand .sidebar-icon-button {
 	width: 1.75rem;
 	height: 1.75rem;
+}
+
+.app-sidebar-footer {
+	position: absolute;
+	z-index: 71;
+	bottom: 0;
+	left: 0;
+	display: flex;
+	height: 36px;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 3px;
+	border-top: 1px solid var(--ui-border);
+	background: var(--ui-surface-muted);
+	padding: 0 7px;
+}
+
+html[data-theme] .app-sidebar {
+	padding-bottom: 36px;
+}
+
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon {
+	width: 26px;
+	height: 26px;
 }
 
 html[data-theme] .sidebar-nav-icon.is-active {

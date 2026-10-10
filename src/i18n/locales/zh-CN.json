@@ -1,5 +1,10 @@
 {
 	"Select nodes": "选择节点",
+	"Merge paths": "合并路径",
+	"Summary instructions (optional)": "汇总提示词（可选）",
+	"What should the summary focus on?": "希望汇总重点关注什么？",
+	"Source paths": "来源路径",
+	"Wait for the summary to finish before continuing.": "请等待汇总完成后再继续对话。",
 	"selected": "已选",
 	"Summary": "汇总",
 	"Cancel": "取消",
@@ -21,7 +26,6 @@
 	"Summarize from the root to this node": "汇总从根节点到此节点的路径",
 	"Toggle selection": "切换选择",
 	"selected rounds": "个已选轮次",
-	"Skip to content": "跳转到正文",
 	"Workspace sidebar": "工作区侧边栏",
 	"Close sidebar": "关闭侧边栏",
 	"Search chats (Ctrl+Shift+F)": "搜索对话（Ctrl+Shift+F）",

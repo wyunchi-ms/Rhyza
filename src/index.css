@@ -549,13 +549,6 @@ body {
 		transform: translateY(0) scale(1);
 	}
 }
-.sidebar-header-navigation {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 2px;
-	margin-left: auto;
-}
 .sidebar-nav-icon {
 	display: grid;
 	width: 30px;

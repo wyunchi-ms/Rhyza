@@ -78,7 +78,7 @@ export function SessionNodeContextMenu({
 		const graph = projectConversationGraph(state.sessions, state.turns);
 		const endpoint =
 			roundId ?? (turnId ? graph.roundByTurnId.get(turnId) : graph.paths.get(nodeId)?.slice(-1)[0]);
-		void selection.summarize(endpoint ? [endpoint] : []);
+		selection.begin(endpoint ? [endpoint] : []);
 	};
 	return (
 		<SessionContextMenu

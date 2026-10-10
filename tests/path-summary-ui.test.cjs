@@ -65,6 +65,30 @@ if (!process.versions.electron) {
 			"new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
 		);
 	};
+	const pointerClick = async (selector) => {
+		const point = await host(`(() => {
+			const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+			return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+		})()`);
+		browser.webContents.sendInputEvent({ type: "mouseMove", ...point });
+		await sleep(30);
+		browser.webContents.sendInputEvent({
+			type: "mouseDown",
+			button: "left",
+			clickCount: 1,
+			...point,
+		});
+		await sleep(30);
+		browser.webContents.sendInputEvent({
+			type: "mouseUp",
+			button: "left",
+			clickCount: 1,
+			...point,
+		});
+		await host(
+			"new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+		);
+	};
 	const activeView = ".sidebar-view-content:not([hidden])";
 	const listRow = (id) =>
 		`${activeView} [data-session-tree-id="${id}"] > .relative .session-tree-select`;
@@ -119,10 +143,7 @@ if (!process.versions.electron) {
 		});
 		const url = `http://127.0.0.1:${server.httpServer.address().port}/`;
 		await browser.loadURL(url);
-		await until(
-			'Boolean(document.querySelector(".path-summary-select-button"))',
-			"summary selection entry",
-		);
+		await until('Boolean(document.querySelector(".path-summary-mode-button"))', "merge mode entry");
 		await host(
 			'import("/src/store/index.ts").then(module => { window.uiStore = module.useAppStore; })',
 		);
@@ -171,6 +192,7 @@ if (!process.versions.electron) {
 			window.rhyza = {
 				isElectron: true,
 				onAgentEvent: () => () => {},
+				modelCatalog: () => Promise.resolve({ models: [] }),
 				appStateLoad: () => localStorage.getItem("rhyza-workspace-v2"),
 				onPathSummaryEvent: listener => { window.summaryListeners.add(listener); return () => window.summaryListeners.delete(listener); },
 				generatePathSummary: request => {
@@ -183,10 +205,24 @@ if (!process.versions.electron) {
 				},
 				cancelAuxiliaryRequest: () => { window.summaryResolve?.({ canceled: true, error: "Canceled", usage: { input: 10, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.005 } }); return Promise.resolve({ canceled: true }); }
 			}; void 0;`);
-		await click(".path-summary-select-button");
+		assert.equal(await host('Boolean(document.querySelector(".path-summary-toolbar"))'), false);
+		await click(`${activeView} .path-summary-mode-button`);
 		assert.equal(await host('document.querySelector(".path-summary-generate").disabled'), true);
 		await click(listRow("u2"));
 		await click(listRow("r2"));
+		assert.equal(
+			await host(
+				`document.querySelector(${JSON.stringify(listRow("u2"))}).getAttribute("aria-pressed")`,
+			),
+			"true",
+		);
+		assert.equal(
+			await host(
+				'document.querySelectorAll(".summary-selection-checkbox, .summary-selection-count").length',
+			),
+			0,
+			"list selection uses highlighting only",
+		);
 		assert.equal(
 			await host('document.querySelectorAll(".session-node-button.is-summary-selected").length'),
 			2,
@@ -213,10 +249,26 @@ if (!process.versions.electron) {
 			),
 			"true",
 		);
+		await sleep(420);
+		await pointerClick(graphNode("u1"));
+		assert.equal(
+			await host(
+				`document.querySelector(${JSON.stringify(graphNode("u1"))}).getAttribute("aria-pressed")`,
+			),
+			"true",
+			"physical click selects a graph node",
+		);
+		await pointerClick(graphNode("u1"));
+		assert.equal(
+			await host(
+				`document.querySelector(${JSON.stringify(graphNode("u1"))}).getAttribute("aria-pressed")`,
+			),
+			"false",
+		);
 		await click(graphNode("u2"));
 		await switchView();
 		await until(
-			`document.querySelector(${JSON.stringify(listRow("u2"))})?.getAttribute("aria-checked") === "mixed"`,
+			`document.querySelector(${JSON.stringify(listRow("u2"))})?.getAttribute("aria-pressed") === "mixed"`,
 			"partial compressed-row selection",
 		);
 		await click(listRow("u2"));
@@ -225,19 +277,48 @@ if (!process.versions.electron) {
 			/1 selected/,
 		);
 		await click(listRow("u2"));
+		assert.equal(
+			await host(`(() => {
+				const input = document.querySelector(".path-summary-prompt textarea");
+				const swatch = document.createElement("span");
+				swatch.style.color = "var(--ui-brand-accent)";
+				document.body.append(swatch);
+				const highlighted = getComputedStyle(input).borderTopColor === getComputedStyle(swatch).color;
+				swatch.remove();
+				return highlighted;
+			})()`),
+			true,
+			"summary prompt uses the accent border before generation",
+		);
+		await host(`(() => {
+			const input = document.querySelector(".path-summary-prompt textarea");
+			const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+			setter.call(input, "Focus on differences between branches");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		})()`);
 		await click(".path-summary-generate");
-		await until('Boolean(document.querySelector(".path-summary-result"))', "successful summary");
+		await until(
+			'!document.querySelector(".path-summary-toolbar") && window.uiStore.getState().sessions.length === 4',
+			"successful summary",
+		);
 		const captured = await host("window.summaryRequests[0]");
 		assert.deepEqual(captured.paths.map((item) => item.id).sort(), ["r2", "u3"]);
+		assert.equal(captured.prompt, "Focus on differences between branches");
 		assert.equal(
 			captured.rounds.flatMap((round) => round.messages).filter((message) => message.id === "a1")
 				.length,
 			1,
 		);
 		assert.doesNotMatch(JSON.stringify(captured), /PRIVATE|reasoning|tools|subagent/);
-		assert.equal(await host("window.uiStore.getState().activeSessionId"), "left");
 		const summaryId = await host(
 			"window.uiStore.getState().sessions.find(session => !['root','left','right'].includes(session.id)).id",
+		);
+		assert.equal(await host("window.uiStore.getState().activeSessionId"), summaryId);
+		assert.equal(
+			await host(
+				`window.uiStore.getState().turns.find(turn => turn.sessionId === ${JSON.stringify(summaryId)} && turn.role === "user").content`,
+			),
+			"Focus on differences between branches",
 		);
 		assert.equal(
 			await host(
@@ -247,14 +328,81 @@ if (!process.versions.electron) {
 		);
 		await switchView();
 		await until(
-			'document.querySelectorAll(".summary-source-edge").length === 2',
-			"two dashed source edges",
+			'document.querySelectorAll(".summary-provenance-edge").length === 3',
+			"two source links and one summary link",
+		);
+		assert.equal(await host('document.querySelectorAll(".summary-graph-junction").length'), 1);
+		assert.equal(
+			await host('document.querySelector(".summary-graph-junction").textContent.trim()'),
+			"",
+			"provenance connector has no visible source-path badge",
+		);
+		const summaryRoundId = await host(
+			`window.uiStore.getState().turns.find(turn => turn.sessionId === ${JSON.stringify(summaryId)} && turn.role === "user").id`,
+		);
+		const highlightedSources = await host(`(() => {
+			const sources = [...document.querySelectorAll(${JSON.stringify(`${activeView} .session-graph-node.is-summary-source`)})];
+			return sources.map(node => ({
+				id: node.closest(".react-flow__node").dataset.id,
+				outline: getComputedStyle(node).outlineStyle,
+				color: getComputedStyle(node).outlineColor,
+				width: getComputedStyle(node).outlineWidth,
+			}));
+		})()`);
+		assert.deepEqual(
+			highlightedSources.map(({ id }) => id).sort(),
+			["r2", "u3"],
+			"only the selected summary's source nodes are highlighted",
+		);
+		assert.ok(
+			highlightedSources.every(
+				({ outline, color, width }) =>
+					outline === "dashed" && color === "rgb(139, 92, 246)" && width === "3px",
+			),
+			"source-node highlights use visible purple dashed outlines",
+		);
+		await click(graphNode("r2"));
+		await until(
+			`!document.querySelector(${JSON.stringify(`${activeView} .session-graph-node.is-summary-source`)})`,
+			"source highlights clear when leaving the summary",
 		);
 		assert.equal(
-			await host(
-				'getComputedStyle(document.querySelector(".summary-source-edge path")).strokeDasharray',
-			),
-			"6px, 5px",
+			await host('document.querySelectorAll(".summary-provenance-edge.is-active").length'),
+			0,
+			"provenance links do not remain highlighted after leaving the summary",
+		);
+		const ordinaryActiveAppearance = await host(`(() => {
+			const path = document.querySelector(".react-flow__edge.is-active:not(.summary-provenance-edge) .react-flow__edge-path");
+			const style = getComputedStyle(path);
+			return { width: style.strokeWidth, filter: style.filter, stroke: style.stroke, path: path.getAttribute("d"), arrow: style.markerEnd };
+		})()`);
+		assert.ok(
+			ordinaryActiveAppearance.path.includes("C") &&
+				ordinaryActiveAppearance.stroke.startsWith("url(") &&
+				ordinaryActiveAppearance.arrow.startsWith("url("),
+			"selected normal links use a curved gradient and arrowhead",
+		);
+		await click(graphNode(summaryRoundId));
+		await until(
+			`document.querySelectorAll(${JSON.stringify(`${activeView} .session-graph-node.is-summary-source`)}).length === 2`,
+			"source highlights return when selecting the summary",
+		);
+		assert.equal(
+			await host('document.querySelectorAll(".summary-provenance-edge.is-active").length'),
+			3,
+			"selected summary highlights both source links and the junction-to-summary link",
+		);
+		const sourceLabels = await host(
+			`[...document.querySelectorAll(${JSON.stringify(`${activeView} .react-flow__node[data-id="${summaryRoundId}"] .summary-node-source`)})].map(element => element.textContent)`,
+		);
+		assert.deepEqual(
+			sourceLabels,
+			(
+				await host(
+					`window.uiStore.getState().turns.find(turn => turn.id === ${JSON.stringify(summaryRoundId)}).pathSummary.sources.map(source => source.title)`,
+				)
+			).slice(0, 2),
+			"summary card identifies its source paths without crossing links",
 		);
 		for (const orientation of ["vertical", "horizontal"]) {
 			const checked = await host(
@@ -262,29 +410,88 @@ if (!process.versions.electron) {
 			);
 			if ((checked === "true") !== (orientation === "vertical"))
 				await click('[aria-label="Vertical layout"]');
-			await until(
-				'document.querySelectorAll(".summary-source-edge").length === 2',
-				`${orientation} summary edges`,
+			await sleep(380);
+			const edgeAppearance = await host(`(() => {
+					const edges = [...document.querySelectorAll(".summary-provenance-edge .react-flow__edge-path")];
+					return edges.map(path => {
+						const style = getComputedStyle(path);
+						return {
+							length: path.getTotalLength(),
+							stroke: style.stroke,
+							width: style.strokeWidth,
+							filter: style.filter,
+							dash: style.strokeDasharray,
+							arrow: style.markerEnd,
+							curve: path.getAttribute("d").includes("C"),
+						};
+					});
+				})()`);
+			assert.ok(
+				edgeAppearance.length === 3 &&
+					edgeAppearance.filter(({ arrow }) => arrow === ordinaryActiveAppearance.arrow).length ===
+						1 &&
+					edgeAppearance.every(
+						({ length, stroke, width, filter, dash, arrow, curve }) =>
+							length > 0 &&
+							stroke.startsWith("url(") &&
+							width === ordinaryActiveAppearance.width &&
+							filter === ordinaryActiveAppearance.filter &&
+							dash !== "none" &&
+							(arrow === ordinaryActiveAppearance.arrow || arrow === 'url("#")') &&
+							curve,
+					),
+				`${orientation} provenance links reuse the curved gradient and arrow into the summary, but remain dashed: ${JSON.stringify(edgeAppearance)}`,
 			);
 		}
 		await switchView();
-		await click(".path-summary-result button");
-		await until('Boolean(document.querySelector(".path-summary-sources"))', "summary continuation");
+		await until(
+			'Boolean(document.querySelector(".path-summary-source-quote"))',
+			"summary continuation",
+		);
+		assert.equal(
+			await host(
+				`Boolean(document.querySelector(${JSON.stringify(`.chat-turn[data-turn-id="${summaryRoundId}"] .user-bubble .path-summary-source-quote`)}))`,
+			),
+			true,
+			"source paths appear as a quote inside the summary message",
+		);
+		assert.equal(
+			await host(
+				'Boolean(document.querySelector(".path-summary-source-quote .user-message-quote-label"))',
+			),
+			false,
+			"source quote shows links without a heading",
+		);
+		assert.equal(await host('Boolean(document.querySelector(".path-summary-sources"))'), false);
+		browser.setContentSize(1750, 960);
+		await until('Boolean(document.querySelector(".answer-outline"))', "summary answer outline");
+		const quoteAndOutline = await host(`(() => {
+			const sources = document.querySelector(".path-summary-source-quote").getBoundingClientRect();
+			const outline = document.querySelector(".answer-outline").getBoundingClientRect();
+			return { sourcesLeft: sources.left, outlineRight: outline.right };
+		})()`);
+		assert.ok(
+			quoteAndOutline.outlineRight <= quoteAndOutline.sourcesLeft,
+			"answer outline must not overlap quoted summary sources",
+		);
+		browser.setContentSize(1440, 960);
 		assert.equal(
 			await host(
 				`window.uiStore.getState().turns.filter(turn => turn.sessionId === ${JSON.stringify(summaryId)}).length`,
 			),
 			2,
 		);
-		await click(".path-summary-sources summary");
-		assert.equal(await host('document.querySelectorAll(".path-summary-sources li").length'), 2);
-		await click(".path-summary-sources li button");
+		assert.equal(
+			await host('document.querySelectorAll(".path-summary-source-quote li").length'),
+			2,
+		);
+		await click(".path-summary-source-quote li button");
 		assert.notEqual(
 			await host("window.uiStore.getState().activeSessionId"),
 			summaryId,
 			"sources navigate to the original path",
 		);
-		await click(".path-summary-select-button");
+		await click(`${activeView} .path-summary-mode-button`);
 		await click(listRow("u2"));
 		await host('window.summaryMode = "error"');
 		await click(".path-summary-generate");
@@ -302,16 +509,67 @@ if (!process.versions.electron) {
 			/1 selected/,
 		);
 		await host('window.summaryMode = "pending"');
+		const previousPendingSessionId = await host("window.uiStore.getState().activeSessionId");
 		await click(".path-summary-generate");
-		await until('Boolean(document.querySelector(".path-summary-progress"))', "pending summary");
-		assert.equal(await host('document.querySelector(".path-summary-generate").disabled'), true);
-		await click(".path-summary-cancel");
+		await until(
+			'!document.querySelector(".path-summary-toolbar") && Boolean(document.querySelector(".path-summary-composer-pending"))',
+			"pending summary without a top toolbar",
+		);
+		assert.equal(await host('Boolean(document.querySelector(".path-summary-generate"))'), false);
+		assert.equal(await host('Boolean(document.querySelector(".path-summary-prompt"))'), false);
+		assert.equal(
+			await host('Boolean(document.querySelector(".path-summary-selection-details"))'),
+			false,
+		);
+		assert.equal(
+			await host('Boolean(document.querySelector(".path-summary-composer-pending"))'),
+			true,
+		);
+		assert.equal(await host("window.uiStore.getState().sessions.length"), 5);
+		const pendingId = await host("window.uiStore.getState().activeSessionId");
+		const pendingRoundId = await host(
+			`window.uiStore.getState().turns.find(turn => turn.sessionId === ${JSON.stringify(pendingId)} && turn.role === "user").id`,
+		);
+		assert.equal(
+			await host(
+				`window.uiStore.getState().turns.find(turn => turn.sessionId === ${JSON.stringify(pendingId)} && turn.role === "assistant").status`,
+			),
+			"running",
+		);
+		await switchView();
+		await until(
+			`Boolean(document.querySelector(${JSON.stringify(graphNode(pendingRoundId))}))`,
+			"pending graph node",
+		);
+		assert.equal(
+			await host(
+				`document.querySelector(${JSON.stringify(`${activeView} .react-flow__node[data-id="${pendingRoundId}"] .session-graph-node`)}).dataset.executionStatus`,
+			),
+			"running",
+		);
+		assert.equal(await host('document.querySelectorAll(".summary-provenance-edge").length'), 5);
+		assert.equal(
+			await host(
+				`Boolean(document.querySelector(${JSON.stringify(`${activeView} .react-flow__node[data-id="${pendingRoundId}"] .summary-node-sources`)}))`,
+			),
+			true,
+			"pending summary already identifies its sources",
+		);
+		await switchView();
+		assert.equal(
+			await host('document.querySelectorAll(".session-tree-select[role=checkbox]").length'),
+			0,
+			"running summaries do not leave selection checkboxes in the list",
+		);
+		assert.equal(await host('document.querySelectorAll(".summary-selection-checkbox").length'), 0);
+		await click(".path-summary-composer-pending button");
 		await until(
 			'document.querySelector(".path-summary-error")?.textContent.includes("Summary canceled")',
 			"summary cancellation",
 		);
 		assert.equal(await host("window.summaryListeners.size"), 0, "progress listener cleanup");
 		assert.equal(await host("window.uiStore.getState().sessions.length"), 4);
+		assert.equal(await host("window.uiStore.getState().activeSessionId"), previousPendingSessionId);
 		await click(".path-summary-cancel");
 		await host('window.summaryMode = "complete"');
 		await host(
@@ -325,7 +583,12 @@ if (!process.versions.electron) {
 			`Array.from(document.querySelectorAll('.session-status-menu [role="menuitem"]')).find(button => button.textContent.includes("Summarize path")).click()`,
 		);
 		await until(
-			'Boolean(document.querySelector(".path-summary-result"))',
+			'Boolean(document.querySelector(".path-summary-generate"))',
+			"preselected merge mode",
+		);
+		await click(".path-summary-generate");
+		await until(
+			'!document.querySelector(".path-summary-toolbar") && window.uiStore.getState().sessions.length === 5',
 			"single-node summary result",
 		);
 		assert.deepEqual(
@@ -338,6 +601,11 @@ if (!process.versions.electron) {
 		await host(
 			"window.uiStore.getState().deleteSession(window.uiStore.getState().sessions[window.uiStore.getState().sessions.length - 1].id)",
 		);
+		assert.equal(
+			await host('Boolean(document.querySelector(".path-summary-toolbar"))'),
+			false,
+			"deleting a completed summary leaves no stale status banner",
+		);
 		for (const theme of ["light", "dark"]) {
 			await host(`window.uiStore.getState().updateSettings({ theme: ${JSON.stringify(theme)} })`);
 			for (const width of [1440, 1024, 768, 375]) {
@@ -345,7 +613,7 @@ if (!process.versions.electron) {
 				await sleep(60);
 				if (width <= 900 && (await host('Boolean(document.querySelector(".sidebar-reopen"))')))
 					await click(".sidebar-reopen");
-				await click(".path-summary-select-button");
+				await click(`${activeView} .path-summary-mode-button`);
 				const layout = await host(`(() => {
 					const toolbar = document.querySelector(".path-summary-toolbar").getBoundingClientRect();
 					return [...document.querySelectorAll(".path-summary-controls button")].map(button => {
@@ -366,7 +634,7 @@ if (!process.versions.electron) {
 		);
 		await browser.loadURL(url);
 		await until(
-			'Boolean(document.querySelector(".path-summary-sources"))',
+			'Boolean(document.querySelector(".path-summary-source-quote"))',
 			"persistent summary after reload",
 		);
 		await host(
@@ -380,9 +648,8 @@ if (!process.versions.electron) {
 			2,
 		);
 		await host('window.uiStore.getState().deleteSession("root")');
-		await click(".path-summary-sources summary");
 		assert.equal(
-			await host('document.querySelectorAll(".path-summary-sources button:disabled").length'),
+			await host('document.querySelectorAll(".path-summary-source-quote button:disabled").length'),
 			2,
 		);
 		assert.equal(

@@ -1,4 +1,4 @@
-import { Check, FileText, ListChecks, X } from "lucide-react";
+import { FileText, GitMerge, X } from "lucide-react";
 import {
 	createContext,
 	useCallback,
@@ -12,7 +12,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { useTranslation } from "../i18n";
-import type { PathSummaryProgress } from "../shared/ipc";
 import { providerModelSelection } from "../shared/providers";
 import { errorToMessage } from "../shared/value";
 import { getWorkspacePersistencePath, useAppStore } from "../store";
@@ -26,6 +25,10 @@ interface SummarySelection {
 	selecting: boolean;
 	selected: ReadonlySet<string>;
 	running: boolean;
+	canceling: boolean;
+	error: string | null;
+	cancel: () => Promise<void>;
+	begin: (ids?: readonly string[]) => void;
 	toggle: (id: string) => void;
 	toggleList: (roundIds: readonly string[], endpoint: string) => void;
 	summarize: (ids?: readonly string[]) => Promise<void>;
@@ -48,12 +51,11 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 	const graph = useMemo(() => projectConversationGraph(sessions, turns), [sessions, turns]);
 	const [selecting, setSelecting] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(() => new Set());
+	const [prompt, setPrompt] = useState("");
 	const [visible, setVisible] = useState<Map<string, Set<string>>>(() => new Map());
 	const [running, setRunning] = useState(false);
 	const [canceling, setCanceling] = useState(false);
-	const [progress, setProgress] = useState<PathSummaryProgress | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [resultId, setResultId] = useState<string | null>(null);
 	const pending = useRef<{ id: string; cancelRequested: boolean } | null>(null);
 	const mounted = useRef(true);
 	const reportVisible = useCallback((owner: string, ids: readonly string[] | null) => {
@@ -144,10 +146,10 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 			setSelecting(true);
 			if (ids) setSelected(new Set(ids));
 			setError(null);
-			setResultId(null);
 			const workspace = getWorkspacePersistencePath();
 			const operation = { id: createId("summary"), cancelRequested: false };
-			let unsubscribe: (() => void) | undefined;
+			let pendingSessionId: string | undefined;
+			const previousSessionId = useAppStore.getState().activeSessionId;
 			try {
 				const state = useAppStore.getState();
 				const input = buildPathSummaryInput(state.sessions, state.turns, selectedIds);
@@ -159,16 +161,22 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 				}
 				const model = providerModelSelection(state.settings);
 				const createdAt = new Date().toISOString();
+				pendingSessionId = state.createSummarySession(
+					"",
+					{ sources: input.sources, createdAt, model },
+					undefined,
+					prompt,
+				);
+				useConversationFocus.getState().setFocus(pendingSessionId, null);
+				state.setActiveSession(pendingSessionId);
+				navigate("/");
 				pending.current = operation;
 				setRunning(true);
 				setCanceling(false);
-				setProgress(null);
-				unsubscribe = bridge.onPathSummaryEvent((event) => {
-					if (mounted.current && event.requestId === operation.id) setProgress(event);
-				});
 				const result = await bridge.generatePathSummary({
 					requestId: operation.id,
 					model,
+					prompt: prompt.trim(),
 					rounds: input.rounds,
 					paths: input.paths,
 				});
@@ -196,18 +204,24 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 					}
 					throw new Error(result.error || "The model returned an empty path summary.");
 				}
-				const id = current.createSummarySession(
-					result.content,
-					{ sources: input.sources, createdAt, model },
-					result.usage,
-				);
-				setResultId(id);
+				current.completeSummarySession(pendingSessionId, result.content, result.usage);
+				pendingSessionId = undefined;
 				setSelected(new Set());
 				setSelecting(false);
+				setPrompt("");
 			} catch (failure) {
 				if (mounted.current) setError(errorToMessage(failure));
 			} finally {
-				unsubscribe?.();
+				if (pendingSessionId && getWorkspacePersistencePath() === workspace) {
+					const current = useAppStore.getState();
+					if (current.sessions.some((session) => session.id === pendingSessionId)) {
+						if (current.activeSessionId === pendingSessionId && previousSessionId) {
+							useConversationFocus.getState().setFocus(previousSessionId, null);
+							current.setActiveSession(previousSessionId);
+						}
+						current.deleteSession(pendingSessionId);
+					}
+				}
 				pending.current = null;
 				if (mounted.current) {
 					setRunning(false);
@@ -215,40 +229,50 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 				}
 			}
 		},
-		[selected, t],
+		[selected, prompt, navigate, t],
 	);
 	const allVisible = new Set([...visible.values()].flatMap((ids) => [...ids]));
 	const hiddenCount = [...selected].filter((id) => !allVisible.has(id)).length;
-	const value = useMemo(
-		() => ({ selecting, selected, running, toggle, toggleList, summarize, reportVisible }),
-		[selecting, selected, running, toggle, toggleList, summarize, reportVisible],
-	);
-	const startSelection = () => {
+	const begin = useCallback((ids?: readonly string[]) => {
 		setSelecting(true);
+		setSelected(new Set(ids));
 		setError(null);
-		setResultId(null);
-	};
-	const openResult = () => {
-		if (!resultId || !useAppStore.getState().sessions.some((session) => session.id === resultId)) {
-			setError(t("Summary no longer exists."));
-			return;
-		}
-		window.sessionStorage.removeItem("rhyza-focus-turn");
-		useConversationFocus.getState().setFocus(resultId, null);
-		useAppStore.getState().setActiveSession(resultId);
-		navigate("/");
-		setResultId(null);
-	};
+	}, []);
+	const value = useMemo(
+		() => ({
+			selecting,
+			selected,
+			running,
+			canceling,
+			error,
+			cancel,
+			begin,
+			toggle,
+			toggleList,
+			summarize,
+			reportVisible,
+		}),
+		[
+			selecting,
+			selected,
+			running,
+			canceling,
+			error,
+			cancel,
+			begin,
+			toggle,
+			toggleList,
+			summarize,
+			reportVisible,
+		],
+	);
 	return (
 		<SummarySelectionContext.Provider value={value}>
 			<PathSummaryToolbarContext.Provider
 				value={
-					<div className="path-summary-toolbar">
-						{!selecting ? (
-							<button type="button" className="path-summary-select-button" onClick={startSelection}>
-								<ListChecks size={15} /> {t("Select nodes")}
-							</button>
-						) : (
+					selecting &&
+					!running && (
+						<div className="path-summary-toolbar">
 							<>
 								<div className="path-summary-controls">
 									<span aria-live="polite">
@@ -266,11 +290,21 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 										type="button"
 										className="path-summary-generate"
 										onClick={() => void summarize()}
-										disabled={!selected.size || running}
+										disabled={!selected.size}
 									>
 										<FileText size={14} /> {t("Summary")}
 									</button>
 								</div>
+								<label className="path-summary-prompt">
+									<span>{t("Summary instructions (optional)")}</span>
+									<textarea
+										value={prompt}
+										maxLength={4000}
+										rows={2}
+										onChange={(event) => setPrompt(event.target.value)}
+										placeholder={t("What should the summary focus on?")}
+									/>
+								</label>
 								{hiddenCount > 0 && (
 									<span className="path-summary-hint">
 										{hiddenCount} {t("selected nodes are hidden")}
@@ -297,38 +331,14 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 										))}
 									</details>
 								)}
-								{running && (
-									<div className="path-summary-progress" role="status">
-										<span>
-											{progress
-												? `${t(progress.phase === "merging" ? "Merging summaries" : "Summarizing paths")} ${Math.min(progress.completed + 1, progress.total)}/${progress.total}`
-												: t("Preparing summary…")}
-										</span>
-										{progress && (
-											<progress
-												max={progress.total}
-												value={progress.completed}
-												aria-label={t("Summary progress")}
-											/>
-										)}
-									</div>
-								)}
 							</>
-						)}
-						{error && (
-							<div className="path-summary-error" role="alert">
-								{error}
-							</div>
-						)}
-						{resultId && (
-							<div className="path-summary-result" role="status">
-								<Check size={14} /> {t("Summary created")}{" "}
-								<button type="button" onClick={openResult}>
-									{t("Open")}
-								</button>
-							</div>
-						)}
-					</div>
+							{error && (
+								<div className="path-summary-error" role="alert">
+									{error}
+								</div>
+							)}
+						</div>
+					)
 				}
 			>
 				{children}
@@ -341,4 +351,21 @@ const PathSummaryToolbarContext = createContext<ReactNode>(null);
 
 export function PathSummaryToolbar() {
 	return useContext(PathSummaryToolbarContext);
+}
+
+export function MergeModeButton() {
+	const { t } = useTranslation();
+	const { begin, selecting } = usePathSummarySelection();
+	if (selecting) return null;
+	return (
+		<button
+			type="button"
+			className="path-summary-mode-button"
+			aria-label={t("Merge paths")}
+			title={t("Merge paths")}
+			onClick={() => begin()}
+		>
+			<GitMerge size={14} /> {t("Merge paths")}
+		</button>
+	);
 }

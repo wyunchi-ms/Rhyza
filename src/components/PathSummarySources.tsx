@@ -1,4 +1,3 @@
-import { ChevronRight, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "../i18n";
@@ -34,15 +33,10 @@ export function PathSummarySources({ snapshot }: { snapshot: PathSummarySnapshot
 		if (turnId) window.dispatchEvent(new CustomEvent("rhyza:focus-turn", { detail: { turnId } }));
 	};
 	return (
-		<details className="path-summary-sources">
-			<summary>
-				<ChevronRight className="path-summary-disclosure" size={14} aria-hidden="true" />
-				<FileText size={15} /> {t("Summary")}{" "}
-				<span>
-					{snapshot.sources.length} {t("source paths")}
-				</span>
-			</summary>
-			<p>{t("This is a snapshot. Continuing uses the summary, not the original histories.")}</p>
+		<blockquote
+			className="user-message-quote path-summary-source-quote"
+			aria-label={t("Source paths")}
+		>
 			{error && <p role="alert">{error}</p>}
 			<ul>
 				{snapshot.sources.map((source) => {
@@ -57,6 +51,6 @@ export function PathSummarySources({ snapshot }: { snapshot: PathSummarySnapshot
 					);
 				})}
 			</ul>
-		</details>
+		</blockquote>
 	);
 }

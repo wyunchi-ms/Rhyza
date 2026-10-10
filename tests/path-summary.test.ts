@@ -187,6 +187,14 @@ test("IPC validation projects only allowed message fields and rejects duplicate 
 		],
 	});
 	assert.doesNotMatch(JSON.stringify(valid), /PRIVATE/);
+	assert.equal(
+		validatePathSummaryRequest({ ...request, prompt: "  Compare branches  " }).prompt,
+		"Compare branches",
+	);
+	assert.throws(
+		() => validatePathSummaryRequest({ ...request, prompt: "x".repeat(4001) }),
+		/Invalid summary instructions/,
+	);
 	assert.throws(
 		() =>
 			validatePathSummaryRequest({ ...request, rounds: [request.rounds[0], request.rounds[0]] }),
@@ -233,6 +241,30 @@ test("small contexts use one request and truncated responses retry instead of su
 	assert.equal(prompts.length, 2);
 	assert.equal(result.usage?.cost, 0.02);
 	assert.ok(prompts.every((prompt) => summaryTokenEstimate(prompt) + 1024 < 8192));
+});
+
+test("custom summary focus reaches every generation level without replacing source rules", async () => {
+	const prompts: string[] = [];
+	const completion: PathSummaryCompletion = {
+		contextWindow: 4096,
+		maxTokens: 512,
+		complete: async (prompt) => {
+			prompts.push(prompt);
+			return { text: `# Findings\nConcise answer\n${summaryCompletionMarker}` };
+		},
+	};
+	const result = await summarizeConversationPaths(
+		{ ...requestFor("A long path. ".repeat(550)), prompt: "Compare the alternatives" },
+		completion,
+		new AbortController().signal,
+		() => {},
+	);
+	assert.ok(result.content);
+	assert.ok(prompts.length > 1);
+	assert.ok(prompts.every((prompt) => prompt.includes("Compare the alternatives")));
+	assert.ok(
+		prompts.every((prompt) => prompt.includes("Only summarize supplied user/assistant text")),
+	);
 });
 
 test("long Unicode messages are fully chunked, merged recursively, and every request fits its window", async () => {
@@ -345,6 +377,45 @@ test("summary creation, persistence, forks, and source deletion keep one indepen
 			model: { providerId: "codex" as const, modelId: "" },
 		};
 		const usage = { input: 50, output: 20, cacheRead: 0, cacheWrite: 0, cost: 0.01 };
+		const pendingId = useAppStore
+			.getState()
+			.createSummarySession("", snapshot, undefined, "Compare the conclusions");
+		let pending = useAppStore.getState();
+		assert.equal(pending.sessions.find((session) => session.id === pendingId)?.status, "running");
+		assert.equal(
+			pending.turns.find((turn) => turn.sessionId === pendingId && turn.role === "assistant")
+				?.status,
+			"running",
+		);
+		assert.equal(
+			pending.turns.find((turn) => turn.sessionId === pendingId && turn.role === "user")?.content,
+			"Compare the conclusions",
+		);
+		pending.completeSummarySession(pendingId, "# Completed\nConclusions", usage);
+		pending = useAppStore.getState();
+		assert.equal(pending.sessions.find((session) => session.id === pendingId)?.status, "idle");
+		assert.equal(
+			pending.turns.find((turn) => turn.sessionId === pendingId && turn.role === "assistant")
+				?.status,
+			"complete",
+		);
+		pending.deleteSession(pendingId);
+		const interruptedId = useAppStore.getState().createSummarySession("", snapshot);
+		const interrupted = useAppStore.getState();
+		loadWorkspaceState(
+			JSON.stringify({
+				state: {
+					sessions: interrupted.sessions,
+					turns: interrupted.turns,
+					activeSessionId: interruptedId,
+				},
+			}),
+		);
+		assert.equal(
+			useAppStore.getState().sessions.some((session) => session.id === interruptedId),
+			false,
+		);
+		assert.equal(useAppStore.getState().activeSessionId, root.id);
 		const id = useAppStore
 			.getState()
 			.createSummarySession("# Summary\nConclusions", snapshot, usage);

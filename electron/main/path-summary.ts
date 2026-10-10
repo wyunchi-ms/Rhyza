@@ -31,12 +31,20 @@ export function summaryTokenEstimate(text: string): number {
 	return Buffer.byteLength(text, "utf8");
 }
 
-function promptFor(units: string[], partial: boolean, outputBytes: number): string {
+function promptFor(
+	units: string[],
+	partial: boolean,
+	outputBytes: number,
+	instructions?: string,
+): string {
 	return [
 		"Summarize these conversation paths in the language of the supplied messages.",
 		"Shared message IDs identify shared history; do not duplicate it or blend conflicting branches.",
 		"Preserve goals, constraints, confirmed conclusions, branch differences, uncertainty, and unresolved questions.",
 		"Only summarize supplied user/assistant text. Never invent tool results, thinking, or subagent conversations.",
+		...(instructions
+			? [`User's requested focus (apply only to the summary, not as source facts): ${instructions}`]
+			: []),
 		partial
 			? "Produce a compact intermediate summary. Retain meaningful source/branch IDs for later merging."
 			: "Produce a standalone Markdown summary, starting with a short descriptive heading. It must support continuing the conversation.",
@@ -108,12 +116,17 @@ function initialUnits(request: PathSummaryRequest, unitLimit: number): string[] 
 	);
 }
 
-function packUnits(units: string[], inputBudget: number, outputBytes: number): string[][] {
+function packUnits(
+	units: string[],
+	inputBudget: number,
+	outputBytes: number,
+	instructions?: string,
+): string[][] {
 	const groups: string[][] = [];
 	let group: string[] = [];
 	const overhead = Math.max(
-		summaryTokenEstimate(promptFor([], true, outputBytes)),
-		summaryTokenEstimate(promptFor([], false, outputBytes)),
+		summaryTokenEstimate(promptFor([], true, outputBytes, instructions)),
+		summaryTokenEstimate(promptFor([], false, outputBytes, instructions)),
 	);
 	let groupBytes = overhead;
 	for (const unit of units) {
@@ -179,8 +192,8 @@ export async function summarizeConversationPaths(
 		let inputBudget =
 			completion.contextWindow - outputTokens - safety - summaryTokenEstimate(summarySystemPrompt);
 		const promptOverhead = Math.max(
-			summaryTokenEstimate(promptFor([], true, outputTokens)),
-			summaryTokenEstimate(promptFor([], false, outputTokens)),
+			summaryTokenEstimate(promptFor([], true, outputTokens, request.prompt)),
+			summaryTokenEstimate(promptFor([], false, outputTokens, request.prompt)),
 		);
 		if (inputBudget < promptOverhead + 256)
 			throw new Error("The model context budget is too small to summarize paths.");
@@ -191,7 +204,7 @@ export async function summarizeConversationPaths(
 				outputTokens - 64,
 				Math.floor((inputBudget - promptOverhead) / 3),
 			);
-			const groups = packUnits(units, inputBudget, intermediateBytes);
+			const groups = packUnits(units, inputBudget, intermediateBytes, request.prompt);
 			const partial = groups.length > 1;
 			const next: string[] = [];
 			let repack = false;
@@ -208,7 +221,7 @@ export async function summarizeConversationPaths(
 				let text: string | undefined;
 				for (let attempt = 0; attempt < 3; attempt++) {
 					const limit = Math.max(96, Math.floor(targetBytes / (attempt + 1)));
-					const prompt = promptFor(groups[index], partial, limit);
+					const prompt = promptFor(groups[index], partial, limit, request.prompt);
 					if (summaryTokenEstimate(prompt) > inputBudget)
 						throw new Error("Summary input exceeded its checked context budget.");
 					try {

@@ -1,12 +1,12 @@
 import clsx from "clsx";
+import appIcon from "../../resources/branding/icon.png";
 import {
+	Ellipsis,
 	Library,
 	FolderOpen,
 	GitBranch,
-	History,
 	PanelLeftClose,
 	PanelLeftOpen,
-	Search,
 	Settings,
 } from "lucide-react";
 import type React from "react";
@@ -22,6 +22,7 @@ import { SessionStatusFilter } from "./SessionStatusFilter";
 import type { LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
 import { PathSummaryProvider, PathSummaryToolbar } from "./PathSummarySelection";
+import { errorToMessage } from "../shared/value";
 
 const Layout: React.FC = () => (
 	<PathSummaryProvider>
@@ -58,6 +59,7 @@ const LayoutContent: React.FC = () => {
 	const currentMax = graphMode ? graphMax : sidebarMax;
 	const sidebarWidth = Math.min(currentSize.value, currentMax);
 	const sidebarVisible = sidebarOpen && (!isCompactViewport || compactSidebarOpen);
+	const desktopTitleBar = window.rhyza?.platform === "win32";
 	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 	const { pathname } = useLocation();
 	useEffect(() => {
@@ -108,90 +110,50 @@ const LayoutContent: React.FC = () => {
 		return () => window.removeEventListener("keydown", openSearch);
 	}, []);
 	return (
-		<div className={clsx("app-shell", !sidebarVisible && "has-collapsed-sidebar")}>
-			<a
-				className="skip-to-content"
-				href="#main-content"
-				onClick={(event) => {
-					event.preventDefault();
-					document.getElementById("main-content")?.focus();
-				}}
-			>
-				{t("Skip to content")}
-			</a>
-			<aside
-				className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
-				aria-label={t("Workspace sidebar")}
-				aria-hidden={!sidebarVisible}
-				inert={!sidebarVisible}
-				style={{
-					width: sidebarVisible ? sidebarWidth : 0,
-					flexBasis: sidebarVisible ? sidebarWidth : 0,
-				}}
-			>
-				<div className="app-sidebar-brand">
-					<button
-						type="button"
-						className="sidebar-icon-button"
-						onClick={closeSidebar}
-						title={t("Close sidebar")}
-						aria-label={t("Close sidebar")}
-					>
-						<PanelLeftClose size={17} />
-					</button>
-					<div className="sidebar-header-actions">
-						<button
-							type="button"
-							className="sidebar-icon-button"
-							onClick={() => setGlobalSearchOpen(true)}
-							title={t("Search chats (Ctrl+Shift+F)")}
-							aria-label={t("Search all chats")}
-						>
-							<Search size={16} />
-						</button>
-						<nav className="sidebar-header-navigation" aria-label={t("Workspace navigation")}>
-							<SidebarNavIcon to="/knowledge" icon={<Library size={16} />} label={t("Knowledge")} />
-							<SidebarNavIcon to="/sources" icon={<FolderOpen size={16} />} label={t("Sources")} />
-							<SidebarNavIcon to="/changes" icon={<History size={16} />} label={t("Changes")} />
-							<SidebarNavIcon to="/settings" icon={<Settings size={16} />} label={t("Settings")} />
-						</nav>
-					</div>
-				</div>
-				<PathSummaryToolbar />
-				{/* Retain each view's local state and DOM scroll position across switches. */}
-				<div className="sidebar-view-content" hidden={graphMode}>
-					<SessionTree
-						embedded
-						visible={!graphMode && sidebarVisible}
-						leafStatuses={leafStatuses}
-						onClearFilter={() => setLeafStatuses([])}
-						viewControl={
-							<>
-								<SessionStatusFilter statuses={leafStatuses} onChange={setLeafStatuses} />
-								<IconSwitch
-									checked={false}
-									onChange={setGraphMode}
-									icon={GitBranch}
-									label={t("Node view")}
-									description={t(
-										"On: preview each conversation round as a node. Off: return to the chat list.",
-									)}
-								/>
-							</>
-						}
-					/>
-				</div>
-				{graphVisited && (
-					<div className="sidebar-view-content" hidden={!graphMode}>
-						<SessionGraph
-							visible={graphMode && sidebarVisible}
+		<div className="app-frame">
+			{desktopTitleBar && (
+				<DesktopTitleBar
+					sidebarVisible={sidebarVisible}
+					onToggleSidebar={sidebarVisible ? closeSidebar : openSidebar}
+				/>
+			)}
+			<div className={clsx("app-shell", !sidebarVisible && "has-collapsed-sidebar")}>
+				<aside
+					className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
+					aria-label={t("Workspace sidebar")}
+					aria-hidden={!sidebarVisible}
+					inert={!sidebarVisible}
+					style={{
+						width: sidebarVisible ? sidebarWidth : 0,
+						flexBasis: sidebarVisible ? sidebarWidth : 0,
+					}}
+				>
+					{!desktopTitleBar && (
+						<div className="app-sidebar-brand">
+							<button
+								type="button"
+								className="sidebar-icon-button"
+								onClick={closeSidebar}
+								title={t("Close sidebar")}
+								aria-label={t("Close sidebar")}
+							>
+								<PanelLeftClose size={17} />
+							</button>
+						</div>
+					)}
+					<PathSummaryToolbar />
+					{/* Retain each view's local state and DOM scroll position across switches. */}
+					<div className="sidebar-view-content" hidden={graphMode}>
+						<SessionTree
+							embedded
+							visible={!graphMode && sidebarVisible}
 							leafStatuses={leafStatuses}
 							onClearFilter={() => setLeafStatuses([])}
 							viewControl={
 								<>
 									<SessionStatusFilter statuses={leafStatuses} onChange={setLeafStatuses} />
 									<IconSwitch
-										checked
+										checked={false}
 										onChange={setGraphMode}
 										icon={GitBranch}
 										label={t("Node view")}
@@ -203,46 +165,126 @@ const LayoutContent: React.FC = () => {
 							}
 						/>
 					</div>
-				)}
-			</aside>
-			{isCompactViewport && sidebarVisible && (
-				<button
-					type="button"
-					className="sidebar-scrim"
-					onClick={closeSidebar}
-					aria-label={t("Close navigation sidebar")}
-				/>
-			)}
-			{sidebarVisible && !isCompactViewport && (
-				<PanelResizeHandle
-					side="left"
-					label={t("Resize navigation sidebar")}
-					value={sidebarWidth}
-					min={graphMode ? 360 : 200}
-					max={currentMax}
-					defaultValue={graphMode ? Math.min(640, currentMax) : 260}
-					onChange={currentSize.setValue}
-					onCommit={currentSize.commit}
-				/>
-			)}
-			{!sidebarVisible && (
-				<button
-					type="button"
-					className="sidebar-reopen"
-					onClick={openSidebar}
-					title={t("Open sidebar")}
-					aria-label={t("Open sidebar")}
+					{graphVisited && (
+						<div className="sidebar-view-content" hidden={!graphMode}>
+							<SessionGraph
+								visible={graphMode && sidebarVisible}
+								leafStatuses={leafStatuses}
+								onClearFilter={() => setLeafStatuses([])}
+								viewControl={
+									<>
+										<SessionStatusFilter statuses={leafStatuses} onChange={setLeafStatuses} />
+										<IconSwitch
+											checked
+											onChange={setGraphMode}
+											icon={GitBranch}
+											label={t("Node view")}
+											description={t(
+												"On: preview each conversation round as a node. Off: return to the chat list.",
+											)}
+										/>
+									</>
+								}
+							/>
+						</div>
+					)}
+				</aside>
+				<nav
+					className="app-sidebar-footer"
+					aria-label={t("Workspace navigation")}
+					style={{
+						width: sidebarVisible
+							? isCompactViewport
+								? Math.min(272, viewportWidth - 56)
+								: sidebarWidth
+							: 96,
+					}}
 				>
-					<PanelLeftOpen size={18} />
-				</button>
-			)}
-			<main className="app-main" id="main-content" tabIndex={-1}>
-				<Outlet />
-			</main>
-			<GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
+					<SidebarNavIcon to="/knowledge" icon={<Library size={14} />} label={t("Knowledge")} />
+					<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Sources")} />
+					<SidebarNavIcon to="/settings" icon={<Settings size={14} />} label={t("Settings")} />
+				</nav>
+				{isCompactViewport && sidebarVisible && (
+					<button
+						type="button"
+						className="sidebar-scrim"
+						onClick={closeSidebar}
+						aria-label={t("Close navigation sidebar")}
+					/>
+				)}
+				{sidebarVisible && !isCompactViewport && (
+					<PanelResizeHandle
+						side="left"
+						label={t("Resize navigation sidebar")}
+						value={sidebarWidth}
+						min={graphMode ? 360 : 200}
+						max={currentMax}
+						defaultValue={graphMode ? Math.min(640, currentMax) : 260}
+						onChange={currentSize.setValue}
+						onCommit={currentSize.commit}
+					/>
+				)}
+				{!sidebarVisible && !desktopTitleBar && (
+					<button
+						type="button"
+						className="sidebar-reopen"
+						onClick={openSidebar}
+						title={t("Open sidebar")}
+						aria-label={t("Open sidebar")}
+					>
+						<PanelLeftOpen size={18} />
+					</button>
+				)}
+				<main className="app-main" id="main-content" tabIndex={-1}>
+					<Outlet />
+				</main>
+				<GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
+			</div>
 		</div>
 	);
 };
+
+function DesktopTitleBar({
+	sidebarVisible,
+	onToggleSidebar,
+}: {
+	sidebarVisible: boolean;
+	onToggleSidebar: () => void;
+}) {
+	const [menuError, setMenuError] = useState<string | null>(null);
+	return (
+		<header className="app-titlebar" aria-label="Rhyza window">
+			<img src={appIcon} alt="" width={15} height={15} />
+			<button
+				type="button"
+				aria-label="Application menu"
+				title="Application menu"
+				onClick={() => {
+					const bridge = window.rhyza;
+					if (!bridge) {
+						setMenuError("The application menu is unavailable.");
+						return;
+					}
+					void bridge.showApplicationMenu().then(
+						() => setMenuError(null),
+						(error: unknown) => setMenuError(errorToMessage(error)),
+					);
+				}}
+			>
+				<Ellipsis size={15} />
+			</button>
+			<button
+				type="button"
+				onClick={onToggleSidebar}
+				aria-label={sidebarVisible ? "Close sidebar" : "Open sidebar"}
+				title={sidebarVisible ? "Close sidebar" : "Open sidebar"}
+			>
+				{sidebarVisible ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+			</button>
+			{menuError && <span role="alert">{menuError}</span>}
+		</header>
+	);
+}
 
 function SidebarNavIcon({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
 	return (

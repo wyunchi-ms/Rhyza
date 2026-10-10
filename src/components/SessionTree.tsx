@@ -9,8 +9,6 @@ import {
 	Plus,
 	Sparkles,
 	Trash2,
-	Check,
-	Minus,
 	FileText,
 } from "lucide-react";
 import type React from "react";
@@ -34,7 +32,7 @@ import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/bra
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
-import { usePathSummarySelection } from "./PathSummarySelection";
+import { MergeModeButton, usePathSummarySelection } from "./PathSummarySelection";
 
 export const SessionTree: React.FC<{
 	embedded?: boolean;
@@ -182,6 +180,7 @@ export const SessionTree: React.FC<{
 					<UsageLabel usage={usage.total} prefix={t("Total")} />
 				</div>
 				<div className="session-tree-header-actions">
+					<MergeModeButton />
 					{viewControl}
 					<button
 						type="button"
@@ -254,6 +253,7 @@ const SessionGroup = ({
 }) => {
 	const { t } = useTranslation();
 	const selection = usePathSummarySelection();
+	const choosing = selection.selecting && !selection.running;
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
 	const { menu: contextMenu, openMenu, closeMenu } = useSessionContextMenu();
 	const [editingTitle, setEditingTitle] = useState<{
@@ -385,7 +385,7 @@ const SessionGroup = ({
 							isCurrent && "is-current",
 							isInView && "is-in-view",
 							isBranchPoint && "is-branch",
-							selection.selecting && selectedCount > 0 && "is-summary-selected",
+							choosing && selectedCount > 0 && "is-summary-selected",
 						)}
 					>
 						{isBranchPoint ? (
@@ -407,8 +407,7 @@ const SessionGroup = ({
 							type="button"
 							className="session-tree-select"
 							aria-current={isCurrent ? "page" : undefined}
-							role={selection.selecting ? "checkbox" : undefined}
-							aria-checked={selection.selecting ? checked : undefined}
+							aria-pressed={choosing ? checked : undefined}
 							disabled={selection.selecting && selection.running}
 							onClick={() =>
 								selection.selecting ? selection.toggleList(roundIds, last.id) : onSelect(node.id)
@@ -419,25 +418,11 @@ const SessionGroup = ({
 							}}
 						>
 							{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
-							{selection.selecting && (
-								<span
-									className="summary-selection-checkbox"
-									aria-hidden="true"
-									aria-checked={checked}
-								>
-									{checked === "mixed" ? <Minus size={12} /> : checked ? <Check size={12} /> : null}
-								</span>
-							)}
 							<ProgressMarker status={session?.progressStatus} active={isCurrent} />
 							{node.rounds.some((round) => round.user?.pathSummary) && (
 								<FileText size={13} aria-label={t("Summary")} />
 							)}
 							<SessionNodeTitle title={node.title} />
-							{selection.selecting && selectedCount > 0 && (
-								<span className="summary-selection-count">
-									{selectedCount} {t("selected rounds")}
-								</span>
-							)}
 							{(session?.titlePending || running) && (
 								<LoaderCircle
 									size={12}

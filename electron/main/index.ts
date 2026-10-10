@@ -1,4 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import {
+	app,
+	BrowserWindow,
+	dialog,
+	ipcMain,
+	Menu,
+	shell,
+	type IpcMainInvokeEvent,
+} from "electron";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
@@ -69,6 +77,9 @@ interface ElectronSmokeEvidence {
 	title: string;
 	bodyText: string;
 	isElectron: boolean;
+	titlebarVisible: boolean;
+	applicationMenuAvailable: boolean;
+	footerDestinations: number;
 	bridgeKeys: string[];
 	stateBytes: number;
 	stateSessions: number;
@@ -114,6 +125,13 @@ async function createWindow(): Promise<void> {
 		minWidth: 760,
 		minHeight: 640,
 		show: false,
+		autoHideMenuBar: true,
+		...(process.platform === "win32"
+			? {
+					titleBarStyle: "hidden" as const,
+					titleBarOverlay: { color: "#242527", symbolColor: "#d7dce2", height: 32 },
+				}
+			: {}),
 		webPreferences: {
 			preload: path.join(currentDirectory, "..", "preload.cjs"),
 			contextIsolation: true,
@@ -212,6 +230,14 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.diagnosticReport, async (event, payload) =>
 		withValidSender(event, async () => {
 			await writeDiagnostic("renderer-sample", validateDiagnosticReport(payload));
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.showApplicationMenu, async (event) =>
+		withValidSender(event, () => {
+			const menu = Menu.getApplicationMenu();
+			if (!menu || !mainWindow) throw new Error("The application menu is unavailable.");
+			menu.popup({ window: mainWindow, x: 34, y: 32 });
 			return { ok: true as const };
 		}),
 	);
@@ -635,6 +661,9 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 						title: document.title,
 						bodyText: document.body?.innerText?.slice(0, 200) ?? '',
 						isElectron: window.rhyza?.isElectron === true,
+						titlebarVisible: document.querySelector('.app-titlebar')?.getBoundingClientRect().height === 32,
+						applicationMenuAvailable: typeof window.rhyza?.showApplicationMenu === 'function',
+						footerDestinations: document.querySelectorAll('.app-sidebar-footer .sidebar-nav-icon').length,
 						bridgeKeys: Object.keys(window.rhyza ?? {}).sort(),
 						stateBytes: serializedState?.length ?? 0,
 						stateSessions: Array.isArray(parsedState.sessions) ? parsedState.sessions.length : 0,
@@ -680,6 +709,15 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 		}
 		if (!evidence.isElectron) {
 			throw new Error(`window.rhyza.isElectron was not true; evidence=${JSON.stringify(evidence)}`);
+		}
+		if (
+			process.platform === "win32" &&
+			(!evidence.titlebarVisible ||
+				!evidence.applicationMenuAvailable ||
+				evidence.footerDestinations !== 3 ||
+				!Menu.getApplicationMenu())
+		) {
+			throw new Error(`Window controls did not render; evidence=${JSON.stringify(evidence)}`);
 		}
 		if (!evidence.chatAtEnd) {
 			throw new Error(

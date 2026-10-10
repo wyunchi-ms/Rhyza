@@ -33,6 +33,7 @@ export const ipcChannels = {
 	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
 	openExternal: "rhyza:open-external",
+	showApplicationMenu: "rhyza:show-application-menu",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -315,6 +316,7 @@ export interface PathSummaryRound {
 export interface PathSummaryRequest {
 	requestId: string;
 	model: { providerId: ProviderId; modelId: string };
+	prompt?: string;
 	rounds: PathSummaryRound[];
 	paths: Array<{ id: string; title: string; roundIds: string[] }>;
 }
@@ -553,6 +555,7 @@ export interface AgentBridgeEvent {
 
 export interface RhyzaBridge {
 	isElectron: true;
+	platform: string;
 	azureOpenAIConfigGet(): Promise<AzureOpenAIConfig | null>;
 	azureOpenAIConfigSet(config: AzureOpenAIConfig): Promise<AzureOpenAIConfig>;
 	providerStatus(request: ProviderStatusRequest): Promise<ProviderStatusResponse>;
@@ -583,6 +586,7 @@ export interface RhyzaBridge {
 	cancelAuxiliaryRequest(request: AuxiliaryRequestCancelRequest): Promise<{ canceled: boolean }>;
 
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
+	showApplicationMenu(): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
@@ -903,6 +907,11 @@ export function validatePathSummaryRequest(value: unknown): PathSummaryRequest {
 	) {
 		throw new Error("Invalid path-summary request.");
 	}
+	if (
+		value.prompt !== undefined &&
+		(typeof value.prompt !== "string" || value.prompt.length > 4000)
+	)
+		throw new Error("Invalid summary instructions.");
 	const ids = new Set<string>();
 	const messageIds = new Set<string>();
 	let bytes = 0;
@@ -959,7 +968,13 @@ export function validatePathSummaryRequest(value: unknown): PathSummaryRequest {
 		pathIds.add(item.id);
 		return { id: item.id, title: item.title, roundIds: item.roundIds as string[] };
 	});
-	return { requestId: value.requestId, model: validateModelSelection(value.model), rounds, paths };
+	return {
+		requestId: value.requestId,
+		model: validateModelSelection(value.model),
+		...(typeof value.prompt === "string" && { prompt: value.prompt.trim() }),
+		rounds,
+		paths,
+	};
 }
 
 export function validateAuxiliaryRequestCancelRequest(

@@ -1,5 +1,10 @@
 {
 	"Select nodes": "選擇節點",
+	"Merge paths": "合併路徑",
+	"Summary instructions (optional)": "彙總提示詞（選填）",
+	"What should the summary focus on?": "希望彙總重點關注什麼？",
+	"Source paths": "來源路徑",
+	"Wait for the summary to finish before continuing.": "請等待彙總完成後再繼續對話。",
 	"selected": "已選",
 	"Summary": "彙總",
 	"Cancel": "取消",
@@ -21,7 +26,6 @@
 	"Summarize from the root to this node": "彙總從根節點到此節點的路徑",
 	"Toggle selection": "切換選擇",
 	"selected rounds": "個已選輪次",
-	"Skip to content": "跳轉到正文",
 	"Workspace sidebar": "工作區側邊欄",
 	"Close sidebar": "關閉側邊欄",
 	"Search chats (Ctrl+Shift+F)": "搜尋對話（Ctrl+Shift+F）",

@@ -33,6 +33,7 @@ const ipcChannels = {
 	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
 	openExternal: "rhyza:open-external",
+	showApplicationMenu: "rhyza:show-application-menu",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -44,6 +45,7 @@ const ipcChannels = {
 
 contextBridge.exposeInMainWorld("rhyza", {
 	isElectron: true,
+	platform: process.platform,
 	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
 	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request) => ipcRenderer.invoke(ipcChannels.providerStatus, request),
@@ -79,6 +81,7 @@ contextBridge.exposeInMainWorld("rhyza", {
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
+	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),

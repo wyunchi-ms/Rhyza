@@ -14,6 +14,7 @@ import {
 
 const bridge: RhyzaBridge = {
 	isElectron: true,
+	platform: process.platform,
 	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
 	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request: ProviderStatusRequest) =>
@@ -57,6 +58,7 @@ const bridge: RhyzaBridge = {
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
+	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),

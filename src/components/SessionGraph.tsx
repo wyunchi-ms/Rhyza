@@ -1,6 +1,6 @@
 import { useHoverRetention } from "../hooks/useHoverRetention";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, GitBranch, Plus, Check, FileText } from "lucide-react";
+import { ArrowDown, ArrowRight, GitBranch, Plus, FileText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +29,12 @@ import { formatChatTimestamp, formatFullChatTimestamp } from "../utils/chatTimes
 import { SessionNodeContextMenu, useSessionContextMenu } from "./SessionContextMenu";
 import { executionAppearance, roundMetrics } from "../utils/roundMetrics";
 import { ProgressMarker } from "./ProgressMarker";
-import { layoutSessionGraph, type SessionGraphOrientation } from "../utils/sessionGraph";
+import {
+	groupSummarySourceEdges,
+	layoutSessionGraph,
+	type SessionGraphOrientation,
+	type SummarySourceGroup,
+} from "../utils/sessionGraph";
 import { isTurnActive } from "../utils/sessionRuntime";
 import { projectConversationGraph, type ConversationRound } from "../utils/conversationGraph";
 import { IconSwitch } from "./IconSwitch";
@@ -40,7 +45,7 @@ import { graphPreviewPosition } from "../utils/graphPreviewPosition";
 import { ConversationPathEdge } from "./ConversationPathEdge";
 import { createGraphPreviewOwner } from "../utils/graphPreviewOwner";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
-import { usePathSummarySelection } from "./PathSummarySelection";
+import { MergeModeButton, usePathSummarySelection } from "./PathSummarySelection";
 import { summarySourceEdges } from "../utils/pathSummary";
 import { useTranslation } from "../i18n";
 
@@ -59,11 +64,17 @@ interface SessionGraphNodeData {
 	selecting: boolean;
 	isSelected: boolean;
 	isSelectedAncestor: boolean;
+	isSummarySource: boolean;
 	selectionRunning: boolean;
 }
 
-const nodeTypes = { session: SessionGraphNode };
+interface SummaryJunctionData {
+	orientation: SessionGraphOrientation;
+}
+
+const nodeTypes = { session: SessionGraphNode, summaryJunction: SummaryJunctionNode };
 const edgeTypes = { conversation: ConversationPathEdge };
+const edgeArrow = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#a5b4fc" };
 
 export function SessionGraph({
 	viewControl,
@@ -106,7 +117,15 @@ export function SessionGraph({
 	const activeRoundId = focusedRoundId ?? activePath[activePath.length - 1];
 	const topology = JSON.stringify(visibleRounds.map(({ id, parentId }) => ({ id, parentId })));
 	const summaryEdges = useMemo(() => summarySourceEdges(visibleRounds), [visibleRounds]);
-	const summaryEdgeTopology = JSON.stringify(summaryEdges);
+	const summaryGroups = useMemo(() => groupSummarySourceEdges(summaryEdges), [summaryEdges]);
+	const activeSummarySources = useMemo(
+		() =>
+			new Set(
+				summaryEdges.filter((edge) => edge.target === activeRoundId).map((edge) => edge.source),
+			),
+		[summaryEdges, activeRoundId],
+	);
+	const summaryEdgeTopology = JSON.stringify(summaryGroups);
 	const visibleIds = JSON.stringify(visibleRounds.map((round) => round.id));
 	const reportVisible = selection.reportVisible;
 	useEffect(() => {
@@ -211,8 +230,9 @@ export function SessionGraph({
 				selecting: selection.selecting,
 				selected: selection.selected,
 				selectedAncestors,
+				activeSummarySources,
 				selectionRunning: selection.running,
-				summaryEdges,
+				summaryGroups,
 			}),
 		[
 			activeRoundId,
@@ -227,7 +247,8 @@ export function SessionGraph({
 			selection.selected,
 			selection.running,
 			selectedAncestors,
-			summaryEdges,
+			activeSummarySources,
+			summaryGroups,
 		],
 	);
 
@@ -267,6 +288,7 @@ export function SessionGraph({
 					</div>
 				</div>
 				<div className="session-graph-actions">
+					<MergeModeButton />
 					{viewControl}
 					<span className="graph-toolbar-divider" aria-hidden="true" />
 					<IconSwitch
@@ -308,7 +330,7 @@ export function SessionGraph({
 						maxZoom={graphMaxZoom}
 						nodesDraggable={false}
 						nodesConnectable={false}
-						elementsSelectable={!selection.selecting}
+						elementsSelectable
 						proOptions={{ hideAttribution: true }}
 					>
 						<Background color="#a5b4fc" gap={22} size={1} />
@@ -445,6 +467,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 	}, [data.orientation, data.round.id, updateNodeInternals]);
 	const sourcePosition = data.orientation === "horizontal" ? Position.Right : Position.Bottom;
 	const targetPosition = data.orientation === "horizontal" ? Position.Left : Position.Top;
+	const sourcePaths = data.round.user?.pathSummary?.sources;
 	return (
 		<div
 			className={clsx(
@@ -452,16 +475,24 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				data.isActive && "is-active",
 				`execution-${execution}`,
 				reduceMotion && "reduce-motion",
-				data.selecting && data.isSelected && "is-summary-selected",
-				data.selecting && data.isSelectedAncestor && "is-summary-ancestor",
+				data.selecting && !data.selectionRunning && data.isSelected && "is-summary-selected",
+				data.selecting &&
+					!data.selectionRunning &&
+					data.isSelectedAncestor &&
+					"is-summary-ancestor",
+				data.isSummarySource && "is-summary-source",
 			)}
 			data-execution-status={metrics.status}
+			onClick={() => {
+				if (data.selecting && !data.selectionRunning) data.onSelect(data.round.id);
+			}}
 			onContextMenu={(event) => {
 				hidePreview();
 				if (data.selecting) {
 					event.preventDefault();
 					return;
 				}
+
 				openMenu(event, data.round.sessionId);
 			}}
 		>
@@ -475,9 +506,12 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				ref={previewSource}
 				type="button"
 				className="session-graph-node-main"
-				onClick={() => data.onSelect(data.round.id)}
+				onClick={(event) => {
+					event.stopPropagation();
+					data.onSelect(data.round.id);
+				}}
 				disabled={data.selecting && data.selectionRunning}
-				aria-pressed={data.selecting ? data.isSelected : undefined}
+				aria-pressed={data.selecting && !data.selectionRunning ? data.isSelected : undefined}
 				aria-label={`${data.round.title}. Execution: ${metrics.status.replace(/_/g, " ")}`}
 				aria-current={data.isActive ? "page" : undefined}
 				aria-describedby={previewRect ? `round-preview-${data.round.id}` : undefined}
@@ -490,9 +524,9 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				<header>
 					<ProgressMarker status={data.progressStatus} active={false} />
 					<strong>{data.round.title}</strong>
-					{data.round.user?.pathSummary && (
+					{sourcePaths && (
 						<span className="summary-node-badge" title={t("Summary")}>
-							<FileText size={12} /> {data.round.user.pathSummary.sources.length}
+							<FileText size={12} /> {sourcePaths.length}
 						</span>
 					)}
 					{roundCreatedAt && timestamp && (
@@ -505,15 +539,24 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 						</time>
 					)}
 				</header>
-				<p>
+				<p className={clsx(sourcePaths && "summary-node-preview")}>
 					{data.preview || (data.round.user ? "Waiting for response" : "Start a new conversation")}
 				</p>
+				{sourcePaths && (
+					<div
+						className="summary-node-sources"
+						title={sourcePaths.map((source) => source.title).join(" · ")}
+					>
+						<span>{t("Source paths")}:</span>
+						{sourcePaths.slice(0, 2).map((source) => (
+							<span key={source.roundId} className="summary-node-source" title={source.title}>
+								{source.title}
+							</span>
+						))}
+						{sourcePaths.length > 2 && <span>+{sourcePaths.length - 2}</span>}
+					</div>
+				)}
 			</button>
-			{data.selecting && data.isSelected && (
-				<span className="summary-node-check" aria-hidden="true">
-					<Check size={12} />
-				</span>
-			)}
 			{data.isLeaf && <CacheStatus compact request={cacheRequest} />}
 			<NodeInformation
 				metrics={metrics}
@@ -593,6 +636,17 @@ function RoundPreviewContent({ round }: { round: ConversationRound }) {
 	);
 }
 
+function SummaryJunctionNode({ data }: NodeProps<SummaryJunctionData>) {
+	const sourcePosition = data.orientation === "horizontal" ? Position.Right : Position.Bottom;
+	const targetPosition = data.orientation === "horizontal" ? Position.Left : Position.Top;
+	return (
+		<div className="summary-graph-junction" aria-hidden="true">
+			<Handle type="target" position={targetPosition} isConnectable={false} />
+			<Handle type="source" position={sourcePosition} isConnectable={false} />
+		</div>
+	);
+}
+
 function buildGraph({
 	rounds,
 	sessions,
@@ -605,8 +659,9 @@ function buildGraph({
 	selecting,
 	selected,
 	selectedAncestors,
+	activeSummarySources,
 	selectionRunning,
-	summaryEdges,
+	summaryGroups,
 }: {
 	rounds: ConversationRound[];
 	sessions: SessionNode[];
@@ -619,37 +674,53 @@ function buildGraph({
 	selecting: boolean;
 	selected: ReadonlySet<string>;
 	selectedAncestors: ReadonlySet<string>;
+	activeSummarySources: ReadonlySet<string>;
 	selectionRunning: boolean;
-	summaryEdges: readonly { source: string; target: string }[];
-}): { nodes: Array<Node<SessionGraphNodeData>>; edges: Edge[] } {
+	summaryGroups: readonly SummarySourceGroup[];
+}): {
+	nodes: Array<Node<SessionGraphNodeData> | Node<SummaryJunctionData>>;
+	edges: Edge[];
+} {
 	const bySession = new Map(sessions.map((session) => [session.id, session]));
 	const parents = new Set(rounds.map((round) => round.parentId));
 	const byId = new Map(rounds.map((round) => [round.id, round]));
 	const activeEdges = new Set(activePath.slice(1).map((id, index) => `${activePath[index]}:${id}`));
-	const nodes = rounds.map((round): Node<SessionGraphNodeData> => {
-		return {
-			id: round.id,
-			type: "session",
-			position: positions.get(round.id) ?? { x: 0, y: 0 },
-			data: {
-				round,
-				preview: clipPreview(
-					round.answers.map((turn) => turn.content || turn.summary || "").join(" "),
-				),
-				progressStatus: bySession.get(round.sessionId)?.progressStatus,
-				isActive: round.id === activeRoundId,
-				isRunning: round.answers.some(isTurnActive),
-				isLeaf: !parents.has(round.id),
-				previewOwner,
-				orientation,
-				onSelect,
-				selecting,
-				isSelected: selected.has(round.id),
-				isSelectedAncestor: selectedAncestors.has(round.id),
-				selectionRunning,
-			},
-		};
-	});
+	const nodes: Array<Node<SessionGraphNodeData> | Node<SummaryJunctionData>> = rounds.map(
+		(round): Node<SessionGraphNodeData> => {
+			return {
+				id: round.id,
+				type: "session",
+				position: positions.get(round.id) ?? { x: 0, y: 0 },
+				data: {
+					round,
+					preview: clipPreview(
+						round.answers.map((turn) => turn.content || turn.summary || "").join(" "),
+					),
+					progressStatus: bySession.get(round.sessionId)?.progressStatus,
+					isActive: round.id === activeRoundId,
+					isRunning: round.answers.some(isTurnActive),
+					isLeaf: !parents.has(round.id),
+					previewOwner,
+					orientation,
+					onSelect,
+					selecting,
+					isSelected: selected.has(round.id),
+					isSelectedAncestor: selectedAncestors.has(round.id),
+					isSummarySource: activeSummarySources.has(round.id),
+					selectionRunning,
+				},
+			};
+		},
+	);
+	nodes.push(
+		...summaryGroups.map((group): Node<SummaryJunctionData> => ({
+			id: group.id,
+			type: "summaryJunction",
+			position: positions.get(group.id) ?? { x: 0, y: 0 },
+			selectable: false,
+			data: { orientation },
+		})),
+	);
 	const edges = rounds.flatMap((round): Edge[] =>
 		round.parentId && byId.has(round.parentId)
 			? [
@@ -663,22 +734,38 @@ function buildGraph({
 							activeEdges.has(`${round.parentId}:${round.id}`) && "is-active",
 							round.answers.some(isTurnActive) && "is-running",
 						),
-						markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#a5b4fc" },
+						markerEnd: edgeArrow,
 					},
 				]
 			: [],
 	);
-	edges.push(
-		...summaryEdges.map((edge): Edge => ({
-			id: `summary:${edge.source}:${edge.target}`,
-			source: edge.source,
-			target: edge.target,
-			type: "smoothstep",
-			className: "summary-source-edge",
-			markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
-			style: { strokeDasharray: "6 5" },
-		})),
-	);
+	for (const group of summaryGroups) {
+		const activeGroup = group.targets.includes(activeRoundId ?? "");
+		for (const source of group.sources) {
+			edges.push({
+				id: `summary-source:${source}:${group.id}`,
+				source,
+				target: group.id,
+				type: "conversation",
+				data: { active: activeGroup },
+				className: clsx("summary-provenance-edge", activeGroup && "is-active"),
+				style: { strokeDasharray: "5 5" },
+			});
+		}
+		for (const target of group.targets) {
+			const active = target === activeRoundId;
+			edges.push({
+				id: `summary-target:${group.id}:${target}`,
+				source: group.id,
+				target,
+				type: "conversation",
+				data: { active },
+				className: clsx("summary-provenance-edge", active && "is-active"),
+				style: { strokeDasharray: "5 5" },
+				markerEnd: edgeArrow,
+			});
+		}
+	}
 	return { nodes, edges };
 }
 
