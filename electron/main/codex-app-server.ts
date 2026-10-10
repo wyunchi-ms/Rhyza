@@ -5,12 +5,14 @@ import path from "node:path";
 import readline from "node:readline";
 import {
 	createAssistantMessageEventStream,
+	getCurrentSystemPrompt,
 	type AssistantMessage,
 	type AssistantMessageEventStream,
 	type Context,
 	type ImageContent,
 	type Model,
 	type SimpleStreamOptions,
+	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 
 const providerId = "codex";
@@ -182,7 +184,7 @@ export class CodexAppServer {
 
 	streamSimple(
 		model: Model<string>,
-		context: Context,
+		context: TranscriptContext,
 		options?: SimpleStreamOptions,
 	): AssistantMessageEventStream {
 		const stream = createAssistantMessageEventStream();
@@ -214,7 +216,7 @@ export class CodexAppServer {
 	private async runStream(
 		stream: AssistantMessageEventStream,
 		model: Model<string>,
-		context: Context,
+		context: TranscriptContext,
 		options?: SimpleStreamOptions,
 	): Promise<void> {
 		const output = emptyAssistantMessage(model);
@@ -248,7 +250,9 @@ export class CodexAppServer {
 						sandbox: sessionContext?.writable ? "workspace-write" : "read-only",
 						ephemeral: true,
 						serviceName: "rhyza",
-						developerInstructions: buildDeveloperInstructions(context.systemPrompt),
+						developerInstructions: buildDeveloperInstructions(
+							getCurrentSystemPrompt(context.messages),
+						),
 					}),
 				);
 				threadId = asString(asObject(threadResult.thread).id);
@@ -582,7 +586,10 @@ async function resolveCodexExecutable(): Promise<string> {
 	return process.platform === "win32" ? "codex.exe" : "codex";
 }
 
-export function contextToInput(context: Context, includeTranscript = true): JsonObject[] {
+export function contextToInput(
+	context: Pick<Context, "messages">,
+	includeTranscript = true,
+): JsonObject[] {
 	const latestUser = [...context.messages].reverse().find((message) => message.role === "user");
 	const transcript = context.messages
 		.slice(0, latestUser ? context.messages.lastIndexOf(latestUser) : context.messages.length)
@@ -604,6 +611,7 @@ export function contextToInput(context: Context, includeTranscript = true): Json
 }
 
 function formatMessage(message: Context["messages"][number]): string {
+	if (message.role === "system") return "";
 	if (message.role === "user") return `<user>\n${messageText(message.content)}\n</user>`;
 	if (message.role === "assistant") {
 		const text = message.content

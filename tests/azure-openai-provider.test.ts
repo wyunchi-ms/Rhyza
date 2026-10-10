@@ -5,6 +5,7 @@ import test, { type TestContext } from "node:test";
 import {
 	createModels,
 	InMemoryCredentialStore,
+	normalizeContext,
 	Type,
 	type Context,
 	type Provider,
@@ -14,6 +15,7 @@ import {
 	type AzureOpenAIProviderDependencies,
 } from "../electron/main/azure-openai-provider.js";
 import { validateAzureOpenAIConfig, type AzureOpenAIConfig } from "../src/shared/ipc.js";
+import { isRecord } from "../src/shared/value.js";
 
 const config: AzureOpenAIConfig = {
 	endpoint: "https://example-resource.openai.azure.com/",
@@ -28,6 +30,7 @@ const authContext = {
 	env: async () => "ambient-key-must-be-ignored",
 	fileExists: async () => false,
 };
+const authRequest = { ctx: authContext, signal: new AbortController().signal };
 const context: Context = { messages: [{ role: "user", content: "Hello", timestamp: now }] };
 
 async function fixture(t: TestContext, dependencies: AzureOpenAIProviderDependencies = {}) {
@@ -176,7 +179,7 @@ test("token refresh is coalesced and expires with a two-minute safety margin", a
 	});
 	await provider.setConfig(config);
 	const native = await runtime(provider);
-	const resolve = () => native.auth.apiKey!.resolve({ ctx: authContext });
+	const resolve = () => native.auth.apiKey!.resolve(authRequest);
 	const requests = [resolve(), resolve(), resolve()];
 	await new Promise<void>((resolve) => setImmediate(resolve));
 	assert.equal(calls, 1);
@@ -211,7 +214,7 @@ test("failed refresh never uses the old token or ambient credentials and can rec
 	const native = await runtime(provider);
 	const resolve = () =>
 		native.auth.apiKey!.resolve({
-			ctx: authContext,
+			...authRequest,
 			credential: { type: "api_key", key: "stored-key" },
 		});
 	assert.equal((await resolve())?.auth.apiKey, secret);
@@ -291,15 +294,12 @@ test("saving settings invalidates old runtime auth and token cache", async (t) =
 	});
 	await provider.setConfig(config);
 	const old = await runtime(provider);
-	await old.auth.apiKey!.resolve({ ctx: authContext });
+	await old.auth.apiKey!.resolve(authRequest);
 	await provider.setConfig({ ...config, deployment: "replacement" });
-	await assert.rejects(old.auth.apiKey!.resolve({ ctx: authContext }), /settings changed/);
+	await assert.rejects(old.auth.apiKey!.resolve(authRequest), /settings changed/);
 	const current = await runtime(provider);
 	assert.equal(current.getModels()[0].id, "replacement");
-	assert.equal(
-		(await current.auth.apiKey!.resolve({ ctx: authContext }))?.auth.apiKey,
-		`${secret}-2`,
-	);
+	assert.equal((await current.auth.apiKey!.resolve(authRequest))?.auth.apiKey, `${secret}-2`);
 });
 
 test("a token refresh completing after settings change cannot restore old credentials", async (t) => {
@@ -316,13 +316,13 @@ test("a token refresh completing after settings change cannot restore old creden
 	});
 	await provider.setConfig(config);
 	const old = await runtime(provider);
-	const pending = old.auth.apiKey!.resolve({ ctx: authContext });
+	const pending = old.auth.apiKey!.resolve(authRequest);
 	const rejected = assert.rejects(pending, /Run `az login`/);
 	await new Promise<void>((resolve) => setImmediate(resolve));
 	await provider.setConfig({ ...config, deployment: "new-deployment" });
 	release!();
 	await rejected;
-	await assert.rejects(old.auth.apiKey!.resolve({ ctx: authContext }), /settings changed/);
+	await assert.rejects(old.auth.apiKey!.resolve(authRequest), /settings changed/);
 	assert.equal((await runtime(provider)).getModels()[0].id, "new-deployment");
 });
 
@@ -357,7 +357,9 @@ test("text-only input rejects images before authentication or transport", async 
 		[historicalUserImage, ...context.messages],
 		[historicalToolImage, ...context.messages],
 	]) {
-		const result = await native.streamSimple(native.getModels()[0], { messages }).result();
+		const result = await native
+			.streamSimple(native.getModels()[0], normalizeContext({ messages }))
+			.result();
 		assert.equal(result.stopReason, "error");
 		assert.match(result.errorMessage ?? "", /supports text only/);
 	}
@@ -366,6 +368,7 @@ test("text-only input rejects images before authentication or transport", async 
 
 test("Responses requests pin CLI auth and endpoint, reject redirects, and enforce configured output limits", async (t) => {
 	let calls = 0;
+	const providerEvents: string[] = [];
 	const { provider } = await fixture(t, {
 		fetch: async (input, init) => {
 			calls += 1;
@@ -399,6 +402,11 @@ test("Responses requests pin CLI auth and endpoint, reject redirects, and enforc
 		maxTokens: 900_000,
 		reasoning: "high",
 		temperature: 1,
+		onProviderStreamEvent: async (event, inspectedModel) => {
+			assert(isRecord(event) && typeof event.type === "string");
+			assert.equal(inspectedModel.provider, "azure-openai");
+			providerEvents.push(event.type);
+		},
 		onPayload: (payload, inspectedModel) => {
 			const dump = JSON.stringify({ payload, model: inspectedModel });
 			assert.doesNotMatch(dump, new RegExp(secret));
@@ -409,6 +417,7 @@ test("Responses requests pin CLI auth and endpoint, reject redirects, and enforc
 	});
 	assert.equal(result.stopReason, "stop");
 	assert.equal(calls, 1);
+	assert.deepEqual(providerEvents, ["response.completed"]);
 });
 
 test("shared Responses parser preserves text, tool calls, usage and follow-up tool results", async (t) => {
@@ -481,7 +490,7 @@ test("shared Responses parser preserves text, tool calls, usage and follow-up to
 			parameters: Type.Object({ query: Type.String() }),
 		},
 	];
-	const events = native.streamSimple(model, { ...context, tools });
+	const events = native.streamSimple(model, normalizeContext({ ...context, tools }));
 	const types: string[] = [];
 	for await (const event of events) types.push(event.type);
 	const result = await events.result();
@@ -494,21 +503,24 @@ test("shared Responses parser preserves text, tool calls, usage and follow-up to
 	assert.deepEqual(tool.arguments, { query: "hello" });
 	assert.equal(result.usage.totalTokens, 12);
 	const followup = await native
-		.streamSimple(model, {
-			tools,
-			messages: [
-				...context.messages,
-				result,
-				{
-					role: "toolResult",
-					toolCallId: tool.id,
-					toolName: tool.name,
-					content: [{ type: "text", text: "Found" }],
-					isError: false,
-					timestamp: now,
-				},
-			],
-		})
+		.streamSimple(
+			model,
+			normalizeContext({
+				tools,
+				messages: [
+					...context.messages,
+					result,
+					{
+						role: "toolResult",
+						toolCallId: tool.id,
+						toolName: tool.name,
+						content: [{ type: "text", text: "Found" }],
+						isError: false,
+						timestamp: now,
+					},
+				],
+			}),
+		)
 		.result();
 	assert.equal(followup.stopReason, "stop");
 	assert.equal(calls, 2);
@@ -528,7 +540,7 @@ test("HTTP and transport errors are sanitized and redirects are never retried by
 		await provider.setConfig(config);
 		const native = await runtime(provider);
 		const result = await native
-			.streamSimple(native.getModels()[0], context, { maxRetries: 0 })
+			.streamSimple(native.getModels()[0], normalizeContext(context), { maxRetries: 0 })
 			.result();
 		assert.equal(result.stopReason, "error");
 		assert.doesNotMatch(JSON.stringify(result), new RegExp(secret));

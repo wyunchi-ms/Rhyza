@@ -1,21 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import {
 	createAssistantMessageEventStream,
 	type AssistantMessage,
 	type Model,
 } from "@earendil-works/pi-ai";
-import { responseCacheEvidence } from "../src/shared/cacheEvidence.js";
+import { providerStreamCacheEvidence, responseCacheEvidence } from "../src/shared/cacheEvidence.js";
+import type { AgentCacheEvidence } from "../src/shared/ipc.js";
 
-test("pinned SDK patch is idempotent and actual Responses parsing preserves TTL alongside usage", async () => {
-	const script = new URL("../scripts/patch-pi-cache-metadata.mjs", import.meta.url);
-	for (let attempt = 0; attempt < 2; attempt++) {
-		execFileSync(process.execPath, [fileURLToPath(script)], {
-			stdio: "pipe",
-		});
-	}
+test("official provider stream hook captures cache TTL alongside actual Responses usage", async () => {
 	const { processResponsesStream } =
 		await import("@earendil-works/pi-ai/api/openai-responses-shared");
 	const model: Model<"openai-responses"> = {
@@ -31,6 +24,8 @@ test("pinned SDK patch is idempotent and actual Responses parsing preserves TTL 
 		maxTokens: 1000,
 	};
 	for (const ttl of ["30m", undefined]) {
+		let cache: AgentCacheEvidence | undefined;
+		let providerEvents = 0;
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -69,10 +64,43 @@ test("pinned SDK patch is idempotent and actual Responses parsing preserves TTL 
 			output,
 			createAssistantMessageEventStream(),
 			model,
+			{
+				onProviderStreamEvent: (event, streamModel) => {
+					providerEvents++;
+					cache = providerStreamCacheEvidence(event, streamModel.api);
+				},
+			},
 		);
 		assert.equal(output.usage.input, 1000);
 		assert.equal(output.usage.cacheRead, 42000);
 		assert.equal(output.usage.cacheWrite, 3000);
-		assert.equal(responseCacheEvidence(JSON.parse(JSON.stringify(output)))?.ttl, ttl);
+		assert.equal(providerEvents, 1);
+		assert.equal(cache?.ttl, ttl);
+		assert.equal(cache?.startedAt, ttl ? "2026-09-14T08:00:00.000Z" : undefined);
+		assert.equal(responseCacheEvidence(output), undefined);
 	}
+});
+
+test("cache evidence requires a terminal Responses event and a valid provider-reported TTL", () => {
+	const response = { prompt_cache_options: { ttl: "30m", mode: "implicit" } };
+	assert.equal(
+		providerStreamCacheEvidence({ type: "response.created", response }, "openai-responses"),
+		undefined,
+	);
+	assert.equal(
+		providerStreamCacheEvidence({ type: "response.completed", response }, "codex-app-server"),
+		undefined,
+	);
+	assert.equal(
+		providerStreamCacheEvidence(
+			{ type: "response.completed", response: { prompt_cache_options: { ttl: "invalid" } } },
+			"openai-responses",
+		),
+		undefined,
+	);
+	assert.equal(
+		providerStreamCacheEvidence({ type: "response.incomplete", response }, "openai-responses")
+			?.ttlMs,
+		1_800_000,
+	);
 });

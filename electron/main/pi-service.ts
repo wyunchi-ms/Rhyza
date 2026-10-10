@@ -10,12 +10,20 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	SessionManager,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { Api, ImageContent, Model } from "@earendil-works/pi-ai";
+import {
+	getCurrentSystemPrompt,
+	getCurrentTools,
+	type Api,
+	type ImageContent,
+	type Model,
+} from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type {
 	AgentBridgeEvent,
 	AgentUsage,
+	AgentCacheEvidence,
 	AgentModelRequestSnapshot,
 	AgentPromptRequest,
 	AgentPromptResponse,
@@ -47,7 +55,10 @@ import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
-import { responseCacheEvidence } from "../../src/shared/cacheEvidence.js";
+import {
+	providerStreamCacheEvidence,
+	responseCacheEvidence,
+} from "../../src/shared/cacheEvidence.js";
 import {
 	CodexAppServer,
 	codexAppServerApi,
@@ -484,6 +495,7 @@ export class PiService {
 				agentDir: this.agentDir,
 				modelRuntime: runtime,
 				model,
+				settingsManager: this.createSessionSettings(workspacePath),
 				sessionManager: SessionManager.inMemory(workspacePath, {
 					id: `kb-summary-${crypto.randomUUID()}`,
 				}),
@@ -651,6 +663,7 @@ export class PiService {
 				modelRuntime: runtime,
 				model,
 				thinkingLevel: "low",
+				settingsManager: this.createSessionSettings(workspacePath),
 				sessionManager: SessionManager.inMemory(workspacePath, {
 					id: `kb-extract-${crypto.randomUUID()}`,
 				}),
@@ -701,6 +714,14 @@ export class PiService {
 	private async getModelRuntime(): Promise<ModelRuntime> {
 		this.modelRuntimePromise ??= this.createModelRuntime();
 		return this.modelRuntimePromise;
+	}
+
+	private createSessionSettings(workspacePath: string): SettingsManager {
+		const settings = SettingsManager.create(workspacePath, this.agentDir);
+		// Pi reads warming from global settings, bypassing applyOverrides. Pin the session's
+		// reader so reloads cannot enable paid background requests or change shared settings.
+		settings.getCacheWarmingMode = () => "off";
+		return settings;
 	}
 
 	private async createModelRuntime(): Promise<ModelRuntime> {
@@ -772,9 +793,11 @@ export class PiService {
 			request.frontendSessionId,
 			request.writable === true,
 		);
+		const settingsManager = this.createSessionSettings(sessionWorkspace.path);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: sessionWorkspace.path,
 			agentDir: this.agentDir,
+			settingsManager,
 
 			appendSystemPromptOverride: (base) => [
 				...base,
@@ -818,6 +841,7 @@ export class PiService {
 			model,
 			thinkingLevel: request.thinkingLevel ?? "medium",
 			sessionManager,
+			settingsManager,
 			resourceLoader,
 			tools: [
 				...new Set([
@@ -831,9 +855,11 @@ export class PiService {
 		let requestSequence = 0;
 		let activeRequestId: string | undefined;
 		let activeSnapshot: AgentModelRequestSnapshot | undefined;
+		let activeCache: AgentCacheEvidence | undefined;
 		const originalStream = session.agent.streamFunction;
 		session.agent.streamFunction = async (requestModel, context, options) => {
 			activeRequestId = crypto.randomUUID();
+			activeCache = undefined;
 			const frontendTurnId = created.frontendTurnId ?? "unmapped";
 			const dumpPath = path.join(
 				this.requestDumpDir,
@@ -852,7 +878,11 @@ export class PiService {
 				frontendTurnId,
 				contextWindow: requestModel.contextWindow,
 				dumpPath,
-				context: sanitizeForRenderer(context) as AgentModelRequestSnapshot["context"],
+				context: sanitizeForRenderer({
+					systemPrompt: getCurrentSystemPrompt(context.messages),
+					messages: context.messages,
+					tools: getCurrentTools(context.messages),
+				}) as AgentModelRequestSnapshot["context"],
 			};
 			activeSnapshot = snapshot;
 			await writeRequestDump(dumpPath, snapshot);
@@ -863,7 +893,14 @@ export class PiService {
 				requestId: activeRequestId,
 				modelRequest: snapshot,
 			});
-			return originalStream(requestModel, context, options);
+			return originalStream(requestModel, context, {
+				...options,
+				onProviderStreamEvent: async (data, streamModel) => {
+					await options?.onProviderStreamEvent?.(data, streamModel);
+					const cache = providerStreamCacheEvidence(data, streamModel.api);
+					if (cache) activeCache = cache;
+				},
+			});
 		};
 		const originalOnPayload = session.agent.onPayload;
 		session.agent.onPayload = async (payload, payloadModel) => {
@@ -888,7 +925,13 @@ export class PiService {
 		};
 		const unsubscribe = session.subscribe((event) => {
 			this.emitAgentEvent(
-				toAgentBridgeEvent(session.sessionId, request.frontendSessionId, event, activeRequestId),
+				toAgentBridgeEvent(
+					session.sessionId,
+					request.frontendSessionId,
+					event,
+					activeRequestId,
+					activeCache,
+				),
 			);
 			if (
 				event.type === "message_end" &&
@@ -903,13 +946,14 @@ export class PiService {
 					activeSnapshot = {
 						...activeSnapshot,
 						usage,
-						cache: responseCacheEvidence(event.message),
+						cache: activeCache ?? responseCacheEvidence(event.message),
 					};
 					if (activeSnapshot.dumpPath)
 						void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
 				}
 				activeRequestId = undefined;
 				activeSnapshot = undefined;
+				activeCache = undefined;
 			}
 		});
 		const created: ActiveSession = {
@@ -1189,6 +1233,7 @@ function toAgentBridgeEvent(
 	frontendSessionId: string,
 	event: AgentSessionEvent,
 	requestId?: string,
+	cache?: AgentCacheEvidence,
 ): AgentBridgeEvent {
 	const stream = extractStreamDelta(event);
 	const usage = getEventUsage(event);
@@ -1196,7 +1241,7 @@ function toAgentBridgeEvent(
 		type: event.type,
 		cache:
 			event.type === "message_end" && "message" in event
-				? responseCacheEvidence(event.message)
+				? (cache ?? responseCacheEvidence(event.message))
 				: undefined,
 		sessionId,
 		frontendSessionId,

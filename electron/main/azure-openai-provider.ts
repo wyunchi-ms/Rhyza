@@ -5,6 +5,7 @@ import { AzureCliCredential, type AzureCliCredentialOptions } from "@azure/ident
 import {
 	createAssistantMessageEventStream,
 	createProvider,
+	getCurrentTools,
 	type AssistantMessage,
 	type Model,
 	type Provider,
@@ -197,8 +198,7 @@ export class AzureOpenAIProvider {
 						throw new Error("This Azure OpenAI connection supports text only.");
 					}
 					const token = await resolveToken();
-					// pi-ai 0.82.1's standard adapter has no fetch hook. Reuse its converters and
-					// stream processor, but own this client so redirects cannot forward credentials.
+					// Own the transport so redirects cannot forward CLI credentials.
 					const client = new OpenAI({
 						apiKey: token,
 						baseURL: snapshot.endpoint,
@@ -222,6 +222,7 @@ export class AzureOpenAIProvider {
 							return this.fetch(input, { ...init, headers, redirect: "error" });
 						},
 					});
+					const tools = getCurrentTools(context.messages);
 					let params: ResponseCreateParamsStreaming = {
 						model: snapshot.deployment,
 						input: convertResponsesMessages(
@@ -229,8 +230,8 @@ export class AzureOpenAIProvider {
 							context,
 							new Set(["openai", "openai-codex", "opencode", "azure-openai"]),
 						),
-						tools: context.tools?.length
-							? convertResponsesTools(context.tools, { supportsStrictMode: false })
+						tools: tools.length
+							? convertResponsesTools(tools, { supportsStrictMode: false })
 							: undefined,
 						stream: true,
 						store: false,
@@ -269,11 +270,14 @@ export class AzureOpenAIProvider {
 						model,
 					);
 					events.push({ type: "start", partial: output });
-					await processResponsesStream(data, output, events, model);
+					await processResponsesStream(data, output, events, model, {
+						onProviderStreamEvent: options?.onProviderStreamEvent,
+					});
 					if (
 						options?.signal?.aborted ||
 						output.stopReason === "error" ||
-						output.stopReason === "aborted"
+						output.stopReason === "aborted" ||
+						output.stopReason === "pending"
 					) {
 						throw new Error("Azure OpenAI response did not complete.");
 					}
