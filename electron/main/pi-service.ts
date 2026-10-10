@@ -575,9 +575,11 @@ export class PiService {
 			maxTokens: model.maxTokens,
 			complete: async (prompt, maxTokens, signal) => {
 				signal.throwIfAborted();
+				const settingsManager = this.createSessionSettings(workspacePath);
 				const loader = new DefaultResourceLoader({
 					cwd: workspacePath,
 					agentDir: this.agentDir,
+					settingsManager,
 					noExtensions: true,
 					noSkills: true,
 					noPromptTemplates: true,
@@ -595,6 +597,7 @@ export class PiService {
 					thinkingLevel: "off",
 					tools: [],
 					noTools: "all",
+					settingsManager,
 					resourceLoader: loader,
 					sessionManager: SessionManager.inMemory(workspacePath, {
 						id: `path-summary-${crypto.randomUUID()}`,
