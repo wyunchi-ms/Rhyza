@@ -15,8 +15,9 @@
 | Conversation | 树状 Session/Turn       | Available | 从历史 Turn 继续会创建分支并保留原路径                                        |
 | Conversation | 引用选区提问            | Available | 保存引用原文，并将新分支挂到引用 Turn                                         |
 | Conversation | 列表/节点视图           | Available | 左侧面板可切换树列表与 Session Graph                                          |
+| Conversation | 路径汇总                | Available | 列表和 Node view 共用高亮多选；去重汇总根到终点的用户/Agent 正文，生成可继续聊天的节点，来源由汇合点连线并标注在卡片内 |
 | Conversation | 节点状态与恢复          | Available | 区分 queued、retrieving、running、complete、error 等活动状态                  |
-| Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F` 或侧栏搜索按钮                                                 |
+| Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F`                                                                 |
 | Conversation | 图片输入                | Available | Composer 可附加图片，由所选 Provider/模型决定是否支持；Azure OpenAI 当前仅支持文本                                   |
 | Conversation | 并发调度                | Available | 全局 1–10；同一 Conversation 严格有序                                         |
 | Conversation | Token/费用展示          | Partial   | 展示 Provider 返回的 usage；字段完整性取决于 Provider                         |
@@ -60,6 +61,16 @@ Rhyza 的基本单位是 Session 和 Turn。用户从历史回答继续时，新
 ### 运行状态
 
 请求依次经过 queue、Source/Knowledge retrieval、Agent generation 和完成/失败阶段。应用会保存活动状态，异常不应伪装成成功。不同 Conversation 可并发，同一 Conversation 始终顺序执行。
+
+### 路径汇总
+
+通过 Chats 标题栏 **Merge paths → 点击节点 → Summary** 汇总一条或多条路径，也可从节点右键菜单执行 **Summarize path** 进入已选中该路径的合并模式。可在高亮的提示词输入框填写可选指令，指定摘要重点；普通浏览模式不会显示节点选择框。两种视图共用高亮选择，不显示勾选框或列表轮次计数；列表中的连续轮次以末轮为默认终点，从图切回列表时保留更早轮次的实际选择并高亮对应行。折叠或筛选隐藏的选择仍计入汇总，可展开 **Selected paths** 单独移除。汇总进行中隐藏顶部选择面板，在对话区域提供取消操作，新节点立即出现在图与对话中。
+
+汇总只输入保存的用户消息（含引用原文）及 Agent 面向用户的回复正文，不输入 thinking、tool、子 Agent 内部消息、原始模型请求或图片。共享历史按原始消息身份去重，不合并无关路径中的相同文字；未完成或中断的回答需要先完成。
+
+汇总使用当前 Provider/模型，可选提示词在每一层分块与合并时传入；超长内容按上下文预算分块并递归合并，不会静默截断路径。Pi 模型使用目录/配置中的上下文及输出预算；Claude Code 无模型目录，使用保守的 32k 请求预算，并在空的临时目录以 `--bare`、空 setting sources 和独立 system prompt 执行，需 CLI 支持这些选项。无对应 tokenizer 时采用 UTF-8 字节数的保守 token 估算。失败、超时、取消、应用关闭和输出截断会移除进行中节点；应用运行期间选择保留供重试。每次片段请求最多等待 120 秒，最多 12 层合并。单次输入最多 32 MB 文本。
+
+结果是独立 Session 内的一对用户/Agent 消息和来源快照。Node view 中普通路径与来源路径共用曲线及选中态渐变，来源路径经隐藏汇合点以虚线连接到摘要；选中摘要时来源节点显示紫色虚线高亮，卡片内也标注来源。用户消息气泡以可点击的引用形式列出来源，删除的来源显示为不可用；引用连线不是 `parentId` 父子关系，列表中摘要单独出现一次。后续聊天只继承摘要与新增对话，不重放原始路径。原历史不移动、不删除，来源后续修改不会改变摘要，删除来源不级联删除摘要。成功费用记录于摘要回答，失败/取消的已知费用记录于来源 Session，均只累计一次。生成阶段不运行工具、不自动写入 Knowledge，Pi 汇总 Session 同样禁用后台 prompt-cache warming。
 
 ### 导航
 

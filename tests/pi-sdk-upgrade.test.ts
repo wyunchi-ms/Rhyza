@@ -14,6 +14,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { CodexAppServer } from "../electron/main/codex-app-server.js";
 import { PiService } from "../electron/main/pi-service.js";
+import { summaryCompletionMarker, summarySystemPrompt } from "../electron/main/path-summary.js";
 import type { AgentBridgeEvent } from "../src/shared/ipc.js";
 import { parseTodoChecklist } from "../electron/main/todo-service.js";
 
@@ -40,6 +41,7 @@ test("SDK upgrade preserves host context, cache evidence, and explicit feature g
 		"Second answer",
 		"Fixture title",
 		'{"entities":[],"relations":[],"diagrams":[]}',
+		`# Fixture path summary\nOnly the selected conversation.\n${summaryCompletionMarker}`,
 	];
 	faux.setResponses(
 		replies.map<FauxResponseFactory>((reply, index) => async (context, options, _state, model) => {
@@ -119,11 +121,34 @@ test("SDK upgrade preserves host context, cache evidence, and explicit feature g
 		directory,
 	);
 	assert.equal(extraction.error, undefined);
-	assert.equal(contexts.length, 4);
+	const pathSummary = await service.generatePathSummary(
+		{
+			requestId: "sdk-path-summary",
+			model,
+			rounds: [
+				{
+					id: "selected-round",
+					messages: [{ id: "selected-user", role: "user", content: "Selected question" }],
+				},
+			],
+			paths: [{ id: "selected-round", title: "Selected path", roundIds: ["selected-round"] }],
+		},
+		directory,
+		() => {},
+	);
+	assert.equal(pathSummary.error, undefined);
+	assert.equal(pathSummary.content, "# Fixture path summary\nOnly the selected conversation.");
+	assert.equal(
+		getCurrentSystemPrompt(contexts[4].messages),
+		`${summarySystemPrompt}\n\n<cwd>\n${directory.split(path.sep).join("/")}\n</cwd>`,
+	);
+	assert.deepEqual(getCurrentTools(contexts[4].messages), []);
+	assert(!contexts[4].messages.some((message) => message.role === "assistant"));
+	assert.equal(contexts.length, 5);
 	assert.equal(
 		settings.length,
-		3,
-		"Chat, title, and extraction each use host-controlled settings.",
+		4,
+		"Chat, title, extraction, and path summary each use host-controlled settings.",
 	);
 	assert(settings.every((manager) => manager.getCacheWarmingMode() === "off"));
 	await Promise.all(settings.map((manager) => manager.reload()));

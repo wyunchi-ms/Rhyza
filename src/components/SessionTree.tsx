@@ -9,6 +9,7 @@ import {
 	Plus,
 	Sparkles,
 	Trash2,
+	FileText,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -31,13 +32,15 @@ import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/bra
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
+import { MergeModeButton, usePathSummarySelection } from "./PathSummarySelection";
 
 export const SessionTree: React.FC<{
 	embedded?: boolean;
 	viewControl?: React.ReactNode;
 	leafStatuses?: readonly LeafStatusFilter[];
 	onClearFilter?: () => void;
-}> = ({ embedded = false, viewControl, leafStatuses = [], onClearFilter }) => {
+	visible?: boolean;
+}> = ({ embedded = false, viewControl, leafStatuses = [], onClearFilter, visible = true }) => {
 	const { t } = useTranslation();
 	const {
 		sessions,
@@ -177,6 +180,7 @@ export const SessionTree: React.FC<{
 					<UsageLabel usage={usage.total} prefix={t("Total")} />
 				</div>
 				<div className="session-tree-header-actions">
+					<MergeModeButton />
 					{viewControl}
 					<button
 						type="button"
@@ -204,6 +208,7 @@ export const SessionTree: React.FC<{
 						onRegenerate={(id) => void regenerateBranchTitles(id)}
 						onDelete={deleteSession}
 						usage={usage}
+						visible={visible}
 					/>
 				))}
 				{leafStatuses.length > 0 && visibleRoots.length === 0 && (
@@ -231,6 +236,7 @@ const SessionGroup = ({
 	onRegenerate,
 	onDelete,
 	usage,
+	visible,
 }: {
 	root: ConversationTreeNode;
 	sessions: SessionNode[];
@@ -243,7 +249,11 @@ const SessionGroup = ({
 	onRegenerate: (id: string) => void;
 	onDelete: (id: string) => void;
 	usage: ReturnType<typeof allocateConversationTreeUsage>;
+	visible: boolean;
 }) => {
+	const { t } = useTranslation();
+	const selection = usePathSummarySelection();
+	const choosing = selection.selecting && !selection.running;
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
 	const { menu: contextMenu, openMenu, closeMenu } = useSessionContextMenu();
 	const [editingTitle, setEditingTitle] = useState<{
@@ -288,6 +298,20 @@ const SessionGroup = ({
 			else next.add(id);
 			return next;
 		});
+
+	const displayedIds: string[] = [];
+	const collectVisible = (node: ConversationTreeNode) => {
+		displayedIds.push(...node.rounds.map((round) => round.id));
+		if (!collapsedIds.has(node.id)) getChildren(node.id).forEach(collectVisible);
+	};
+	collectVisible(root);
+	const visibilityKey = JSON.stringify(displayedIds);
+	const reportVisible = selection.reportVisible;
+	useEffect(() => {
+		const owner = `list:${root.id}`;
+		reportVisible(owner, visible ? JSON.parse(visibilityKey) : null);
+		return () => reportVisible(owner, null);
+	}, [root.id, visible, visibilityKey, reportVisible]);
 
 	const startRename = (nodeId: string, title: string) => {
 		closeMenu();
@@ -339,6 +363,14 @@ const SessionGroup = ({
 		const isInView = viewportId === node.id;
 		const expanded = !collapsedIds.has(node.id);
 		const isEditing = editingTitle?.nodeId === node.id;
+		const roundIds = node.rounds.map((round) => round.id);
+		const selectedCount = roundIds.filter((id) => selection.selected.has(id)).length;
+		const checked =
+			selectedCount === 1 && selection.selected.has(last.id)
+				? true
+				: selectedCount > 0
+					? "mixed"
+					: false;
 
 		return (
 			<div
@@ -353,6 +385,7 @@ const SessionGroup = ({
 							isCurrent && "is-current",
 							isInView && "is-in-view",
 							isBranchPoint && "is-branch",
+							choosing && selectedCount > 0 && "is-summary-selected",
 						)}
 					>
 						{isBranchPoint ? (
@@ -374,11 +407,21 @@ const SessionGroup = ({
 							type="button"
 							className="session-tree-select"
 							aria-current={isCurrent ? "page" : undefined}
-							onClick={() => onSelect(node.id)}
-							onContextMenu={(event) => openMenu(event, node.id)}
+							aria-pressed={choosing ? checked : undefined}
+							disabled={selection.selecting && selection.running}
+							onClick={() =>
+								selection.selecting ? selection.toggleList(roundIds, last.id) : onSelect(node.id)
+							}
+							onContextMenu={(event) => {
+								if (selection.selecting) event.preventDefault();
+								else openMenu(event, node.id);
+							}}
 						>
 							{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
 							<ProgressMarker status={session?.progressStatus} active={isCurrent} />
+							{node.rounds.some((round) => round.user?.pathSummary) && (
+								<FileText size={13} aria-label={t("Summary")} />
+							)}
 							<SessionNodeTitle title={node.title} />
 							{(session?.titlePending || running) && (
 								<LoaderCircle
@@ -403,7 +446,10 @@ const SessionGroup = ({
 						</button>
 					</div>
 					{isEditing && titleEditor(isBranchPoint ? "left-12" : "left-8")}
-					<div className={clsx("session-node-actions", isEditing && "pointer-events-none")}>
+					<div
+						hidden={selection.selecting}
+						className={clsx("session-node-actions", isEditing && "pointer-events-none")}
+					>
 						<HoverUsage usage={usage.node.get(node.id)} />
 						{isBranchPoint && (
 							<button
@@ -468,6 +514,7 @@ const SessionGroup = ({
 					anchor={contextMenu}
 					nodeId={menuNode.sessionId}
 					turnId={menuRound?.answers[menuRound.answers.length - 1]?.id ?? menuRound?.user?.id}
+					roundId={menuRound?.id}
 					onClose={closeMenu}
 				/>
 			)}

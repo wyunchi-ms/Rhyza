@@ -14,6 +14,7 @@ import {
 
 const bridge: RhyzaBridge = {
 	isElectron: true,
+	platform: process.platform,
 	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
 	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request: ProviderStatusRequest) =>
@@ -43,11 +44,21 @@ const bridge: RhyzaBridge = {
 	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
+	generatePathSummary: (request) => ipcRenderer.invoke(ipcChannels.generatePathSummary, request),
+	onPathSummaryEvent: (listener) => {
+		const wrapped = (
+			_event: Electron.IpcRendererEvent,
+			payload: import("../src/shared/ipc.js").PathSummaryProgress,
+		) => listener(payload);
+		ipcRenderer.on(ipcChannels.pathSummaryEvent, wrapped);
+		return () => ipcRenderer.removeListener(ipcChannels.pathSummaryEvent, wrapped);
+	},
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
 	cancelAuxiliaryRequest: (request) =>
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
+	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),

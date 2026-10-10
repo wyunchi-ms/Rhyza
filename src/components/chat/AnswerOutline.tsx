@@ -58,13 +58,15 @@ export function AnswerOutline({
 			const scrollBounds = container.getBoundingClientRect();
 			const gutter = answer.getBoundingClientRect().left - paneBounds.left;
 			const width = Math.min(256, gutter - 40);
+			const top = scrollBounds.top + 20;
+			const maxHeight = Math.max(0, scrollBounds.bottom - top - 20);
 			const next =
-				width >= 180
+				width >= 180 && maxHeight >= 80
 					? {
 							left: gutter - width - 24,
-							top: scrollBounds.top - paneBounds.top + 20,
+							top: top - paneBounds.top,
 							width,
-							maxHeight: Math.max(0, scrollBounds.height - 40),
+							maxHeight,
 						}
 					: null;
 			setPlacement((current) =>

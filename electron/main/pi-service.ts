@@ -42,6 +42,9 @@ import type {
 	ProviderStatusResponse,
 	SummaryRequest,
 	SummaryResponse,
+	PathSummaryRequest,
+	PathSummaryResponse,
+	PathSummaryProgress,
 	WorkspaceDiffResponse,
 	WorkspaceTodosResponse,
 } from "../../src/shared/ipc.js";
@@ -62,6 +65,11 @@ import {
 	codexAppServerProviderId,
 	type CodexAccount,
 } from "./codex-app-server.js";
+import {
+	summarizeConversationPaths,
+	summarySystemPrompt,
+	type PathSummaryCompletion,
+} from "./path-summary.js";
 
 const defaultProviderId: ProviderId = "github-copilot";
 type PiModel = Model<Api>;
@@ -103,6 +111,7 @@ export class PiService {
 	private readonly azureOpenAI: AzureOpenAIProvider;
 	private azureConfigSaving = false;
 	private activeInferenceCount = 0;
+	private readonly pathSummaryControllers = new Set<AbortController>();
 
 	constructor(
 		userDataPath: string,
@@ -498,6 +507,7 @@ export class PiService {
 					writable: false,
 				});
 			}
+
 			try {
 				return await this.runCancellableAuxiliary(
 					request.requestId,
@@ -524,6 +534,119 @@ export class PiService {
 		} finally {
 			this.activeInferenceCount--;
 		}
+	}
+
+	async generatePathSummary(
+		request: PathSummaryRequest,
+		workspacePath: string,
+		onProgress: (progress: PathSummaryProgress) => void,
+	): Promise<PathSummaryResponse> {
+		const controller = new AbortController();
+		this.pathSummaryControllers.add(controller);
+		this.activeInferenceCount++;
+		try {
+			if (this.azureConfigSaving)
+				throw new Error("Wait for the Azure configuration save to finish.");
+			return await this.runCancellableAuxiliary(
+				request.requestId,
+				() => controller.abort(),
+				async () => {
+					const completion = await this.createPathSummaryCompletion(request, workspacePath);
+					return summarizeConversationPaths(request, completion, controller.signal, onProgress);
+				},
+			);
+		} catch (error) {
+			return { error: errorToMessage(error), canceled: controller.signal.aborted || undefined };
+		} finally {
+			this.pathSummaryControllers.delete(controller);
+			this.activeInferenceCount--;
+		}
+	}
+
+	protected async createPathSummaryCompletion(
+		request: PathSummaryRequest,
+		workspacePath: string,
+	): Promise<PathSummaryCompletion> {
+		const runtime = await this.getModelRuntime();
+		const model = await resolveRequestedModel(runtime, request.model);
+		if (!model) throw new Error("No configured model is available for path summarization.");
+		return {
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			complete: async (prompt, maxTokens, signal) => {
+				signal.throwIfAborted();
+				const settingsManager = this.createSessionSettings(workspacePath);
+				const loader = new DefaultResourceLoader({
+					cwd: workspacePath,
+					agentDir: this.agentDir,
+					settingsManager,
+					noExtensions: true,
+					noSkills: true,
+					noPromptTemplates: true,
+					noThemes: true,
+					noContextFiles: true,
+					systemPromptOverride: () => summarySystemPrompt,
+					appendSystemPromptOverride: () => [],
+				});
+				await loader.reload();
+				const { session } = await createAgentSession({
+					cwd: workspacePath,
+					agentDir: this.agentDir,
+					modelRuntime: runtime,
+					model,
+					thinkingLevel: "off",
+					tools: [],
+					noTools: "all",
+					settingsManager,
+					resourceLoader: loader,
+					sessionManager: SessionManager.inMemory(workspacePath, {
+						id: `path-summary-${crypto.randomUUID()}`,
+					}),
+				});
+				const stream = session.agent.streamFunction;
+				session.agent.streamFunction = (requestModel, context, options) =>
+					stream(requestModel, context, { ...options, maxTokens });
+				if (model.provider === codexAppServerProviderId) {
+					this.codexAppServer.registerSession(session.sessionId, {
+						cwd: workspacePath,
+						writable: false,
+					});
+				}
+				const abort = () => {
+					void session.abort();
+				};
+				signal.addEventListener("abort", abort, { once: true });
+				let timedOut = false;
+				const timeout = setTimeout(() => {
+					timedOut = true;
+					abort();
+				}, 120_000);
+				try {
+					signal.throwIfAborted();
+					await session.sendUserMessage(prompt);
+					const last = [...session.messages]
+						.reverse()
+						.find((message) => message.role === "assistant");
+					return {
+						text: getLastAssistantText(session) ?? "",
+						usage: getSessionUsage(session),
+						stopReason: last?.role === "assistant" ? last.stopReason : undefined,
+						error: timedOut
+							? "Path summary request timed out."
+							: last?.role === "assistant"
+								? last.errorMessage
+								: undefined,
+					};
+				} catch (error) {
+					return { text: "", usage: getSessionUsage(session), error: errorToMessage(error) };
+				} finally {
+					clearTimeout(timeout);
+					signal.removeEventListener("abort", abort);
+					this.codexAppServer.unregisterSession(session.sessionId);
+					session.dispose();
+				}
+			},
+		};
 	}
 
 	async extractKnowledge(
@@ -1028,6 +1151,8 @@ export class PiService {
 	}
 
 	dispose(): void {
+		for (const controller of this.pathSummaryControllers) controller.abort();
+		this.pathSummaryControllers.clear();
 		for (const abort of this.auxiliaryAborters.values()) void abort();
 		this.auxiliaryAborters.clear();
 		for (const expiry of this.pendingAuxiliaryCancels.values()) clearTimeout(expiry);

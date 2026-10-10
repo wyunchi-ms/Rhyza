@@ -27,10 +27,13 @@ export const ipcChannels = {
 	modelRequestHistory: "rhyza:model-request-history",
 	workspaceTodos: "rhyza:workspace-todos",
 	generateSummary: "rhyza:generate-summary",
+	generatePathSummary: "rhyza:generate-path-summary",
+	pathSummaryEvent: "rhyza:path-summary-event",
 	extractKnowledge: "rhyza:extract-knowledge",
 	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
 	openExternal: "rhyza:open-external",
+	showApplicationMenu: "rhyza:show-application-menu",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -305,6 +308,34 @@ export interface SummaryResponse {
 	usage?: AgentUsage;
 }
 
+export interface PathSummaryRound {
+	id: string;
+	messages: Array<{ id: string; role: "user" | "assistant"; content: string }>;
+}
+
+export interface PathSummaryRequest {
+	requestId: string;
+	model: { providerId: ProviderId; modelId: string };
+	prompt?: string;
+	rounds: PathSummaryRound[];
+	paths: Array<{ id: string; title: string; roundIds: string[] }>;
+}
+
+export interface PathSummaryResponse {
+	content?: string;
+	error?: string;
+	canceled?: boolean;
+	usage?: AgentUsage;
+}
+
+export interface PathSummaryProgress {
+	requestId: string;
+	phase: "summarizing" | "merging";
+	completed: number;
+	total: number;
+	level: number;
+}
+
 export interface AgentUsage {
 	input: number;
 	output: number;
@@ -524,6 +555,7 @@ export interface AgentBridgeEvent {
 
 export interface RhyzaBridge {
 	isElectron: true;
+	platform: string;
 	azureOpenAIConfigGet(): Promise<AzureOpenAIConfig | null>;
 	azureOpenAIConfigSet(config: AzureOpenAIConfig): Promise<AzureOpenAIConfig>;
 	providerStatus(request: ProviderStatusRequest): Promise<ProviderStatusResponse>;
@@ -548,10 +580,13 @@ export interface RhyzaBridge {
 	modelRequestHistory(request: ModelRequestHistoryRequest): Promise<ModelRequestHistoryResponse>;
 	workspaceTodos(request?: WorkspaceTodosRequest): Promise<WorkspaceTodosResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
+	generatePathSummary(request: PathSummaryRequest): Promise<PathSummaryResponse>;
+	onPathSummaryEvent(listener: (event: PathSummaryProgress) => void): () => void;
 	extractKnowledge(request: KnowledgeExtractionRequest): Promise<KnowledgeExtractionResponse>;
 	cancelAuxiliaryRequest(request: AuxiliaryRequestCancelRequest): Promise<{ canceled: boolean }>;
 
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
+	showApplicationMenu(): Promise<{ ok: true }>;
 	appStateLoad(): string | null;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
@@ -855,6 +890,91 @@ export function validateSummaryRequest(value: unknown): SummaryRequest {
 		request.requestId = value.requestId.slice(0, 180);
 	}
 	return request;
+}
+
+export function validatePathSummaryRequest(value: unknown): PathSummaryRequest {
+	if (
+		!isRecord(value) ||
+		typeof value.requestId !== "string" ||
+		!value.requestId.trim() ||
+		value.requestId.length > 180 ||
+		!Array.isArray(value.rounds) ||
+		!Array.isArray(value.paths) ||
+		!value.rounds.length ||
+		!value.paths.length ||
+		value.rounds.length > 100_000 ||
+		value.paths.length > 10_000
+	) {
+		throw new Error("Invalid path-summary request.");
+	}
+	if (
+		value.prompt !== undefined &&
+		(typeof value.prompt !== "string" || value.prompt.length > 4000)
+	)
+		throw new Error("Invalid summary instructions.");
+	const ids = new Set<string>();
+	const messageIds = new Set<string>();
+	let bytes = 0;
+	const encoder = new TextEncoder();
+	const validId = (id: unknown): id is string =>
+		typeof id === "string" && id.length > 0 && id.length <= 200;
+	const rounds = value.rounds.map((round): PathSummaryRound => {
+		if (
+			!isRecord(round) ||
+			!validId(round.id) ||
+			ids.has(round.id) ||
+			!Array.isArray(round.messages)
+		) {
+			throw new Error("Invalid or duplicate summary round.");
+		}
+		ids.add(round.id);
+		const messages = round.messages.map((message): PathSummaryRound["messages"][number] => {
+			if (
+				!isRecord(message) ||
+				!validId(message.id) ||
+				messageIds.has(message.id) ||
+				(message.role !== "user" && message.role !== "assistant") ||
+				typeof message.content !== "string"
+			) {
+				throw new Error(
+					"Only unique user and assistant message text is allowed in a path summary.",
+				);
+			}
+			messageIds.add(message.id);
+			bytes += encoder.encode(message.content).byteLength;
+			if (bytes > 32_000_000)
+				throw new Error("The selected text exceeds the 32 MB summary request limit.");
+			return { id: message.id, role: message.role, content: message.content };
+		});
+		return { id: round.id, messages };
+	});
+	if (!messageIds.size) throw new Error("The selected paths contain no messages.");
+	const pathIds = new Set<string>();
+	const paths = value.paths.map((item) => {
+		if (
+			!isRecord(item) ||
+			!validId(item.id) ||
+			pathIds.has(item.id) ||
+			typeof item.title !== "string" ||
+			item.title.length > 2000 ||
+			!Array.isArray(item.roundIds) ||
+			!item.roundIds.length ||
+			item.roundIds.some((id) => !validId(id) || !ids.has(id)) ||
+			new Set(item.roundIds).size !== item.roundIds.length ||
+			item.roundIds[item.roundIds.length - 1] !== item.id
+		) {
+			throw new Error("Invalid summary path.");
+		}
+		pathIds.add(item.id);
+		return { id: item.id, title: item.title, roundIds: item.roundIds as string[] };
+	});
+	return {
+		requestId: value.requestId,
+		model: validateModelSelection(value.model),
+		...(typeof value.prompt === "string" && { prompt: value.prompt.trim() }),
+		rounds,
+		paths,
+	};
 }
 
 export function validateAuxiliaryRequestCancelRequest(

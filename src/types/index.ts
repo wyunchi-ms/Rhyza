@@ -19,6 +19,23 @@ export interface SessionNode {
 	worktreePath?: string;
 	/** Model usage spent generating this node's title. */
 	titleUsage?: TokenUsage;
+	/** Usage from canceled or failed path-summary requests, counted once. */
+	summaryUsage?: TokenUsage;
+}
+
+export interface PathSummarySource {
+	roundId: string;
+	sessionId: string;
+	turnId?: string;
+	title: string;
+	roundIds: string[];
+	contentHash: string;
+}
+
+export interface PathSummarySnapshot {
+	sources: PathSummarySource[];
+	createdAt: string;
+	model: { providerId: ProviderId; modelId: string };
 }
 
 export interface Turn {
@@ -26,6 +43,8 @@ export interface Turn {
 	id: string;
 	/** Original turn represented by a copied branch-history turn. */
 	sourceTurnId?: string;
+	/** Only the user turn introducing a compressed conversation carries provenance. */
+	pathSummary?: PathSummarySnapshot;
 	sessionId: string;
 	role: "user" | "assistant";
 	content: string;

@@ -1,15 +1,9 @@
 import { useAppStore } from "../store";
 import type { Language } from "./language";
 
-const titles: Record<Language, string> = {
-	"zh-CN": "Rhyza - 知识工作区",
-	"zh-TW": "Rhyza - 知識工作區",
-	en: "Rhyza - Knowledge Workspace",
-};
-
 function applyDocumentLanguage(language: Language): void {
 	document.documentElement.lang = language;
-	document.title = titles[language];
+	document.title = "Rhyza";
 }
 
 export function startDocumentLocalization(): () => void {

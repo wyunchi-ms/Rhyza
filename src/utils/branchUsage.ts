@@ -1,6 +1,12 @@
 import type { SessionNode, TokenUsage, Turn } from "../types";
 
-export const emptyUsage = (): TokenUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+export const emptyUsage = (): TokenUsage => ({
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	cost: 0,
+});
 
 export function addUsage(left: TokenUsage, right?: TokenUsage): TokenUsage {
 	if (!right) return left;
@@ -27,8 +33,8 @@ export function allocateBranchUsage(sessions: SessionNode[], turns: Turn[]): Bra
 
 	for (const session of sessions) {
 		const sessionTurns = turns.filter((turn) => turn.sessionId === session.id);
-		let direct = addUsage(emptyUsage(), session.titleUsage);
-		total = addUsage(total, session.titleUsage);
+		let direct = addUsage(addUsage(emptyUsage(), session.titleUsage), session.summaryUsage);
+		total = addUsage(addUsage(total, session.titleUsage), session.summaryUsage);
 		sessionTurns.forEach((turn) => {
 			if (!turn.usage) return;
 			total = addUsage(total, turn.usage);

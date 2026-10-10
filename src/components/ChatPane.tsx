@@ -40,6 +40,7 @@ import { buildComposerReferenceContext } from "../utils/composerInput";
 import { conversationTurnTitle } from "../utils/conversationTitle";
 import { AnswerOutline } from "./chat/AnswerOutline";
 import { useTranslation } from "../i18n";
+import { usePathSummarySelection } from "./PathSummarySelection";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
@@ -47,6 +48,7 @@ export const ChatPane: React.FC = () => {
 	const { t } = useTranslation();
 	const renderStartedAt = performance.now();
 	const store = useAppStore();
+	const summarySelection = usePathSummarySelection();
 	const composerDraftRef = useRef<ComposerDraftHandle>(null);
 	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
@@ -69,6 +71,10 @@ export const ChatPane: React.FC = () => {
 	const focusedAnswer = sessionTurns.find(
 		(turn) => turn.id === focusedTurnId && turn.role === "assistant",
 	);
+	const summarySnapshot = sessionTurns.find((turn) => turn.pathSummary)?.pathSummary;
+	const summaryPending =
+		Boolean(summarySnapshot) &&
+		sessionTurns.some((turn) => turn.role === "assistant" && turn.status === "running");
 	const { openEntityById: openEntityPreview, openDiagramById: openDiagramPreview } =
 		useKnowledgePreviewActions();
 	useLayoutEffect(() => {
@@ -110,6 +116,18 @@ export const ChatPane: React.FC = () => {
 		const prompt = (options?.question ?? input).trim();
 		const targetSessionId = options?.sessionId ?? activeSessionId;
 		if ((!prompt && images.length === 0) || !targetSessionId) return;
+		if (
+			store.turns.some((turn) => turn.sessionId === targetSessionId && turn.pathSummary) &&
+			store.turns.some(
+				(turn) =>
+					turn.sessionId === targetSessionId &&
+					turn.role === "assistant" &&
+					turn.status === "running",
+			)
+		) {
+			setSendError(t("Wait for the summary to finish before continuing."));
+			return;
+		}
 		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
 		const referenceContext = buildComposerReferenceContext(prompt, store);
 		const lightweightGreeting = isLightweightGreeting(prompt, {
@@ -643,21 +661,37 @@ export const ChatPane: React.FC = () => {
 			{sessionTurns.length > 1 && (
 				<TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
 			)}
-			<ChatComposer
-				draftRef={composerDraftRef}
-				entities={store.entities}
-				diagrams={store.diagrams}
-				contextRequest={sessionTurns.flatMap((turn) => turn.modelRequests ?? []).slice(-1)[0]}
-				isSending={isSending}
-				error={sendError}
-				runtimeCaption={
-					isElectronRuntime()
-						? getProviderInfo(store.settings.provider).runtimeLabel
-						: t("Electron runtime required for agent execution")
-				}
-				onError={setSendError}
-				onSend={() => void handleSend()}
-			/>
+			{summaryPending ? (
+				<div className="path-summary-composer-pending" role="status">
+					<span>{t("Wait for the summary to finish before continuing.")}</span>
+					{summarySelection.running && (
+						<button
+							type="button"
+							onClick={() => void summarySelection.cancel()}
+							disabled={summarySelection.canceling}
+						>
+							{summarySelection.canceling ? t("Canceling…") : t("Cancel")}
+						</button>
+					)}
+					{summarySelection.error && <span role="alert">{summarySelection.error}</span>}
+				</div>
+			) : (
+				<ChatComposer
+					draftRef={composerDraftRef}
+					entities={store.entities}
+					diagrams={store.diagrams}
+					contextRequest={sessionTurns.flatMap((turn) => turn.modelRequests ?? []).slice(-1)[0]}
+					isSending={isSending}
+					error={sendError}
+					runtimeCaption={
+						isElectronRuntime()
+							? getProviderInfo(store.settings.provider).runtimeLabel
+							: t("Electron runtime required for agent execution")
+					}
+					onError={setSendError}
+					onSend={() => void handleSend()}
+				/>
+			)}
 		</div>
 	);
 };

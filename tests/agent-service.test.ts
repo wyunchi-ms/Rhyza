@@ -8,6 +8,7 @@ import { PiService, type PiPromptRequest } from "../electron/main/pi-service";
 import type { NativeAgentRequest, NativeAgentResult } from "../electron/main/native-agent";
 import { WorktreeService } from "../electron/main/worktree-service";
 import type { AgentPromptRequest, ProviderId } from "../src/shared/ipc";
+import { summaryCompletionMarker } from "../electron/main/path-summary";
 
 class FakeAgentService extends AgentService {
 	requests: NativeAgentRequest[] = [];
@@ -99,6 +100,45 @@ test("native writable tools are disabled unless Git isolation succeeded", async 
 		const firstPart = service.requests[0].parts[0];
 		assert.equal(firstPart.type, "text");
 		if (firstPart.type === "text") assert.match(firstPart.text, /read-only session/);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("native path summaries use the selected Claude model, no tools, and no inherited workspace context", async () => {
+	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-native-path-summary-"));
+	try {
+		const service = new FakeAgentService(
+			directory,
+			undefined,
+			undefined,
+			path.join(directory, "pi"),
+		);
+		service.reply = `# Path summary\nFinal conclusions.\n${summaryCompletionMarker}`;
+		const result = await service.generatePathSummary(
+			{
+				requestId: "summary-request",
+				model: { providerId: "claude-code", modelId: "sonnet" },
+				rounds: [
+					{
+						id: "u",
+						messages: [{ id: "u", role: "user", content: "Summarize this visible message." }],
+					},
+				],
+				paths: [{ id: "u", title: "Question", roundIds: ["u"] }],
+			},
+			directory,
+			() => {},
+		);
+		assert.equal(result.content, "# Path summary\nFinal conclusions.");
+		assert.equal(service.requests.length, 1);
+		assert.equal(service.requests[0].modelId, "sonnet");
+		assert.equal(service.requests[0].tools, false);
+		assert.equal(service.requests[0].writable, false);
+		assert.equal(service.requests[0].knowledgeTool, undefined);
+		assert.equal(service.requests[0].isolatedContext, true);
+		assert.notEqual(service.requests[0].workspacePath, directory);
+		service.dispose();
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

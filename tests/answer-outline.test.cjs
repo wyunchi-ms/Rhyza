@@ -111,6 +111,7 @@ if (!process.versions.electron) {
 				import { createRoot } from "react-dom/client";
 				import { MemoryRouter } from "react-router-dom";
 				import { ChatPane } from "/src/components/ChatPane.tsx";
+				import { PathSummaryProvider } from "/src/components/PathSummarySelection.tsx";
 				import { useAppStore } from "/src/store/index.ts";
 				import { useConversationFocus } from "/src/store/conversationFocus.ts";
 				import "/src/index.css";
@@ -139,7 +140,8 @@ if (!process.versions.electron) {
 				window.outlineButton = (text) => [...document.querySelectorAll(".answer-outline-list button")]
 					.find(button => button.textContent === text);
 				createRoot(document.getElementById("root")).render(React.createElement(React.StrictMode, null,
-					React.createElement(MemoryRouter, null, React.createElement(ChatPane))));
+					React.createElement(MemoryRouter, null,
+						React.createElement(PathSummaryProvider, null, React.createElement(ChatPane)))));
 			</script></body></html>`;
 		server = await createServer({
 			root: projectRoot,

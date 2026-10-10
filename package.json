@@ -13,6 +13,7 @@
 		"test:chat-performance": "node --test tests/chat-performance.test.cjs",
 		"test:answer-outline": "node --test tests/answer-outline.test.cjs",
 		"test:ui": "node --test tests/ui-refinement.test.cjs",
+		"test:path-summary": "node --import tsx --test tests/path-summary.test.ts && node --test tests/path-summary-ui.test.cjs",
 		"dev": "vite --host 127.0.0.1 --port 5175 --strictPort",
 		"test": "tsc -p tsconfig.tests.json && tsx --test tests/*.test.ts",
 		"electron:compile": "tsc -p tsconfig.electron.json && node -e \"fs=require('node:fs');fs.mkdirSync('dist-electron/electron',{recursive:true});fs.copyFileSync('electron/preload.cjs','dist-electron/electron/preload.cjs')\"",

@@ -15,6 +15,7 @@ import type {
 	RightPaneView,
 	SessionNode,
 	SessionProgressStatus,
+	PathSummarySnapshot,
 	Settings,
 	Source,
 	SourceRef,
@@ -71,6 +72,18 @@ interface AppState {
 	openTurnInspector: (turnId: string, view: Exclude<RightPaneView, "todo">) => void;
 	closeRightPane: () => void;
 	createRootSession: () => string;
+	createSummarySession: (
+		content: string,
+		snapshot: PathSummarySnapshot,
+		usage?: import("../types").TokenUsage,
+		prompt?: string,
+	) => string;
+	completeSummarySession: (
+		id: string,
+		content: string,
+		usage?: import("../types").TokenUsage,
+	) => void;
+	addSessionSummaryUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	forkSession: (
 		turnId: string,
 		options?: { activate?: boolean },
@@ -156,6 +169,10 @@ const legacyWorkspaceStorageKey = `${["know", "branch"].join("")}-workspace-v2`;
 
 export function setWorkspacePersistencePath(workspacePath: string | null): void {
 	persistenceWorkspacePath = workspacePath;
+}
+
+export function getWorkspacePersistencePath(): string | null {
+	return persistenceWorkspacePath;
 }
 
 const workspaceStorage: StateStorage = {
@@ -292,6 +309,85 @@ export const useAppStore = create<AppState>()(
 					visibleSessionId: id,
 				}));
 				return id;
+			},
+
+			createSummarySession: (content, snapshot, usage, prompt) => {
+				if (!snapshot.sources.length) throw new Error("A summary needs sources.");
+				const id = createId("session");
+				const userId = createId("turn");
+				const title =
+					content
+						.split("\n")
+						.find((line) => line.trim())
+						?.replace(/^#+\s*/, "")
+						.trim()
+						.slice(0, 80) || "Path summary";
+				const now = new Date().toISOString();
+				const pending = !content.trim();
+				set((state) => ({
+					sessions: [
+						...state.sessions,
+						{ id, parentId: null, title, isRoot: true, status: pending ? "running" : "idle" },
+					],
+					turns: [
+						...state.turns,
+						{
+							id: userId,
+							sessionId: id,
+							role: "user",
+							content: prompt?.trim() || "Summarize the selected conversation paths.",
+							summary: title,
+							pathSummary: snapshot,
+							status: "complete",
+							createdAt: now,
+						},
+						{
+							id: createId("turn"),
+							sessionId: id,
+							role: "assistant",
+							content,
+							status: pending ? "running" : "complete",
+							createdAt: now,
+							...(!pending && { completedAt: now }),
+							usage,
+						},
+					],
+				}));
+				return id;
+			},
+			completeSummarySession: (id, content, usage) => {
+				if (!content.trim()) throw new Error("A summary needs content.");
+				const state = get();
+				if (!state.sessions.some((session) => session.id === id))
+					throw new Error("The pending summary no longer exists.");
+				const title =
+					content
+						.split("\n")
+						.find((line) => line.trim())
+						?.replace(/^#+\s*/, "")
+						.trim()
+						.slice(0, 80) || "Path summary";
+				const now = new Date().toISOString();
+				set((current) => ({
+					sessions: current.sessions.map((session) =>
+						session.id === id ? { ...session, title, status: "idle" } : session,
+					),
+					turns: current.turns.map((turn) =>
+						turn.sessionId === id && turn.role === "assistant"
+							? { ...turn, content, status: "complete", completedAt: now, usage }
+							: turn,
+					),
+				}));
+			},
+			addSessionSummaryUsage: (id, usage) => {
+				if (!usage) return;
+				set((state) => ({
+					sessions: state.sessions.map((session) =>
+						session.id === id
+							? { ...session, summaryUsage: addUsage(session.summaryUsage ?? emptyUsage(), usage) }
+							: session,
+					),
+				}));
 			},
 
 			forkSession: (turnId, options) => {
@@ -1154,11 +1250,33 @@ export function loadWorkspaceState(serialized: string | null): void {
 			saved = {};
 		}
 	}
+	const activeAnswerSessions = new Set(
+		(saved.turns ?? [])
+			.filter((turn) => turn.role === "assistant" && isTurnActive(turn))
+			.map((turn) => turn.sessionId),
+	);
+	const pendingSummaryTurns = (saved.turns ?? []).filter(
+		(turn) => turn.role === "user" && turn.pathSummary && activeAnswerSessions.has(turn.sessionId),
+	);
+	const pendingSummaries = new Set(pendingSummaryTurns.map((turn) => turn.sessionId));
+	const restoredSessions = (saved.sessions ?? []).filter(
+		(session) => !pendingSummaries.has(session.id),
+	);
+	const restoredIds = new Set(restoredSessions.map((session) => session.id));
+	const activeSessionId = pendingSummaries.has(saved.activeSessionId ?? "")
+		? (pendingSummaryTurns
+				.find((turn) => turn.sessionId === saved.activeSessionId)
+				?.pathSummary?.sources.map((source) => source.sessionId)
+				.find((id) => restoredIds.has(id)) ??
+			restoredSessions[0]?.id ??
+			null)
+		: (saved.activeSessionId ?? null);
+	const restoredTurns = (saved.turns ?? []).filter((turn) => !pendingSummaries.has(turn.sessionId));
 	useAppStore.setState({
-		sessions: recoverInterruptedSessions(saved.sessions ?? [], saved.turns ?? []),
-		activeSessionId: saved.activeSessionId ?? null,
-		visibleSessionId: saved.activeSessionId ?? null,
-		turns: recoverInterruptedTurns(saved.turns ?? []),
+		sessions: recoverInterruptedSessions(restoredSessions, restoredTurns),
+		activeSessionId,
+		visibleSessionId: activeSessionId,
+		turns: recoverInterruptedTurns(restoredTurns),
 		entities: saved.entities ?? [],
 		relations: saved.relations ?? [],
 		diagrams: migrateMermaidDiagrams(saved.diagrams ?? []),

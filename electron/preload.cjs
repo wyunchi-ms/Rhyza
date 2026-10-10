@@ -27,10 +27,13 @@ const ipcChannels = {
 	modelRequestHistory: "rhyza:model-request-history",
 	workspaceTodos: "rhyza:workspace-todos",
 	generateSummary: "rhyza:generate-summary",
+	generatePathSummary: "rhyza:generate-path-summary",
+	pathSummaryEvent: "rhyza:path-summary-event",
 	extractKnowledge: "rhyza:extract-knowledge",
 	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
 	openExternal: "rhyza:open-external",
+	showApplicationMenu: "rhyza:show-application-menu",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -42,6 +45,7 @@ const ipcChannels = {
 
 contextBridge.exposeInMainWorld("rhyza", {
 	isElectron: true,
+	platform: process.platform,
 	azureOpenAIConfigGet: () => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigGet),
 	azureOpenAIConfigSet: (config) => ipcRenderer.invoke(ipcChannels.azureOpenAIConfigSet, config),
 	providerStatus: (request) => ipcRenderer.invoke(ipcChannels.providerStatus, request),
@@ -66,11 +70,18 @@ contextBridge.exposeInMainWorld("rhyza", {
 	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
+	generatePathSummary: (request) => ipcRenderer.invoke(ipcChannels.generatePathSummary, request),
+	onPathSummaryEvent: (listener) => {
+		const wrapped = (_event, payload) => listener(payload);
+		ipcRenderer.on(ipcChannels.pathSummaryEvent, wrapped);
+		return () => ipcRenderer.removeListener(ipcChannels.pathSummaryEvent, wrapped);
+	},
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
 	cancelAuxiliaryRequest: (request) =>
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
+	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
 	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),

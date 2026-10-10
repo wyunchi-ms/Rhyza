@@ -53,6 +53,7 @@ import {
 import { MermaidDiagram } from "../MermaidDiagram";
 import { isTurnActive } from "../../utils/sessionRuntime";
 import { recordPerformanceTiming } from "../../utils/performanceMarks";
+import { PathSummarySources } from "../PathSummarySources";
 import "./markdownSections.css";
 
 export const TurnMessage = memo(function TurnMessage({
@@ -147,6 +148,7 @@ export const TurnMessage = memo(function TurnMessage({
 						</p>
 					)}
 					<div className="turn-expanded-content" hidden={collapsed && !isUser}>
+						{isUser && turn.pathSummary && <PathSummarySources snapshot={turn.pathSummary} />}
 						<TurnBubbleContent
 							turn={turn}
 							entities={entities}

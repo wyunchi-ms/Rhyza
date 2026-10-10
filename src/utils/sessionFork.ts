@@ -160,6 +160,7 @@ function splitLocalPath(
 		progressStatus: undefined,
 		worktreePath: undefined,
 		titleUsage: undefined,
+		summaryUsage: undefined,
 		status: "idle",
 	};
 	const originalContinuation: SessionNode = {
