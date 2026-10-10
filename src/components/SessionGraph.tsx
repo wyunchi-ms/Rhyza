@@ -1,6 +1,6 @@
 import { useHoverRetention } from "../hooks/useHoverRetention";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, GitBranch, Plus } from "lucide-react";
+import { ArrowDown, ArrowRight, GitBranch, Plus, Check, FileText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +40,9 @@ import { graphPreviewPosition } from "../utils/graphPreviewPosition";
 import { ConversationPathEdge } from "./ConversationPathEdge";
 import { createGraphPreviewOwner } from "../utils/graphPreviewOwner";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
+import { usePathSummarySelection } from "./PathSummarySelection";
+import { summarySourceEdges } from "../utils/pathSummary";
+import { useTranslation } from "../i18n";
 
 const orientationStorageKey = "rhyza-session-graph-orientation";
 
@@ -53,6 +56,10 @@ interface SessionGraphNodeData {
 	previewOwner: ReturnType<typeof createGraphPreviewOwner>;
 	orientation: SessionGraphOrientation;
 	onSelect: (id: string) => void;
+	selecting: boolean;
+	isSelected: boolean;
+	isSelectedAncestor: boolean;
+	selectionRunning: boolean;
 }
 
 const nodeTypes = { session: SessionGraphNode };
@@ -69,6 +76,7 @@ export function SessionGraph({
 	leafStatuses?: readonly LeafStatusFilter[];
 	onClearFilter?: () => void;
 }) {
+	const selection = usePathSummarySelection();
 	const sessions = useAppStore((state) => state.sessions);
 	const turns = useAppStore((state) => state.turns);
 	const activeSessionId = useAppStore((state) => state.activeSessionId);
@@ -97,10 +105,34 @@ export function SessionGraph({
 			: undefined;
 	const activeRoundId = focusedRoundId ?? activePath[activePath.length - 1];
 	const topology = JSON.stringify(visibleRounds.map(({ id, parentId }) => ({ id, parentId })));
+	const summaryEdges = useMemo(() => summarySourceEdges(visibleRounds), [visibleRounds]);
+	const summaryEdgeTopology = JSON.stringify(summaryEdges);
+	const visibleIds = JSON.stringify(visibleRounds.map((round) => round.id));
+	const reportVisible = selection.reportVisible;
+	useEffect(() => {
+		reportVisible("graph", visible ? JSON.parse(visibleIds) : null);
+		return () => reportVisible("graph", null);
+	}, [visible, visibleIds, reportVisible]);
+	const selectedAncestors = useMemo(() => {
+		const byId = new Map(projection.rounds.map((round) => [round.id, round]));
+		const ids = new Set<string>();
+		for (const selected of selection.selected) {
+			let round = byId.get(selected);
+			while (round?.parentId && !ids.has(round.parentId)) {
+				ids.add(round.parentId);
+				round = byId.get(round.parentId);
+			}
+		}
+		return ids;
+	}, [projection, selection.selected]);
 	const positions = useMemo(
 		() =>
-			new Map(layoutSessionGraph(JSON.parse(topology), orientation).map((node) => [node.id, node])),
-		[topology, orientation],
+			new Map(
+				layoutSessionGraph(JSON.parse(topology), orientation, JSON.parse(summaryEdgeTopology)).map(
+					(node) => [node.id, node],
+				),
+			),
+		[topology, orientation, summaryEdgeTopology],
 	);
 	const [displayPositions, setDisplayPositions] = useState(positions);
 	const lastPositions = useRef(positions);
@@ -136,6 +168,10 @@ export function SessionGraph({
 
 	const selectRound = useCallback(
 		(id: string) => {
+			if (selection.selecting) {
+				selection.toggle(id);
+				return;
+			}
 			const round = projection.rounds.find((item) => item.id === id);
 			if (!round) return;
 			// Keep the current branch when selecting its shared history.
@@ -151,7 +187,14 @@ export function SessionGraph({
 			navigate("/");
 			if (turnId) window.dispatchEvent(new CustomEvent("rhyza:focus-turn", { detail: { turnId } }));
 		},
-		[navigate, setActiveSession, projection, activeSessionId],
+		[
+			navigate,
+			setActiveSession,
+			projection,
+			activeSessionId,
+			selection.selecting,
+			selection.toggle,
+		],
 	);
 
 	const graph = useMemo(
@@ -165,6 +208,11 @@ export function SessionGraph({
 				orientation,
 				positions: displayPositions,
 				onSelect: selectRound,
+				selecting: selection.selecting,
+				selected: selection.selected,
+				selectedAncestors,
+				selectionRunning: selection.running,
+				summaryEdges,
 			}),
 		[
 			activeRoundId,
@@ -175,6 +223,11 @@ export function SessionGraph({
 			selectRound,
 			visibleRounds,
 			sessions,
+			selection.selecting,
+			selection.selected,
+			selection.running,
+			selectedAncestors,
+			summaryEdges,
 		],
 	);
 
@@ -189,6 +242,11 @@ export function SessionGraph({
 		positions.get(activeRoundId ?? ""),
 		reduceMotion,
 	);
+	const lastSummaryTopology = useRef(summaryEdgeTopology);
+	useEffect(() => {
+		if (selection.selecting || lastSummaryTopology.current !== summaryEdgeTopology) interrupt();
+		lastSummaryTopology.current = summaryEdgeTopology;
+	}, [selection.selecting, summaryEdgeTopology, interrupt]);
 
 	const createSession = () => {
 		createRootSession();
@@ -250,7 +308,7 @@ export function SessionGraph({
 						maxZoom={graphMaxZoom}
 						nodesDraggable={false}
 						nodesConnectable={false}
-						elementsSelectable
+						elementsSelectable={!selection.selecting}
 						proOptions={{ hideAttribution: true }}
 					>
 						<Background color="#a5b4fc" gap={22} size={1} />
@@ -295,6 +353,7 @@ export function SessionGraph({
 }
 
 function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
+	const { t } = useTranslation();
 	const updateNodeInternals = useUpdateNodeInternals();
 	const { menu, openMenu, closeMenu } = useSessionContextMenu();
 	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
@@ -328,7 +387,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 		hidePreview,
 	);
 	const showPreview = (element: HTMLElement) => {
-		if (menu) return;
+		if (menu || data.selecting) return;
 		data.previewOwner.claim(data.round.id, hidePreview);
 		previewHover.retain();
 		clearTimeout(previewTimer.current);
@@ -393,10 +452,16 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				data.isActive && "is-active",
 				`execution-${execution}`,
 				reduceMotion && "reduce-motion",
+				data.selecting && data.isSelected && "is-summary-selected",
+				data.selecting && data.isSelectedAncestor && "is-summary-ancestor",
 			)}
 			data-execution-status={metrics.status}
 			onContextMenu={(event) => {
 				hidePreview();
+				if (data.selecting) {
+					event.preventDefault();
+					return;
+				}
 				openMenu(event, data.round.sessionId);
 			}}
 		>
@@ -411,6 +476,8 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				type="button"
 				className="session-graph-node-main"
 				onClick={() => data.onSelect(data.round.id)}
+				disabled={data.selecting && data.selectionRunning}
+				aria-pressed={data.selecting ? data.isSelected : undefined}
 				aria-label={`${data.round.title}. Execution: ${metrics.status.replace(/_/g, " ")}`}
 				aria-current={data.isActive ? "page" : undefined}
 				aria-describedby={previewRect ? `round-preview-${data.round.id}` : undefined}
@@ -423,6 +490,11 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				<header>
 					<ProgressMarker status={data.progressStatus} active={false} />
 					<strong>{data.round.title}</strong>
+					{data.round.user?.pathSummary && (
+						<span className="summary-node-badge" title={t("Summary")}>
+							<FileText size={12} /> {data.round.user.pathSummary.sources.length}
+						</span>
+					)}
 					{roundCreatedAt && timestamp && (
 						<time
 							className="session-graph-node-time"
@@ -437,6 +509,11 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 					{data.preview || (data.round.user ? "Waiting for response" : "Start a new conversation")}
 				</p>
 			</button>
+			{data.selecting && data.isSelected && (
+				<span className="summary-node-check" aria-hidden="true">
+					<Check size={12} />
+				</span>
+			)}
 			{data.isLeaf && <CacheStatus compact request={cacheRequest} />}
 			<NodeInformation
 				metrics={metrics}
@@ -451,6 +528,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 					anchor={menu}
 					nodeId={menu.nodeId}
 					turnId={data.round.answers[data.round.answers.length - 1]?.id ?? data.round.user?.id}
+					roundId={data.round.id}
 					onClose={closeMenu}
 				/>
 			)}
@@ -524,6 +602,11 @@ function buildGraph({
 	orientation,
 	positions,
 	onSelect,
+	selecting,
+	selected,
+	selectedAncestors,
+	selectionRunning,
+	summaryEdges,
 }: {
 	rounds: ConversationRound[];
 	sessions: SessionNode[];
@@ -533,6 +616,11 @@ function buildGraph({
 	orientation: SessionGraphOrientation;
 	positions: Map<string, { x: number; y: number }>;
 	onSelect: (id: string) => void;
+	selecting: boolean;
+	selected: ReadonlySet<string>;
+	selectedAncestors: ReadonlySet<string>;
+	selectionRunning: boolean;
+	summaryEdges: readonly { source: string; target: string }[];
 }): { nodes: Array<Node<SessionGraphNodeData>>; edges: Edge[] } {
 	const bySession = new Map(sessions.map((session) => [session.id, session]));
 	const parents = new Set(rounds.map((round) => round.parentId));
@@ -555,6 +643,10 @@ function buildGraph({
 				previewOwner,
 				orientation,
 				onSelect,
+				selecting,
+				isSelected: selected.has(round.id),
+				isSelectedAncestor: selectedAncestors.has(round.id),
+				selectionRunning,
 			},
 		};
 	});
@@ -575,6 +667,17 @@ function buildGraph({
 					},
 				]
 			: [],
+	);
+	edges.push(
+		...summaryEdges.map((edge): Edge => ({
+			id: `summary:${edge.source}:${edge.target}`,
+			source: edge.source,
+			target: edge.target,
+			type: "smoothstep",
+			className: "summary-source-edge",
+			markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+			style: { strokeDasharray: "6 5" },
+		})),
 	);
 	return { nodes, edges };
 }

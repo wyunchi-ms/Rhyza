@@ -15,6 +15,7 @@ import type {
 	RightPaneView,
 	SessionNode,
 	SessionProgressStatus,
+	PathSummarySnapshot,
 	Settings,
 	Source,
 	SourceRef,
@@ -71,6 +72,12 @@ interface AppState {
 	openTurnInspector: (turnId: string, view: Exclude<RightPaneView, "todo">) => void;
 	closeRightPane: () => void;
 	createRootSession: () => string;
+	createSummarySession: (
+		content: string,
+		snapshot: PathSummarySnapshot,
+		usage?: import("../types").TokenUsage,
+	) => string;
+	addSessionSummaryUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	forkSession: (
 		turnId: string,
 		options?: { activate?: boolean },
@@ -156,6 +163,10 @@ const legacyWorkspaceStorageKey = `${["know", "branch"].join("")}-workspace-v2`;
 
 export function setWorkspacePersistencePath(workspacePath: string | null): void {
 	persistenceWorkspacePath = workspacePath;
+}
+
+export function getWorkspacePersistencePath(): string | null {
+	return persistenceWorkspacePath;
 }
 
 const workspaceStorage: StateStorage = {
@@ -292,6 +303,61 @@ export const useAppStore = create<AppState>()(
 					visibleSessionId: id,
 				}));
 				return id;
+			},
+
+			createSummarySession: (content, snapshot, usage) => {
+				if (!content.trim() || !snapshot.sources.length)
+					throw new Error("A summary needs content and sources.");
+				const id = createId("session");
+				const userId = createId("turn");
+				const title =
+					content
+						.split("\n")
+						.find((line) => line.trim())
+						?.replace(/^#+\s*/, "")
+						.trim()
+						.slice(0, 80) || "Path summary";
+				const now = new Date().toISOString();
+				set((state) => ({
+					sessions: [
+						...state.sessions,
+						{ id, parentId: null, title, isRoot: true, status: "idle" },
+					],
+					turns: [
+						...state.turns,
+						{
+							id: userId,
+							sessionId: id,
+							role: "user",
+							content: "Summarize the selected conversation paths.",
+							summary: title,
+							pathSummary: snapshot,
+							status: "complete",
+							createdAt: now,
+						},
+						{
+							id: createId("turn"),
+							sessionId: id,
+							role: "assistant",
+							content,
+							status: "complete",
+							createdAt: now,
+							completedAt: now,
+							usage,
+						},
+					],
+				}));
+				return id;
+			},
+			addSessionSummaryUsage: (id, usage) => {
+				if (!usage) return;
+				set((state) => ({
+					sessions: state.sessions.map((session) =>
+						session.id === id
+							? { ...session, summaryUsage: addUsage(session.summaryUsage ?? emptyUsage(), usage) }
+							: session,
+					),
+				}));
 			},
 
 			forkSession: (turnId, options) => {

@@ -40,6 +40,7 @@ import { buildComposerReferenceContext } from "../utils/composerInput";
 import { conversationTurnTitle } from "../utils/conversationTitle";
 import { AnswerOutline } from "./chat/AnswerOutline";
 import { useTranslation } from "../i18n";
+import { PathSummarySources } from "./PathSummarySources";
 
 const auxiliaryRequestTimeoutMs = 30_000;
 
@@ -69,6 +70,7 @@ export const ChatPane: React.FC = () => {
 	const focusedAnswer = sessionTurns.find(
 		(turn) => turn.id === focusedTurnId && turn.role === "assistant",
 	);
+	const summarySnapshot = sessionTurns.find((turn) => turn.pathSummary)?.pathSummary;
 	const { openEntityById: openEntityPreview, openDiagramById: openDiagramPreview } =
 		useKnowledgePreviewActions();
 	useLayoutEffect(() => {
@@ -574,6 +576,7 @@ export const ChatPane: React.FC = () => {
 					moveKeyboardTurn(event.key === "ArrowUp" ? -1 : 1);
 				}}
 			>
+				{summarySnapshot && <PathSummarySources snapshot={summarySnapshot} />}
 				{sessionTurns.map((turn, index) => (
 					<TurnMessage
 						key={turn.sourceTurnId ?? turn.id}

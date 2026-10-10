@@ -2,6 +2,7 @@ import type { AgentBridgeEvent, AgentUsage } from "../../src/shared/ipc.js";
 import { isRecord } from "../../src/shared/value.js";
 import { localClaudeCommand, streamCliJson } from "./cli-process.js";
 import type { NativeAgentRequest, NativeAgentResult } from "./native-agent.js";
+import { summarySystemPrompt } from "./path-summary.js";
 
 export function claudeArguments(request: NativeAgentRequest): string[] {
 	const builtInTools = !request.tools
@@ -51,6 +52,9 @@ export function claudeArguments(request: NativeAgentRequest): string[] {
 	if (request.modelId) args.push("--model", request.modelId);
 	if (request.thinkingLevel) {
 		args.push("--effort", request.thinkingLevel === "off" ? "low" : request.thinkingLevel);
+	}
+	if (request.isolatedContext) {
+		args.push("--bare", "--setting-sources", "", "--system-prompt", summarySystemPrompt);
 	}
 	return args;
 }

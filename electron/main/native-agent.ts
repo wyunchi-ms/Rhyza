@@ -18,6 +18,8 @@ export interface NativeAgentRequest {
 	thinkingLevel?: AgentPromptRequest["thinkingLevel"];
 	writable: boolean;
 	tools: boolean;
+	/** Auxiliary summaries must not load workspace instructions, plugins, or memory. */
+	isolatedContext?: boolean;
 	knowledgeTool?: {
 		serverPath: string;
 		inventoryPath: string;

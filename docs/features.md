@@ -15,6 +15,7 @@
 | Conversation | 树状 Session/Turn       | Available | 从历史 Turn 继续会创建分支并保留原路径                                        |
 | Conversation | 引用选区提问            | Available | 保存引用原文，并将新分支挂到引用 Turn                                         |
 | Conversation | 列表/节点视图           | Available | 左侧面板可切换树列表与 Session Graph                                          |
+| Conversation | 路径汇总                | Available | 列表和 Node view 共用多选；去重汇总根到终点的用户/Agent 正文，生成可继续聊天的节点，来源以虚线连接 |
 | Conversation | 节点状态与恢复          | Available | 区分 queued、retrieving、running、complete、error 等活动状态                  |
 | Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F` 或侧栏搜索按钮                                                 |
 | Conversation | 图片输入                | Available | Composer 可附加图片，由所选 Provider/模型决定是否支持；Azure OpenAI 当前仅支持文本                                   |
@@ -60,6 +61,16 @@ Rhyza 的基本单位是 Session 和 Turn。用户从历史回答继续时，新
 ### 运行状态
 
 请求依次经过 queue、Source/Knowledge retrieval、Agent generation 和完成/失败阶段。应用会保存活动状态，异常不应伪装成成功。不同 Conversation 可并发，同一 Conversation 始终顺序执行。
+
+### 路径汇总
+
+通过侧栏 **Select nodes → 点击节点 → Summary** 汇总一条或多条路径，也可从节点右键菜单执行 **Summarize path**。两种视图共用选择，列表中的连续轮次以末轮为默认终点；从图切回列表时保留更早轮次的实际选择，显示部分选择状态。折叠或筛选隐藏的选择仍计入汇总，可展开 **Selected paths** 单独移除。
+
+汇总只输入保存的用户消息（含引用原文）及 Agent 面向用户的回复正文，不输入 thinking、tool、子 Agent 内部消息、原始模型请求或图片。共享历史按原始消息身份去重，不合并无关路径中的相同文字；未完成或中断的回答需要先完成。
+
+汇总使用当前 Provider/模型，超长内容按上下文预算分块并递归合并；不会静默截断路径。Pi 模型使用目录/配置中的上下文及输出预算；Claude Code 无模型目录，使用保守的 32k 请求预算，并在空的临时目录以 `--bare`、空 setting sources 和独立 system prompt 执行，需 CLI 支持这些选项。无对应 tokenizer 时采用 UTF-8 字节数的保守 token 估算。失败、超时、取消和输出截断不会生成空节点，选择保留供重试；每次片段请求最多等待 120 秒，最多 12 层合并。单次输入最多 32 MB 文本。
+
+结果是独立 Session 内的一对用户/Agent 消息和来源快照。图上的多条虚线表达来源，不是 `parentId` 延续关系；列表中摘要单独出现一次。后续聊天只继承摘要与新增对话，不重放原始路径。原历史不移动、不删除，来源后续修改不会改变摘要，删除来源不级联删除摘要。成功费用记录于摘要回答，失败/取消的已知费用记录于来源 Session，均只累计一次。生成阶段不运行工具、不自动写入 Knowledge。
 
 ### 导航
 

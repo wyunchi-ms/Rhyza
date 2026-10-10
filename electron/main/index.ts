@@ -27,6 +27,7 @@ import {
 	validateSourceSearchRequest,
 	validateWorkspaceDiffRequest,
 	validateSummaryRequest,
+	validatePathSummaryRequest,
 	validateKnowledgeExtractionRequest,
 	validateOpenExternalRequest,
 	validateAppStateSaveRequest,
@@ -388,6 +389,24 @@ function registerIpcHandlers(): void {
 			const request = validateSummaryRequest(payload);
 			return timedDiagnostic("generate-summary", {}, async () =>
 				piService.generateSummary(request, await settingsStore.requireWorkspacePath()),
+			);
+		}),
+	);
+	ipcMain.handle(ipcChannels.generatePathSummary, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validatePathSummaryRequest(payload);
+			return timedDiagnostic(
+				"generate-path-summary",
+				{ rounds: request.rounds.length, paths: request.paths.length },
+				async () =>
+					piService.generatePathSummary(
+						request,
+						await settingsStore.requireWorkspacePath(),
+						(progress) => {
+							if (!event.sender.isDestroyed())
+								event.sender.send(ipcChannels.pathSummaryEvent, progress);
+						},
+					),
 			);
 		}),
 	);

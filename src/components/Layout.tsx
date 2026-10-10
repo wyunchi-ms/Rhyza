@@ -21,8 +21,15 @@ import { IconSwitch } from "./IconSwitch";
 import { SessionStatusFilter } from "./SessionStatusFilter";
 import type { LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
+import { PathSummaryProvider, PathSummaryToolbar } from "./PathSummarySelection";
 
-const Layout: React.FC = () => {
+const Layout: React.FC = () => (
+	<PathSummaryProvider>
+		<LayoutContent />
+	</PathSummaryProvider>
+);
+
+const LayoutContent: React.FC = () => {
 	const { t } = useTranslation();
 	const sidebarOpen = useAppStore((state) => state.sidebarOpen);
 	const toggleSidebar = useAppStore((state) => state.toggleSidebar);
@@ -150,10 +157,12 @@ const Layout: React.FC = () => {
 						</nav>
 					</div>
 				</div>
+				<PathSummaryToolbar />
 				{/* Retain each view's local state and DOM scroll position across switches. */}
 				<div className="sidebar-view-content" hidden={graphMode}>
 					<SessionTree
 						embedded
+						visible={!graphMode && sidebarVisible}
 						leafStatuses={leafStatuses}
 						onClearFilter={() => setLeafStatuses([])}
 						viewControl={

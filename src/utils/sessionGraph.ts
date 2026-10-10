@@ -14,6 +14,7 @@ export interface PositionedSessionNode {
 export function layoutSessionGraph(
 	sessions: Pick<SessionNode, "id" | "parentId">[],
 	orientation: SessionGraphOrientation,
+	sourceEdges: readonly { source: string; target: string }[] = [],
 ): PositionedSessionNode[] {
 	const graph = new dagre.graphlib.Graph();
 	graph.setDefaultEdgeLabel(() => ({}));
@@ -26,7 +27,12 @@ export function layoutSessionGraph(
 	const sessionIds = new Set(sessions.map((session) => session.id));
 	for (const session of sessions) graph.setNode(session.id, { ...sessionGraphNodeSize });
 	for (const session of sessions) {
-		if (session.parentId && sessionIds.has(session.parentId)) graph.setEdge(session.parentId, session.id);
+		if (session.parentId && sessionIds.has(session.parentId))
+			graph.setEdge(session.parentId, session.id);
+	}
+	for (const edge of sourceEdges) {
+		if (sessionIds.has(edge.source) && sessionIds.has(edge.target))
+			graph.setEdge(edge.source, edge.target);
 	}
 	dagre.layout(graph);
 

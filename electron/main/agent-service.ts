@@ -17,6 +17,7 @@ import type {
 	ProviderStatusResponse,
 	SummaryRequest,
 	SummaryResponse,
+	PathSummaryRequest,
 	WorkspaceTodosResponse,
 } from "../../src/shared/ipc.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
@@ -43,6 +44,7 @@ import { runClaudeAgent } from "./claude-agent.js";
 import { getNativeProviderStatus } from "./native-provider-status.js";
 import { collectHtmlPreviews } from "./html-preview-service.js";
 import { readWorkspaceTodos } from "./todo-service.js";
+import type { PathSummaryCompletion } from "./path-summary.js";
 
 interface ProviderSessionState {
 	providerId: ProviderId;
@@ -236,6 +238,52 @@ export class AgentService extends PiService {
 		} catch (error) {
 			return { error: errorToMessage(error) };
 		}
+	}
+
+	protected override async createPathSummaryCompletion(
+		request: PathSummaryRequest,
+		workspacePath: string,
+	): Promise<PathSummaryCompletion> {
+		if (request.model.providerId !== "claude-code")
+			return super.createPathSummaryCompletion(request, workspacePath);
+		// Native Claude has no model catalog. Use a conservative 32k request budget.
+		return {
+			contextWindow: 32_768,
+			maxTokens: 4096,
+			complete: async (prompt, _maxTokens, signal) => {
+				signal.throwIfAborted();
+				const directory = await mkdtemp(path.join(tmpdir(), "rhyza-path-summary-"));
+				const controller = new AbortController();
+				const abort = () => controller.abort(signal.reason);
+				signal.addEventListener("abort", abort, { once: true });
+				const timeout = setTimeout(
+					() => controller.abort(new Error("Path summary request timed out.")),
+					120_000,
+				);
+				try {
+					if (signal.aborted) abort();
+					const result = await this.runNative(
+						{
+							providerId: "claude-code",
+							workspacePath: directory,
+							parts: [{ type: "text", text: prompt }],
+							modelId: request.model.modelId,
+							thinkingLevel: "off",
+							writable: false,
+							tools: false,
+							isolatedContext: true,
+							signal: controller.signal,
+						},
+						() => {},
+					);
+					return { text: result.assistantText, usage: result.usage };
+				} finally {
+					clearTimeout(timeout);
+					signal.removeEventListener("abort", abort);
+					await rm(directory, { recursive: true, force: true });
+				}
+			},
+		};
 	}
 
 	override async extractKnowledge(

@@ -27,6 +27,8 @@ const ipcChannels = {
 	modelRequestHistory: "rhyza:model-request-history",
 	workspaceTodos: "rhyza:workspace-todos",
 	generateSummary: "rhyza:generate-summary",
+	generatePathSummary: "rhyza:generate-path-summary",
+	pathSummaryEvent: "rhyza:path-summary-event",
 	extractKnowledge: "rhyza:extract-knowledge",
 	cancelAuxiliaryRequest: "rhyza:cancel-auxiliary-request",
 
@@ -66,6 +68,12 @@ contextBridge.exposeInMainWorld("rhyza", {
 	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
+	generatePathSummary: (request) => ipcRenderer.invoke(ipcChannels.generatePathSummary, request),
+	onPathSummaryEvent: (listener) => {
+		const wrapped = (_event, payload) => listener(payload);
+		ipcRenderer.on(ipcChannels.pathSummaryEvent, wrapped);
+		return () => ipcRenderer.removeListener(ipcChannels.pathSummaryEvent, wrapped);
+	},
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
 	cancelAuxiliaryRequest: (request) =>
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),

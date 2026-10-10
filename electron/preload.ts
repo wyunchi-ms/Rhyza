@@ -43,6 +43,15 @@ const bridge: RhyzaBridge = {
 	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
+	generatePathSummary: (request) => ipcRenderer.invoke(ipcChannels.generatePathSummary, request),
+	onPathSummaryEvent: (listener) => {
+		const wrapped = (
+			_event: Electron.IpcRendererEvent,
+			payload: import("../src/shared/ipc.js").PathSummaryProgress,
+		) => listener(payload);
+		ipcRenderer.on(ipcChannels.pathSummaryEvent, wrapped);
+		return () => ipcRenderer.removeListener(ipcChannels.pathSummaryEvent, wrapped);
+	},
 	extractKnowledge: (request) => ipcRenderer.invoke(ipcChannels.extractKnowledge, request),
 	cancelAuxiliaryRequest: (request) =>
 		ipcRenderer.invoke(ipcChannels.cancelAuxiliaryRequest, request),
