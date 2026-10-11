@@ -37,39 +37,6 @@
 	white-space: nowrap;
 }
 
-.path-summary-mode-button {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	flex-shrink: 0;
-	padding: 4px 6px;
-	border: 1px solid var(--ui-border);
-	border-radius: 6px;
-	color: var(--color-secondary);
-	font-size: 11px;
-	white-space: nowrap;
-}
-
-.path-summary-mode-button:hover {
-	background: var(--ui-hover);
-	color: var(--color-primary);
-}
-
-.session-tree-header-actions .path-summary-mode-button {
-	width: 30px;
-	height: 30px;
-	justify-content: center;
-	padding: 0;
-	font-size: 0;
-}
-
-.session-tree-header-actions:has(.path-summary-mode-button) {
-	max-width: 100%;
-	flex-wrap: wrap;
-	justify-content: flex-end;
-}
-
-.path-summary-mode-button:focus-visible,
 .path-summary-prompt textarea:focus-visible {
 	outline: 2px solid var(--ui-brand-accent);
 	outline-offset: 2px;
@@ -114,7 +81,7 @@
 .path-summary-prompt {
 	display: grid;
 	gap: 5px;
-	margin-top: 8px;
+	margin-bottom: 8px;
 	color: var(--ui-brand-ink);
 	font-weight: 600;
 }
@@ -164,36 +131,6 @@
 	opacity: 0.65;
 }
 
-.path-summary-selection-details {
-	margin-top: 6px;
-	max-height: 160px;
-	overflow-y: auto;
-}
-
-.path-summary-selection-details summary {
-	cursor: pointer;
-}
-
-.path-summary-selected-item {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 3px 0;
-}
-
-.path-summary-selected-item span {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.path-summary-selected-item button {
-	display: flex;
-	padding: 4px;
-}
-
 .path-summary-error {
 	margin-top: 8px;
 	padding: 6px;
@@ -202,15 +139,25 @@
 	overflow-wrap: anywhere;
 }
 
-html[data-theme] .session-node-button.is-summary-selected {
-	background: var(--ui-selected);
-	box-shadow: inset 0 0 0 2px var(--ui-brand-accent);
+html[data-theme] .session-node-button.is-summary-selected,
+html[data-theme] .session-node-button.is-summary-selected:hover,
+html[data-theme] .session-node-button.is-current.is-summary-selected {
+	background: var(--ui-action);
+	color: var(--ui-on-action);
+	box-shadow: inset 0 0 0 2px var(--ui-brand-ink);
 }
 
-html[data-theme] .session-graph-node.is-summary-selected {
-	border-color: var(--ui-brand-accent);
-	box-shadow: 0 0 0 2px var(--ui-brand-accent);
-	background: var(--ui-selected);
+html[data-theme] .session-node-button.is-summary-selected .session-viewport-rail {
+	background: var(--ui-on-action);
+}
+
+html[data-theme] .session-graph-node.is-summary-selected,
+html[data-theme] .session-graph-node.is-active.is-summary-selected {
+	border-color: var(--ui-brand-ink);
+	outline: 3px solid var(--ui-brand-ink);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 6px rgb(var(--ui-brand-rgb) / 16%);
+	background: var(--ui-brand-soft-strong);
 }
 
 html[data-theme] .session-graph-node.is-summary-ancestor {

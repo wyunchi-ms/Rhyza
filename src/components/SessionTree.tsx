@@ -32,7 +32,7 @@ import { announceBranchSwitchEnd, announceBranchSwitchStart } from "../utils/bra
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
-import { MergeModeButton, usePathSummarySelection } from "./PathSummarySelection";
+import { usePathSummarySelection } from "./PathSummarySelection";
 
 export const SessionTree: React.FC<{
 	embedded?: boolean;
@@ -180,7 +180,6 @@ export const SessionTree: React.FC<{
 					<UsageLabel usage={usage.total} prefix={t("Total")} />
 				</div>
 				<div className="session-tree-header-actions">
-					<MergeModeButton />
 					{viewControl}
 					<button
 						type="button"
@@ -409,9 +408,11 @@ const SessionGroup = ({
 							aria-current={isCurrent ? "page" : undefined}
 							aria-pressed={choosing ? checked : undefined}
 							disabled={selection.selecting && selection.running}
-							onClick={() =>
-								selection.selecting ? selection.toggleList(roundIds, last.id) : onSelect(node.id)
-							}
+							onClick={(event) => {
+								if (selection.selecting) selection.toggleList(roundIds, last.id);
+								else if (event.ctrlKey || event.metaKey) selection.begin([last.id]);
+								else onSelect(node.id);
+							}}
 							onContextMenu={(event) => {
 								if (selection.selecting) event.preventDefault();
 								else openMenu(event, node.id);

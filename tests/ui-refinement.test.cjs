@@ -293,8 +293,45 @@ if (!process.versions.electron) {
 		);
 		assert.equal(
 			await host('document.querySelectorAll(".app-sidebar-footer .sidebar-nav-icon").length'),
-			4,
-			"four destinations occupy the bottom-left navigation",
+			5,
+			"five destinations occupy the bottom-left navigation",
+		);
+		assert.equal(
+			await host(`(() => {
+				const link = document.querySelector(".app-sidebar-footer a[aria-label='Settings']");
+				return link.title === "" && getComputedStyle(link, "::after").content.includes("Settings");
+			})()`),
+			true,
+			"footer shortcuts use a styled tooltip rather than the native title popup",
+		);
+		const settingsShortcut = await host(`(() => {
+			const rect = document.querySelector(".app-sidebar-footer a[aria-label='Settings']").getBoundingClientRect();
+			return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+		})()`);
+		browser.webContents.sendInputEvent({ type: "mouseMove", ...settingsShortcut });
+		await until(
+			'getComputedStyle(document.querySelector(".app-sidebar-footer a[aria-label=Settings]"), "::after").visibility === "visible"',
+			"navigation tooltip appears on hover",
+		);
+		browser.webContents.sendInputEvent({ type: "mouseMove", x: 500, y: 500 });
+		assert.equal(
+			await host('Boolean(document.querySelector(".app-sidebar-footer a[href=\\"#/\\"]"))'),
+			true,
+			"the Chats shortcut returns to the current conversation",
+		);
+		await sleep(200);
+		assert.equal(
+			await host(`(() => {
+				const active = document.querySelector(".app-sidebar-footer .sidebar-nav-icon.is-active");
+				const swatch = document.createElement("span");
+				swatch.style.background = "var(--ui-action)";
+				document.body.append(swatch);
+				const matches = getComputedStyle(active).backgroundColor === getComputedStyle(swatch).backgroundColor;
+				swatch.remove();
+				return matches;
+			})()`),
+			true,
+			"the active navigation shortcut has a distinct filled background",
 		);
 		assert.equal(
 			await host('Boolean(document.querySelector(".app-sidebar-footer a[href=\\"#/changes\\"]"))'),
@@ -329,7 +366,70 @@ if (!process.versions.electron) {
 		const nodeViewSwitch = '.sidebar-view-content:not([hidden]) [aria-label="Node view"]';
 		await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
 		await until('Boolean(document.querySelector(".session-graph-node"))', "conversation graph");
-		await sleep(400);
+		await sleep(450);
+		const resizePoint = await host(`(() => {
+			const bounds = document.querySelector('[aria-label="Resize navigation sidebar"]').getBoundingClientRect();
+			return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + 120) };
+		})()`);
+		browser.webContents.sendInputEvent({ type: "mouseMove", ...resizePoint });
+		browser.webContents.sendInputEvent({
+			type: "mouseDown",
+			button: "left",
+			clickCount: 1,
+			...resizePoint,
+		});
+		await sleep(40);
+		browser.webContents.sendInputEvent({
+			type: "mouseMove",
+			x: resizePoint.x + 128,
+			y: resizePoint.y,
+			button: "left",
+		});
+		await sleep(40);
+		browser.webContents.sendInputEvent({
+			type: "mouseUp",
+			button: "left",
+			clickCount: 1,
+			x: resizePoint.x + 128,
+			y: resizePoint.y,
+		});
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 768',
+			"graph width after dragging",
+		);
+		await host('document.querySelector(".react-flow__controls-zoomout").click()');
+		await sleep(450);
+		const manualViewport = await host(
+			'document.querySelector(".react-flow__viewport").style.transform',
+		);
+		await host(
+			'document.querySelector(".app-sidebar-brand [aria-label=\\"Close sidebar\\"]").click()',
+		);
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 0',
+			"graph collapsed",
+		);
+		await host('document.querySelector(".sidebar-reopen").click()');
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 768',
+			"graph width restored",
+		);
+		await sleep(500);
+		assert.equal(
+			await host('document.querySelector(".react-flow__viewport").style.transform'),
+			manualViewport,
+			"reopening the graph preserves manual pan and zoom",
+		);
+		browser.setContentSize(1024, 960);
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 424',
+			"graph width respects chat minimum",
+		);
+		browser.setContentSize(1440, 960);
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 768',
+			"graph width returns after resizing window",
+		);
 		await host('window.graphNodeRef = document.querySelector(".session-graph-node")');
 		await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
 		await settle();
@@ -357,6 +457,12 @@ if (!process.versions.electron) {
 			"sidebar can still be resized to its minimum width",
 		);
 		await checkLayout("minimum sidebar width with populated conversation");
+		await navigate("/knowledge", ".knowledge-page-header h1");
+		await host('document.querySelector(".app-sidebar-footer a[href=\\"#/\\"]").click()');
+		await until(
+			'location.hash === "#/" && Boolean(document.querySelector(".chat-topbar"))',
+			"back to chat",
+		);
 		await host(`document.querySelector('[aria-label="Resize navigation sidebar"]')
 			.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
 		await settle();
@@ -670,6 +776,11 @@ if (!process.versions.electron) {
 
 		await navigate("/settings", ".settings-section:not([hidden]) .settings-section-header h1");
 		assert.equal(
+			await host('document.querySelector(".settings-section:not([hidden]) h1").id'),
+			"provider-heading",
+			"AI provider is the first and default settings section",
+		);
+		assert.equal(
 			await host('document.querySelector(".settings-content .page-header")'),
 			null,
 			"settings no longer repeats a page-level title",
@@ -686,16 +797,23 @@ if (!process.versions.electron) {
 			true,
 			"settings navigation replaces workspace sidebar",
 		);
-		for (const [index, heading] of [
-			"language-heading",
-			"plugins-heading",
-			"appearance-heading",
+		assert.deepEqual(
+			await host(
+				'[...document.querySelectorAll(".settings-navigation-group-heading")].map(heading => heading.textContent.trim())',
+			),
+			["AI & workflows", "App preferences"],
+		);
+		for (const heading of [
 			"provider-heading",
-			"workspace-heading",
+			"plugins-heading",
 			"knowledge-heading",
+			"language-heading",
+			"appearance-heading",
 			"accessibility-heading",
-		].entries()) {
-			await host(`document.querySelectorAll(".settings-navigation nav button")[${index}].click()`);
+		]) {
+			await host(
+				`document.querySelector(".settings-navigation nav button[data-section='${heading}']").click()`,
+			);
 			assert.equal(await host("location.hash"), "#/settings", `${heading} retains route`);
 			assert.equal(
 				await host(
@@ -723,33 +841,60 @@ if (!process.versions.electron) {
 			"settings search filters categories",
 		);
 		assert.equal(
+			await host('document.querySelectorAll(".settings-navigation-group").length'),
+			1,
+			"empty groups are hidden by search",
+		);
+		assert.equal(
 			await host(
 				'document.querySelector(".settings-navigation nav button.is-active").textContent.trim()',
 			),
 			"AI provider",
 		);
+		assert.equal(
+			await host(
+				'(() => { const input = document.querySelector(".settings-search input"); input.focus(); return getComputedStyle(input).outlineStyle; })()',
+			),
+			"none",
+			"focused search text does not receive a square outline",
+		);
 		await setInput('[aria-label="Search settings sections"]', "");
-		await host('document.querySelectorAll(".settings-navigation nav button")[3].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=appearance-heading]").click()',
+		);
 		await host('document.querySelector(".settings-content").style.maxHeight = "12rem"');
 		await host('document.querySelector(".settings-content").scrollTo(0, 200)');
 		assert.ok(
 			await host('document.querySelector(".settings-content").scrollTop > 0'),
 			"settings content scrolls independently",
 		);
-		await host('document.querySelectorAll(".settings-navigation nav button")[2].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=appearance-heading]").click()',
+		);
 		assert.equal(await host('document.querySelector(".settings-content").scrollTop'), 0);
 		await host('document.querySelector(".settings-content").style.maxHeight = ""');
 		const autoExtract = await host("window.uiStore.getState().settings.autoExtract");
 		await host(`document.querySelector('input[name="app-theme"][value="light"]').click()`);
-		await host('document.querySelectorAll(".settings-navigation nav button")[6].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=accessibility-heading]").click()',
+		);
 		await until('document.documentElement.dataset.theme === "light"', "theme radio");
 		await host('document.querySelector("#reduce-motion").click()');
 		await host('document.querySelector("#high-contrast").click()');
 		await setInput("#font-scale", "1.1");
-		await host('document.querySelectorAll(".settings-navigation nav button")[4].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=knowledge-heading]").click()',
+		);
 		await setInput("#concurrent-questions", "3");
-		await host('document.querySelectorAll(".settings-navigation nav button")[5].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=knowledge-heading]").click()',
+		);
 		await host(`document.querySelector('button[aria-labelledby="auto-extract-label"]').click()`);
+		assert.equal(
+			await host('Boolean(document.querySelector("#workspace-heading"))'),
+			false,
+			"workspace selection is not duplicated in Settings",
+		);
 		await settle();
 		const expected = {
 			theme: "light",
@@ -773,7 +918,9 @@ if (!process.versions.electron) {
 			String(!autoExtract),
 		);
 		assert.equal(await host('document.documentElement.classList.contains("reduce-motion")'), true);
-		await host('document.querySelectorAll(".settings-navigation nav button")[6].click()');
+		await host(
+			'document.querySelector(".settings-navigation nav button[data-section=accessibility-heading]").click()',
+		);
 		await host('document.querySelector("#font-scale").scrollIntoView({ block: "center" })');
 		await screenshot("settings-controls");
 		await browser.loadURL(browser.webContents.getURL());
@@ -893,6 +1040,21 @@ if (!process.versions.electron) {
 				await screenshot(`${theme}-empty-${route.slice(1) || "workspace"}`);
 			}
 		}
+		await navigate("/sources", ".page-title");
+		assert.equal(
+			await host('document.querySelector(".sources-workspace-card h2").textContent.trim()'),
+			"Current workspace",
+			"workspace selection is displayed in Sources",
+		);
+		assert.equal(
+			await host('document.querySelector(".sources-workspace-card button").textContent.trim()'),
+			"Choose workspace",
+		);
+		assert.equal(
+			await host('document.querySelectorAll(".sources-empty-state .command-button").length'),
+			1,
+			"the empty sources state has an Add sources action",
+		);
 		await seedContent();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
@@ -920,7 +1082,36 @@ if (!process.versions.electron) {
 		await checkSidebarFilter();
 		await checkPageControls();
 		await checkChatActionContrast();
-		assert.deepEqual(rendererErrors, [], "renderer console errors");
+		browser.setContentSize(1440, 960);
+		await navigate("/", ".chat-topbar h1");
+		assert.equal(
+			await host('localStorage.getItem("rhyza-layout-graph-width")'),
+			"768",
+			"the dragged graph width is saved",
+		);
+		await browser.reload();
+		await until('Boolean(document.querySelector(".session-tree-header"))', "reopened workspace");
+		if (await host('Boolean(document.querySelector(".sidebar-reopen"))'))
+			await host('document.querySelector(".sidebar-reopen").click()');
+		await host(
+			'document.querySelector(".sidebar-view-content:not([hidden]) [aria-label=\\"Node view\\"]").click()',
+		);
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 768',
+			"saved graph width after reopening the app",
+		);
+		const resizeNotifications = rendererErrors.filter(
+			(message) => message === "ResizeObserver loop completed with undelivered notifications.",
+		);
+		if (resizeNotifications.length)
+			console.warn(`${resizeNotifications.length} browser ResizeObserver delivery warnings`);
+		assert.deepEqual(
+			rendererErrors.filter(
+				(message) => message !== "ResizeObserver loop completed with undelivered notifications.",
+			),
+			[],
+			"renderer console errors",
+		);
 		console.log(
 			"Verified five routes, empty/populated states, both themes, four widths, large text and navigation.",
 		);

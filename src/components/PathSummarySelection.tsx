@@ -1,4 +1,4 @@
-import { FileText, GitMerge, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import {
 	createContext,
 	useCallback,
@@ -17,7 +17,6 @@ import { errorToMessage } from "../shared/value";
 import { getWorkspacePersistencePath, useAppStore } from "../store";
 import { useConversationFocus } from "../store/conversationFocus";
 import { createId } from "../utils/common";
-import { projectConversationGraph } from "../utils/conversationGraph";
 import { buildPathSummaryInput } from "../utils/pathSummary";
 import "./pathSummary.css";
 
@@ -46,9 +45,6 @@ export function usePathSummarySelection(): SummarySelection {
 export function PathSummaryProvider({ children }: { children: ReactNode }) {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
-	const sessions = useAppStore((state) => state.sessions);
-	const turns = useAppStore((state) => state.turns);
-	const graph = useMemo(() => projectConversationGraph(sessions, turns), [sessions, turns]);
 	const [selecting, setSelecting] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(() => new Set());
 	const [prompt, setPrompt] = useState("");
@@ -274,6 +270,16 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 					!running && (
 						<div className="path-summary-toolbar">
 							<>
+								<label className="path-summary-prompt">
+									<span>{t("Summary instructions (optional)")}</span>
+									<textarea
+										value={prompt}
+										maxLength={4000}
+										rows={2}
+										onChange={(event) => setPrompt(event.target.value)}
+										placeholder={t("What should the summary focus on?")}
+									/>
+								</label>
 								<div className="path-summary-controls">
 									<span aria-live="polite">
 										{selected.size} {t("selected")}
@@ -295,41 +301,10 @@ export function PathSummaryProvider({ children }: { children: ReactNode }) {
 										<FileText size={14} /> {t("Summary")}
 									</button>
 								</div>
-								<label className="path-summary-prompt">
-									<span>{t("Summary instructions (optional)")}</span>
-									<textarea
-										value={prompt}
-										maxLength={4000}
-										rows={2}
-										onChange={(event) => setPrompt(event.target.value)}
-										placeholder={t("What should the summary focus on?")}
-									/>
-								</label>
 								{hiddenCount > 0 && (
 									<span className="path-summary-hint">
 										{hiddenCount} {t("selected nodes are hidden")}
 									</span>
-								)}
-								{selected.size > 0 && (
-									<details className="path-summary-selection-details">
-										<summary>{t("Selected paths")}</summary>
-										{[...selected].map((id) => (
-											<div key={id} className="path-summary-selected-item">
-												<span>
-													{graph.rounds.find((round) => round.id === id)?.title ??
-														t("Source deleted")}
-												</span>
-												<button
-													type="button"
-													onClick={() => toggle(id)}
-													disabled={running}
-													aria-label={t("Remove selection")}
-												>
-													<X size={13} />
-												</button>
-											</div>
-										))}
-									</details>
 								)}
 							</>
 							{error && (
@@ -351,21 +326,4 @@ const PathSummaryToolbarContext = createContext<ReactNode>(null);
 
 export function PathSummaryToolbar() {
 	return useContext(PathSummaryToolbarContext);
-}
-
-export function MergeModeButton() {
-	const { t } = useTranslation();
-	const { begin, selecting } = usePathSummarySelection();
-	if (selecting) return null;
-	return (
-		<button
-			type="button"
-			className="path-summary-mode-button"
-			aria-label={t("Merge paths")}
-			title={t("Merge paths")}
-			onClick={() => begin()}
-		>
-			<GitMerge size={14} /> {t("Merge paths")}
-		</button>
-	);
 }

@@ -86,7 +86,7 @@ const Sources = () => {
 	const selectWorkspace = async () => {
 		const bridge = getRhyzaBridge();
 		if (!bridge?.isElectron) {
-			setWorkspaceError("选择工作区需要在 Electron 桌面应用中进行。");
+			setWorkspaceError(t("Selecting a workspace requires the Electron desktop app."));
 			return;
 		}
 		setWorkspaceBusy(true);
@@ -196,23 +196,26 @@ const Sources = () => {
 						{t("Indexed repositories and documentation directories.")}
 					</p>
 				</div>
-				<button
-					type="button"
-					onClick={() => void addSources()}
-					disabled={busy}
-					className="command-button"
-				>
-					{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
-					{busy ? t("Adding sources…") : t("Add sources")}
-				</button>
+				{activeSources.length > 0 && (
+					<button
+						type="button"
+						onClick={() => void addSources()}
+						disabled={busy}
+						className="command-button"
+					>
+						{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
+						{busy ? t("Adding sources…") : t("Add sources")}
+					</button>
+				)}
 			</header>
 			<section className="sources-workspace-card" aria-labelledby="sources-workspace-heading">
 				<div className="sources-workspace-copy">
-					<h2 id="sources-workspace-heading">当前工作区</h2>
-					<p>对话使用的工作目录。资料来源需另行添加并索引。</p>
+					<h2 id="sources-workspace-heading">{t("Current workspace")}</h2>
+					<p>{t("The working directory for chats. Add and index sources separately.")}</p>
 					<p className="sources-workspace-path" title={workspacePath ?? undefined}>
-						{workspacePath ?? "尚未选择工作区"}
+						{workspacePath ?? t("No workspace selected.")}
 					</p>
+					<p>{t("Run writable sessions in separate Git worktrees.")}</p>
 					{workspaceError && (
 						<p className="sources-workspace-error" role="alert">
 							{workspaceError}
@@ -225,7 +228,11 @@ const Sources = () => {
 					disabled={!getRhyzaBridge()?.isElectron || workspaceBusy}
 					onClick={() => void selectWorkspace()}
 				>
-					{workspaceBusy ? "正在选择…" : workspacePath ? "更改工作区" : "选择工作区"}
+					{workspaceBusy
+						? t("Choosing workspace…")
+						: workspacePath
+							? t("Change workspace")
+							: t("Choose workspace")}
 				</button>
 			</section>
 			<form
@@ -414,6 +421,17 @@ const Sources = () => {
 									? t("Reading the workspace index.")
 									: t("Add a repository or documentation folder to build the workspace index.")}
 							</p>
+							{!loading && (
+								<button
+									type="button"
+									className="command-button"
+									onClick={() => void addSources()}
+									disabled={busy}
+								>
+									{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
+									{busy ? t("Adding sources…") : t("Add sources")}
+								</button>
+							)}
 						</div>
 					)}
 				</section>

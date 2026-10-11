@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type KeyboardEvent,
+	type PointerEvent,
+} from "react";
 
 interface PanelResizeHandleProps {
 	side: "left" | "right";
@@ -11,15 +18,29 @@ interface PanelResizeHandleProps {
 	onCommit: (value: number) => void;
 }
 
-export function PanelResizeHandle({ side, label, value, min, max, defaultValue, onChange, onCommit }: PanelResizeHandleProps) {
+export function PanelResizeHandle({
+	side,
+	label,
+	value,
+	min,
+	max,
+	defaultValue,
+	onChange,
+	onCommit,
+}: PanelResizeHandleProps) {
 	const dragRef = useRef<{ pointerId: number; startX: number; startValue: number } | null>(null);
 	const latestValueRef = useRef(value);
 	const resizeFrameRef = useRef<number | null>(null);
-	useEffect(() => { latestValueRef.current = value; }, [value]);
-	useEffect(() => () => {
-		document.body.classList.remove("is-resizing-panel");
-		if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
-	}, []);
+	useEffect(() => {
+		latestValueRef.current = value;
+	}, [value]);
+	useEffect(
+		() => () => {
+			document.body.classList.remove("is-resizing-panel");
+			if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
+		},
+		[],
+	);
 
 	const resize = (nextValue: number) => {
 		const clamped = Math.round(Math.min(max, Math.max(min, nextValue)));
@@ -39,7 +60,8 @@ export function PanelResizeHandle({ side, label, value, min, max, defaultValue, 
 		}
 		onChange(latestValueRef.current);
 		document.body.classList.remove("is-resizing-panel");
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+		if (event.currentTarget.hasPointerCapture(event.pointerId))
+			event.currentTarget.releasePointerCapture(event.pointerId);
 		onCommit(latestValueRef.current);
 	};
 	const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -67,7 +89,10 @@ export function PanelResizeHandle({ side, label, value, min, max, defaultValue, 
 			aria-valuemax={max}
 			aria-valuenow={value}
 			tabIndex={0}
-			onDoubleClick={() => { resize(defaultValue); onCommit(defaultValue); }}
+			onDoubleClick={() => {
+				resize(defaultValue);
+				onCommit(defaultValue);
+			}}
 			onKeyDown={handleKeyDown}
 			onPointerDown={(event) => {
 				dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startValue: value };
@@ -88,14 +113,17 @@ export function PanelResizeHandle({ side, label, value, min, max, defaultValue, 
 	);
 }
 
-export function usePanelSize(storageKey: string, defaultValue: number, min: number, max: number) {
+export function usePanelSize(storageKey: string, defaultValue: number, min: number) {
 	const [value, setValue] = useState(() => {
 		const saved = Number(window.localStorage.getItem(storageKey));
-		return Number.isFinite(saved) && saved > 0 ? Math.min(max, Math.max(min, saved)) : defaultValue;
+		return Number.isFinite(saved) && saved > 0 ? Math.max(min, saved) : defaultValue;
 	});
-	const commit = useCallback((nextValue: number) => {
-		window.localStorage.setItem(storageKey, String(Math.round(nextValue)));
-	}, [storageKey]);
+	const commit = useCallback(
+		(nextValue: number) => {
+			window.localStorage.setItem(storageKey, String(Math.round(nextValue)));
+		},
+		[storageKey],
+	);
 	return { value, setValue, commit };
 }
 

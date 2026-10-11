@@ -55,7 +55,13 @@ if (!process.versions.electron) {
 	let server;
 	let browser;
 	const rendererErrors = [];
-	const host = (code) => browser.webContents.executeJavaScript(code);
+	const host = async (code) => {
+		try {
+			return await browser.webContents.executeJavaScript(code);
+		} catch (error) {
+			throw new Error(`${error.message}\n${rendererErrors.join("\n")}`);
+		}
+	};
 	const frame = () =>
 		host("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
 	const until = async (code, label) => {
@@ -211,6 +217,15 @@ if (!process.versions.electron) {
 		assert.ok(geometry.outlineRight < geometry.answerLeft);
 		assert.ok(geometry.outlineBottom <= geometry.composerTop);
 		assert.equal(geometry.width, 960, "the outline must not squeeze the transcript");
+		const navigator = await host(`(() => {
+			const pane = document.querySelector(".chat-pane").getBoundingClientRect();
+			const button = document.querySelector('[aria-label="Open turn navigator"]').getBoundingClientRect();
+			return { paneLeft: pane.left, buttonLeft: button.left };
+		})()`);
+		assert.ok(
+			navigator.buttonLeft - navigator.paneLeft <= 12,
+			"turn navigation hugs the chat edge",
+		);
 		assert.equal(
 			await host(
 				'document.querySelectorAll("#turn-question-one [data-markdown-heading-id]").length',
@@ -340,7 +355,38 @@ if (!process.versions.electron) {
 		await focusAnswer("answer-two");
 		await until('!document.querySelector(".answer-outline")', "plain responses have no outline");
 		await focusAnswer("answer-one");
-		for (const width of [1200, 768, 375]) {
+		browser.setContentSize(1200, 980);
+		await frame();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		assert.equal(
+			await host('getComputedStyle(document.querySelector(".chat-scroll")).paddingLeft'),
+			"224px",
+			"the chat pane reserves space for the outline",
+		);
+		await until(
+			'Boolean(document.querySelector(".answer-outline"))',
+			"outline survives narrower chat",
+		);
+		const narrow = await host(`(() => {
+			const pane = document.querySelector(".chat-pane").getBoundingClientRect();
+			const outline = document.querySelector(".answer-outline").getBoundingClientRect();
+			const answer = document.querySelector("#turn-answer-one").getBoundingClientRect();
+			return { paneLeft: pane.left, outlineLeft: outline.left, outlineRight: outline.right, answerLeft: answer.left, answerWidth: answer.width };
+		})()`);
+		assert.ok(narrow.outlineLeft - narrow.paneLeft <= 32, "outline stays at the chat pane edge");
+		assert.ok(narrow.outlineRight < narrow.answerLeft, "outline leaves the answer unobstructed");
+		assert.ok(narrow.answerWidth >= 580, "the answer retains a readable minimum width");
+		browser.setContentSize(840, 980);
+		await frame();
+		await until(
+			'Boolean(document.querySelector(".answer-outline"))',
+			"outline stays visible at the minimum reading width",
+		);
+		assert.ok(
+			await host('document.querySelector("#turn-answer-one").getBoundingClientRect().width >= 580'),
+			"minimum reading width is respected at the outline threshold",
+		);
+		for (const width of [839, 768, 375]) {
 			browser.setContentSize(width, 980);
 			await frame();
 			await until('!document.querySelector(".answer-outline")', `outline hides at ${width}px`);

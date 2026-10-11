@@ -45,7 +45,7 @@ import { graphPreviewPosition } from "../utils/graphPreviewPosition";
 import { ConversationPathEdge } from "./ConversationPathEdge";
 import { createGraphPreviewOwner } from "../utils/graphPreviewOwner";
 import { filterConversationRounds, type LeafStatusFilter } from "../utils/conversationFilter";
-import { MergeModeButton, usePathSummarySelection } from "./PathSummarySelection";
+import { usePathSummarySelection } from "./PathSummarySelection";
 import { summarySourceEdges } from "../utils/pathSummary";
 import { useTranslation } from "../i18n";
 
@@ -60,7 +60,7 @@ interface SessionGraphNodeData {
 	isLeaf: boolean;
 	previewOwner: ReturnType<typeof createGraphPreviewOwner>;
 	orientation: SessionGraphOrientation;
-	onSelect: (id: string) => void;
+	onSelect: (id: string, additive: boolean) => void;
 	selecting: boolean;
 	isSelected: boolean;
 	isSelectedAncestor: boolean;
@@ -186,9 +186,13 @@ export function SessionGraph({
 	}, [positions, reduceMotion]);
 
 	const selectRound = useCallback(
-		(id: string) => {
+		(id: string, additive: boolean) => {
 			if (selection.selecting) {
 				selection.toggle(id);
+				return;
+			}
+			if (additive) {
+				selection.begin([id]);
 				return;
 			}
 			const round = projection.rounds.find((item) => item.id === id);
@@ -213,6 +217,7 @@ export function SessionGraph({
 			activeSessionId,
 			selection.selecting,
 			selection.toggle,
+			selection.begin,
 		],
 	);
 
@@ -288,7 +293,6 @@ export function SessionGraph({
 					</div>
 				</div>
 				<div className="session-graph-actions">
-					<MergeModeButton />
 					{viewControl}
 					<span className="graph-toolbar-divider" aria-hidden="true" />
 					<IconSwitch
@@ -484,7 +488,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 			)}
 			data-execution-status={metrics.status}
 			onClick={() => {
-				if (data.selecting && !data.selectionRunning) data.onSelect(data.round.id);
+				if (data.selecting && !data.selectionRunning) data.onSelect(data.round.id, false);
 			}}
 			onContextMenu={(event) => {
 				hidePreview();
@@ -508,7 +512,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				className="session-graph-node-main"
 				onClick={(event) => {
 					event.stopPropagation();
-					data.onSelect(data.round.id);
+					data.onSelect(data.round.id, event.ctrlKey || event.metaKey);
 				}}
 				disabled={data.selecting && data.selectionRunning}
 				aria-pressed={data.selecting && !data.selectionRunning ? data.isSelected : undefined}
@@ -670,7 +674,7 @@ function buildGraph({
 	previewOwner: ReturnType<typeof createGraphPreviewOwner>;
 	orientation: SessionGraphOrientation;
 	positions: Map<string, { x: number; y: number }>;
-	onSelect: (id: string) => void;
+	onSelect: (id: string, additive: boolean) => void;
 	selecting: boolean;
 	selected: ReadonlySet<string>;
 	selectedAncestors: ReadonlySet<string>;

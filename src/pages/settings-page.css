@@ -89,8 +89,22 @@ html[data-theme] .settings-page .settings-search {
 
 .settings-page .settings-navigation nav {
 	display: grid;
-	gap: 0.2rem;
+	gap: 1.25rem;
 	margin-top: 0.9rem;
+}
+
+.settings-page .settings-navigation-group {
+	display: grid;
+	gap: 0.2rem;
+}
+
+.settings-page .settings-navigation-group-heading {
+	margin: 0 0 0.25rem;
+	padding-inline: 0.7rem;
+	color: var(--color-secondary);
+	font-size: 0.7rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
 }
 
 html[data-theme] .settings-page .settings-navigation nav button {
@@ -354,6 +368,20 @@ html[data-theme] .settings-page :is(button, input, select):focus-visible {
 	outline-offset: 3px;
 }
 
+html[data-theme]
+	.settings-page
+	:is(
+		input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+		select,
+		textarea
+	):focus-visible {
+	outline: none;
+}
+
+html[data-theme] .settings-page .settings-search input:focus-visible {
+	box-shadow: none;
+}
+
 .settings-page .settings-inset {
 	margin: 0 0 1rem;
 	border: 1px solid var(--ui-border);
@@ -388,25 +416,6 @@ html[data-theme] .settings-page :is(button, input, select):focus-visible {
 .settings-page .settings-auth-actions,
 .settings-page .settings-auth-link {
 	margin-top: 0.6rem;
-}
-
-.settings-page .settings-workspace-path {
-	overflow-wrap: anywhere;
-}
-
-.settings-page .settings-status {
-	display: inline-flex;
-	max-width: 100%;
-	flex: 0 0 auto;
-	align-items: center;
-	border: 1px solid var(--ui-brand-border);
-	border-radius: 0.35rem;
-	background: var(--ui-brand-soft);
-	padding: 0.3rem 0.5rem;
-	color: var(--ui-brand-ink);
-	font-size: 0.6875rem;
-	font-weight: 600;
-	line-height: 1.4;
 }
 
 html[data-theme] .settings-page .settings-section > .theme-settings {
@@ -753,14 +762,6 @@ html.high-contrast .settings-page .settings-section-header p {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 0.65rem;
 	}
-
-	.settings-page .settings-workspace-folder {
-		flex-wrap: wrap;
-	}
-
-	.settings-page .settings-workspace-folder .settings-row-copy {
-		flex-basis: 100%;
-	}
 }
 
 @container settings (max-width: 28rem) {
@@ -790,11 +791,6 @@ html.high-contrast .settings-page .settings-section-header p {
 
 	.settings-page .settings-row {
 		gap: 0.8rem;
-	}
-
-	.settings-page .settings-status {
-		max-width: 7rem;
-		flex-shrink: 1;
 	}
 }
 

@@ -1152,6 +1152,7 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 	height: 100%;
 	flex: 1;
 	flex-direction: column;
+	container-type: inline-size;
 	background: #fff;
 }
 .conversation-find {
@@ -2464,6 +2465,12 @@ html[data-theme="dark"] .user-message-quote-label {
 	flex: 0 0 auto;
 	padding: 0 1.5rem 0.7rem;
 	background: #fff;
+}
+@container (min-width: 840px) {
+	.chat-scroll,
+	.composer-shell {
+		padding-left: 14rem;
+	}
 }
 .composer-frame {
 	position: relative;

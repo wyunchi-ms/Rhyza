@@ -3,7 +3,13 @@ import { ListTree } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import type { Turn } from "../types";
 
-export function TurnNavigator({ turns, scrollContainerRef }: { turns: Turn[]; scrollContainerRef: RefObject<HTMLDivElement | null> }) {
+export function TurnNavigator({
+	turns,
+	scrollContainerRef,
+}: {
+	turns: Turn[];
+	scrollContainerRef: RefObject<HTMLDivElement | null>;
+}) {
 	const userTurns = useMemo(() => turns.filter((turn) => turn.role === "user"), [turns]);
 	const [expanded, setExpanded] = useState(false);
 	const [activeId, setActiveId] = useState(userTurns[userTurns.length - 1]?.id ?? "");
@@ -67,7 +73,8 @@ export function TurnNavigator({ turns, scrollContainerRef }: { turns: Turn[]; sc
 			const containerRect = container.getBoundingClientRect();
 			const elementRect = element.getBoundingClientRect();
 			container.scrollTo({
-				top: container.scrollTop + elementRect.top - containerRect.top - container.clientHeight * 0.2,
+				top:
+					container.scrollTop + elementRect.top - containerRect.top - container.clientHeight * 0.2,
 				behavior: "smooth",
 			});
 		}
@@ -79,12 +86,28 @@ export function TurnNavigator({ turns, scrollContainerRef }: { turns: Turn[]; sc
 
 	return (
 		<div
-			className="absolute right-2 top-1/2 -translate-y-1/2 z-20 flex items-center"
+			className="absolute left-1 top-1/2 -translate-y-1/2 z-20 flex items-center"
 			onMouseEnter={() => setExpanded(true)}
 			onMouseLeave={() => setExpanded(false)}
 		>
+			<button
+				type="button"
+				onClick={() => setExpanded((value) => !value)}
+				aria-label="Open turn navigator"
+				className="w-4 py-2 flex flex-col items-center gap-1 focus-visible:outline-2 focus-visible:outline-accent"
+			>
+				{userTurns.map((turn) => (
+					<span
+						key={turn.id}
+						className={clsx(
+							"block h-0.5 rounded bg-gray-400 transition-all",
+							activeId === turn.id ? "w-4 bg-accent" : "w-2",
+						)}
+					/>
+				))}
+			</button>
 			{expanded && (
-				<div className="mr-2 w-56 max-h-[60vh] overflow-y-auto border border-gray-200 bg-white shadow-xl p-2 rounded-lg">
+				<div className="ml-2 w-56 max-h-[60vh] overflow-y-auto border border-gray-200 bg-white shadow-xl p-2 rounded-lg">
 					<div className="flex items-center gap-2 px-2 py-1 text-xs font-bold text-gray-500 uppercase">
 						<ListTree size={14} /> Turns
 					</div>
@@ -96,7 +119,9 @@ export function TurnNavigator({ turns, scrollContainerRef }: { turns: Turn[]; sc
 							aria-current={activeId === turn.id ? "step" : undefined}
 							className={clsx(
 								"w-full text-left px-2 py-2 text-xs rounded-md flex gap-2",
-								activeId === turn.id ? "bg-accent/10 text-accent" : "hover:bg-gray-50 text-secondary",
+								activeId === turn.id
+									? "bg-accent/10 text-accent"
+									: "hover:bg-gray-50 text-secondary",
 							)}
 						>
 							<span className="font-bold tabular-nums">{index + 1}</span>
@@ -105,19 +130,6 @@ export function TurnNavigator({ turns, scrollContainerRef }: { turns: Turn[]; sc
 					))}
 				</div>
 			)}
-			<button
-				type="button"
-				onClick={() => setExpanded((value) => !value)}
-				aria-label="Open turn navigator"
-				className="w-4 py-2 flex flex-col items-center gap-1 focus:outline-none"
-			>
-				{userTurns.map((turn) => (
-					<span
-						key={turn.id}
-						className={clsx("block h-0.5 rounded bg-gray-400 transition-all", activeId === turn.id ? "w-4 bg-accent" : "w-2")}
-					/>
-				))}
-			</button>
 		</div>
 	);
 }

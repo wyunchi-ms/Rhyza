@@ -20,7 +20,7 @@ export const KnowledgePane = () => {
 	const store = useAppStore();
 	const viewportWidth = useViewportWidth();
 	const paneMax = Math.min(560, Math.max(320, viewportWidth * 0.45));
-	const paneSize = usePanelSize("rhyza-layout-right-pane-width", 340, 280, paneMax);
+	const paneSize = usePanelSize("rhyza-layout-right-pane-width", 340, 280);
 	const paneWidth = Math.min(paneSize.value, paneMax);
 	const isOpen = store.rightPaneOpen;
 	const inspectedTurn = store.turns.find((turn) => turn.id === store.inspectedTurnId);
