@@ -74,7 +74,7 @@ if (!process.versions.electron) {
 		["/knowledge", ".knowledge-page-header h1"],
 		["/sources", ".page-title"],
 		["/changes", ".page-title"],
-		["/settings", ".page-title"],
+		["/settings", ".settings-section:not([hidden]) .settings-section-header h1"],
 	];
 
 	async function navigate(route, heading) {
@@ -121,8 +121,8 @@ if (!process.versions.electron) {
 					return rect.width > 0 && (rect.left < -1 || rect.right > innerWidth + 1);
 				}).map(element => element.className));
 			const hiddenHeading = [...document.querySelectorAll("main h1")]
-				.some(element => element.getClientRects().length === 0
-					|| element.closest("[hidden]"));
+				.filter(element => !element.closest("[hidden]"))
+				.some(element => element.getClientRects().length === 0);
 			const reopen = document.querySelector(".sidebar-reopen")?.getBoundingClientRect();
 			const obstructedHeading = reopen && [...document.querySelectorAll(
 				"main h1, .knowledge-page-header > div:first-child"
@@ -133,7 +133,7 @@ if (!process.versions.electron) {
 			});
 			const sidebar = document.querySelector(".app-sidebar");
 			const sidebarRect = sidebar.getBoundingClientRect();
-			const clippedSidebarControls = sidebar.inert ? [] : [...sidebar.querySelectorAll(
+			const clippedSidebarControls = sidebar.inert || sidebarRect.width < 200 ? [] : [...sidebar.querySelectorAll(
 				".session-tree-header button, .app-sidebar-footer .sidebar-nav-icon"
 			)].filter(element => {
 				const rect = element.getBoundingClientRect();
@@ -165,7 +165,7 @@ if (!process.versions.electron) {
 				.reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
 			return [...document.querySelectorAll(
 				".page-title, .page-subtitle, .chat-topbar h1, .chat-empty p, .chat-empty-hint, " +
-				".settings-page section > h2, .command-button:not(:disabled), " +
+				".settings-section:not([hidden]) .settings-section-header h1, .command-button:not(:disabled), " +
 				".session-filter-label, .session-filter-hint, .session-filter-count, " +
 				".text-selection-actions button[type=submit]:not(:disabled), .analyze-context-button"
 			)].filter(element => element.getBoundingClientRect().width > 0).map(element => {
@@ -287,39 +287,37 @@ if (!process.versions.electron) {
 			await host(`[...document.querySelector(".app-sidebar-brand").children]
 				.map(element => element.matches('[aria-label="Close sidebar"]')
 					? "toggle"
-					: element.className)`),
-			["toggle"],
-			"browser sidebar retains its toggle without the old header navigation",
+					: element.getAttribute("aria-label"))`),
+			["toggle", "Search all chats"],
+			"browser sidebar retains its toggle and search without the old header navigation",
 		);
 		assert.equal(
 			await host('document.querySelectorAll(".app-sidebar-footer .sidebar-nav-icon").length'),
-			3,
-			"three destinations occupy the bottom-left navigation without a search button",
+			4,
+			"four destinations occupy the bottom-left navigation",
 		);
 		assert.equal(
 			await host('Boolean(document.querySelector(".app-sidebar-footer a[href=\\"#/changes\\"]"))'),
-			false,
-			"the changes shortcut is absent",
+			true,
+			"the changes shortcut remains accessible",
 		);
 		await host(
 			'document.querySelector(".app-sidebar-brand [aria-label=\\"Close sidebar\\"]").click()',
 		);
 		await until('document.querySelector(".app-sidebar").inert', "sidebar collapsed");
-		assert.equal(
-			await host('document.querySelectorAll(".app-sidebar-footer a:not([inert])").length'),
-			3,
-			"bottom navigation remains available after collapsing the sidebar",
+		await until(
+			'document.querySelector(".app-sidebar").getBoundingClientRect().width === 0',
+			"sidebar collapse animation",
 		);
 		assert.equal(
-			await host(`(() => {
-				const footer = document.querySelector(".app-sidebar-footer");
-				const rect = footer.getBoundingClientRect();
-				footer.querySelector("a").focus();
-				return rect.left === 0 && rect.width >= 90 && rect.bottom === innerHeight &&
-					document.activeElement === footer.querySelector("a");
-			})()`),
+			await host('document.querySelector(".app-sidebar-footer").closest(".app-sidebar").inert'),
 			true,
-			"collapsed sidebar leaves a visible, keyboard-accessible bottom-left navigation",
+			"bottom navigation collapses with the sidebar",
+		);
+		assert.equal(
+			await host('getComputedStyle(document.querySelector(".app-sidebar-footer")).visibility'),
+			"hidden",
+			"collapsed sidebar hides bottom navigation",
 		);
 		await host('document.querySelector(".sidebar-reopen").click()');
 		await until('!document.querySelector(".app-sidebar").inert', "sidebar reopened");
@@ -373,6 +371,7 @@ if (!process.versions.electron) {
 			await navigate(route, heading);
 			await checkLayout(`collapsed desktop sidebar ${route}`);
 		}
+		await navigate("/", ".chat-topbar h1");
 		await host('document.querySelector(".sidebar-reopen").click()');
 		browser.setContentSize(1440, 960);
 		await navigate("/", ".chat-topbar h1");
@@ -458,8 +457,7 @@ if (!process.versions.electron) {
 			});
 		})()`);
 		await settle();
-		const filterButton =
-			'.sidebar-view-content:not([hidden]) button[aria-label="Filter by leaf status"]';
+		const filterButton = ".sidebar-view-content:not([hidden]) button.session-filter-trigger";
 		const nodeViewSwitch = '.sidebar-view-content:not([hidden]) [aria-label="Node view"]';
 		const visibleIds = () =>
 			host(
@@ -503,7 +501,7 @@ if (!process.versions.electron) {
 			await open();
 			assert.equal(
 				await host("document.activeElement.textContent.trim()"),
-				"All statuses",
+				"所有状态",
 				"filter opens with keyboard focus",
 			);
 			await host(
@@ -551,7 +549,7 @@ if (!process.versions.electron) {
 			await close();
 			assert.equal(
 				await host('document.activeElement.getAttribute("aria-label")'),
-				"Filter by leaf status",
+				"按末端节点状态筛选",
 				"Escape restores focus",
 			);
 			await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
@@ -567,7 +565,7 @@ if (!process.versions.electron) {
 				"node view shares the filter and contextual titles",
 			);
 			await open();
-			await choose("All statuses");
+			await choose("所有状态");
 			await choose("On hold");
 			assert.equal(
 				await host('Boolean(document.querySelector(".session-graph-page .session-filter-empty"))'),
@@ -670,14 +668,87 @@ if (!process.versions.electron) {
 		await host('document.querySelector("#changes-knowledge-tab").click()');
 		await settle();
 
-		await navigate("/settings", ".page-title");
+		await navigate("/settings", ".settings-section:not([hidden]) .settings-section-header h1");
+		assert.equal(
+			await host('document.querySelector(".settings-content .page-header")'),
+			null,
+			"settings no longer repeats a page-level title",
+		);
+		assert.equal(await host('document.querySelector(".app-sidebar").inert'), true);
+		assert.equal(
+			await host('document.querySelector(".app-sidebar-footer").closest(".app-sidebar").inert'),
+			true,
+		);
+		assert.equal(
+			await host(
+				'document.querySelector(".settings-navigation nav").getBoundingClientRect().width > 0',
+			),
+			true,
+			"settings navigation replaces workspace sidebar",
+		);
+		for (const [index, heading] of [
+			"language-heading",
+			"plugins-heading",
+			"appearance-heading",
+			"provider-heading",
+			"workspace-heading",
+			"knowledge-heading",
+			"accessibility-heading",
+		].entries()) {
+			await host(`document.querySelectorAll(".settings-navigation nav button")[${index}].click()`);
+			assert.equal(await host("location.hash"), "#/settings", `${heading} retains route`);
+			assert.equal(
+				await host(
+					`document.querySelector(".settings-navigation nav button.is-active")?.textContent.trim()`,
+				),
+				await host(`document.getElementById(${JSON.stringify(heading)}).textContent.trim()`),
+				`${heading} becomes active`,
+			);
+			assert.equal(
+				await host(
+					`!document.getElementById(${JSON.stringify(heading)}).closest("section").hidden`,
+				),
+				true,
+				`${heading} is the visible section`,
+			);
+			assert.equal(
+				await host('document.querySelectorAll(".settings-section:not([hidden])").length'),
+				1,
+				"only the selected section is shown",
+			);
+		}
+		await setInput('[aria-label="Search settings sections"]', "azure");
+		await until(
+			'document.querySelectorAll(".settings-navigation nav button").length === 1',
+			"settings search filters categories",
+		);
+		assert.equal(
+			await host(
+				'document.querySelector(".settings-navigation nav button.is-active").textContent.trim()',
+			),
+			"AI provider",
+		);
+		await setInput('[aria-label="Search settings sections"]', "");
+		await host('document.querySelectorAll(".settings-navigation nav button")[3].click()');
+		await host('document.querySelector(".settings-content").style.maxHeight = "12rem"');
+		await host('document.querySelector(".settings-content").scrollTo(0, 200)');
+		assert.ok(
+			await host('document.querySelector(".settings-content").scrollTop > 0'),
+			"settings content scrolls independently",
+		);
+		await host('document.querySelectorAll(".settings-navigation nav button")[2].click()');
+		assert.equal(await host('document.querySelector(".settings-content").scrollTop'), 0);
+		await host('document.querySelector(".settings-content").style.maxHeight = ""');
 		const autoExtract = await host("window.uiStore.getState().settings.autoExtract");
 		await host(`document.querySelector('input[name="app-theme"][value="light"]').click()`);
+		await host('document.querySelectorAll(".settings-navigation nav button")[6].click()');
 		await until('document.documentElement.dataset.theme === "light"', "theme radio");
 		await host('document.querySelector("#reduce-motion").click()');
 		await host('document.querySelector("#high-contrast").click()');
 		await setInput("#font-scale", "1.1");
+		await host('document.querySelectorAll(".settings-navigation nav button")[4].click()');
 		await setInput("#concurrent-questions", "3");
+		await host('document.querySelectorAll(".settings-navigation nav button")[5].click()');
 		await host(`document.querySelector('button[aria-labelledby="auto-extract-label"]').click()`);
 		await settle();
 		const expected = {
@@ -702,6 +773,7 @@ if (!process.versions.electron) {
 			String(!autoExtract),
 		);
 		assert.equal(await host('document.documentElement.classList.contains("reduce-motion")'), true);
+		await host('document.querySelectorAll(".settings-navigation nav button")[6].click()');
 		await host('document.querySelector("#font-scale").scrollIntoView({ block: "center" })');
 		await screenshot("settings-controls");
 		await browser.loadURL(browser.webContents.getURL());
@@ -716,6 +788,18 @@ if (!process.versions.electron) {
 				`${key} persists after reload`,
 			);
 		}
+		browser.setContentSize(375, 812);
+		await settle();
+		assert.equal(
+			await host(
+				'document.querySelector(".settings-navigation nav").getBoundingClientRect().width > 0',
+			),
+			true,
+			"settings navigation remains usable on compact screens",
+		);
+		await host('document.querySelector(".settings-back").click()');
+		await until('location.hash === "#/"', "return from settings");
+		assert.equal(await host('document.querySelector(".app-sidebar").inert'), true);
 	}
 
 	async function checkChatActionContrast() {

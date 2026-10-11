@@ -139,7 +139,7 @@ export function AzureOpenAISettings({
 
 	const disabled = !available || loading || saving;
 	return (
-		<div aria-label="Azure OpenAI configuration" aria-busy={loading || saving}>
+		<div aria-label="Azure OpenAI 配置" aria-busy={loading || saving}>
 			{!available && (
 				<p className="settings-help settings-inset">
 					Azure OpenAI setup requires the Electron desktop app.
@@ -190,7 +190,7 @@ export function AzureOpenAISettings({
 				</div>
 			))}
 			<details className="settings-inset">
-				<summary>Advanced</summary>
+				<summary>高级设置</summary>
 				<p className="settings-help">
 					Local operating limits, not detected model capabilities. Keep these within your
 					deployment’s supported limits.
@@ -224,10 +224,10 @@ export function AzureOpenAISettings({
 				<div className="settings-row-copy">
 					<p className="settings-help" role="status">
 						{loading
-							? "Loading configuration…"
+							? "正在加载配置…"
 							: saved
 								? "Configuration saved. Deployment access is checked on your first request."
-								: "Changes take effect after saving."}
+								: "保存后更改即会生效。"}
 					</p>
 					{readError && (
 						<p role="alert" className="settings-error">
@@ -258,18 +258,18 @@ export function AzureOpenAISettings({
 						disabled={disabled || connectionBusy}
 						onClick={() => void save()}
 					>
-						{saving ? "Saving…" : "Save configuration"}
+						{saving ? "正在保存…" : "保存配置"}
 					</button>
 				</div>
 			</div>
 			<div className="settings-row settings-row--field">
 				<div className="settings-row-copy">
-					<h3>Default model</h3>
+					<h3>默认模型</h3>
 					<p className="settings-help">
 						Your saved deployment is used for chat, titles, and knowledge extraction.
 					</p>
 				</div>
-				<span className="settings-status">{deployment || "Save a deployment first"}</span>
+				<span className="settings-status">{deployment || "请先保存部署配置"}</span>
 			</div>
 			<p className="settings-help settings-inset">
 				Text and tools only; image input and reasoning controls are not supported. Azure usage is

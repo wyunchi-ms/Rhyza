@@ -260,6 +260,7 @@ if (!process.versions.electron) {
 			import { createRoot } from "react-dom/client";
 			import { MemoryRouter } from "react-router-dom";
 			import { ChatPane } from "/src/components/ChatPane.tsx";
+			import { PathSummaryProvider } from "/src/components/PathSummarySelection.tsx";
 			import { useAppStore } from "/src/store/index.ts";
 			import { useConversationFocus } from "/src/store/conversationFocus.ts";
 			import { drainPerformanceTimings } from "/src/utils/performanceMarks.ts";
@@ -278,7 +279,8 @@ if (!process.versions.electron) {
 			});
 			window.chatTest = { store: useAppStore, focus: useConversationFocus, drain: drainPerformanceTimings, sent: [], finishes: [] };
 			createRoot(document.getElementById("root")).render(React.createElement(React.StrictMode, null,
-				React.createElement(MemoryRouter, null, React.createElement(ChatPane))));
+				React.createElement(MemoryRouter, null,
+					React.createElement(PathSummaryProvider, null, React.createElement(ChatPane)))));
 			window.editDraft = (value, inputType = "insertText", isComposing = false) => {
 				const textarea = document.querySelector(".composer-input");
 				Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(textarea, value);

@@ -225,7 +225,7 @@ export function ChatComposer({
 				...entities
 					.filter((entry) => !entry.deletedAt)
 					.map((entry) => ({
-						...item(entry.name, "entity", entry.id, entry.type, "Knowledge"),
+						...item(entry.name, "entity", entry.id, entry.type, "知识库"),
 						keywords: entry.aliases.join(" "),
 					})),
 				...diagrams
@@ -245,7 +245,7 @@ export function ChatComposer({
 				),
 				...sources
 					.filter((entry) => entry.status !== "archived")
-					.map((entry) => item(entry.name, "source", entry.id, entry.path, "Sources")),
+					.map((entry) => item(entry.name, "source", entry.id, entry.path, "资料来源")),
 				...skills.map((entry) => ({
 					...item(entry.name, "skill", entry.path, entry.description, "Skills"),
 					badge: entry.scope,
@@ -307,7 +307,7 @@ export function ChatComposer({
 		},
 		{
 			id: "knowledge",
-			name: "Knowledge tools",
+			name: "知识工具",
 			detail: settings.knowledgeTools
 				? "On · turn off for new messages"
 				: "Off · turn on for new messages",
@@ -325,8 +325,8 @@ export function ChatComposer({
 		},
 		{
 			id: "settings",
-			name: "Settings",
-			detail: "Open app settings",
+			name: "设置",
+			detail: "打开应用设置",
 			keywords: "设置",
 			group: "Commands",
 			action: () => navigate("/settings"),
@@ -789,7 +789,7 @@ function ComposerRuntimeControls({
 				<button
 					type="button"
 					className="composer-runtime-trigger"
-					title="Choose provider"
+					title="选择服务提供方"
 					aria-label={`Provider: ${provider.label}`}
 					aria-haspopup="listbox"
 					aria-expanded={openMenu === "provider"}
@@ -800,15 +800,11 @@ function ComposerRuntimeControls({
 					<ChevronDown size={12} aria-hidden="true" />
 				</button>
 				{openMenu === "provider" && (
-					<div
-						className="composer-runtime-menu"
-						role="listbox"
-						aria-label="Provider used for new messages"
-					>
+					<div className="composer-runtime-menu" role="listbox" aria-label="新消息使用的服务提供方">
 						<header>
 							<div>
-								<strong>Provider</strong>
-								<span>Changing provider resets the model</span>
+								<strong>服务提供方</strong>
+								<span>更换服务提供方会重置模型选择</span>
 							</div>
 						</header>
 						<div className="composer-runtime-menu-scroll">
@@ -841,7 +837,7 @@ function ComposerRuntimeControls({
 				<button
 					type="button"
 					className="composer-runtime-trigger"
-					title="Choose model"
+					title="选择模型"
 					aria-haspopup="listbox"
 					aria-expanded={openMenu === "model"}
 					onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
@@ -854,14 +850,14 @@ function ComposerRuntimeControls({
 					<div
 						className="composer-runtime-menu composer-model-menu"
 						role="listbox"
-						aria-label="Model used for new messages"
+						aria-label="新消息使用的模型"
 					>
 						<header>
 							<div>
 								<strong>{provider.label} model</strong>
-								<span>Used for new messages</span>
+								<span>用于新消息</span>
 							</div>
-							<small>{modelsLoading ? "Loading…" : `${models.length + 1} available`}</small>
+							<small>{modelsLoading ? "正在加载…" : `${models.length + 1} 个可用`}</small>
 						</header>
 						{modelError && (
 							<p role="status" className="px-3 py-2 text-xs text-red-600">
@@ -881,7 +877,7 @@ function ComposerRuntimeControls({
 							>
 								<span className="composer-menu-check">{!selectedModel && <Check size={13} />}</span>
 								<span>
-									<strong>Provider default</strong>
+									<strong>服务提供方默认值</strong>
 									<small>Let {provider.label} choose</small>
 								</span>
 							</button>
@@ -898,7 +894,7 @@ function ComposerRuntimeControls({
 									</span>
 									<span>
 										<strong>{selectedModel}</strong>
-										<small>Current model</small>
+										<small>当前模型</small>
 									</span>
 								</button>
 							)}
@@ -934,7 +930,7 @@ function ComposerRuntimeControls({
 				<button
 					type="button"
 					className="composer-runtime-trigger"
-					title="Choose thinking level"
+					title="选择思考强度"
 					aria-haspopup="listbox"
 					aria-expanded={openMenu === "thinking"}
 					onClick={() => setOpenMenu((current) => (current === "thinking" ? null : "thinking"))}
@@ -947,12 +943,12 @@ function ComposerRuntimeControls({
 					<div
 						className="composer-runtime-menu composer-thinking-menu"
 						role="listbox"
-						aria-label="Thinking level used for new messages"
+						aria-label="新消息使用的思考强度"
 					>
 						<header>
 							<div>
-								<strong>Thinking</strong>
-								<span>Reasoning effort for new messages</span>
+								<strong>思考强度</strong>
+								<span>新消息的推理强度</span>
 							</div>
 						</header>
 						<div className="composer-runtime-menu-scroll">
@@ -1004,11 +1000,11 @@ function ComposerRuntimeControls({
 					</svg>
 				</button>
 				{openMenu === "context" && (
-					<div className="composer-context-popover" role="dialog" aria-label="Context window usage">
+					<div className="composer-context-popover" role="dialog" aria-label="上下文窗口用量">
 						<header>
 							<div>
-								<strong>Context window</strong>
-								<span>Latest request</span>
+								<strong>上下文窗口</strong>
+								<span>最近一次请求</span>
 							</div>
 							<b>{percent}%</b>
 						</header>
@@ -1017,25 +1013,25 @@ function ComposerRuntimeControls({
 						</div>
 						<dl>
 							<div>
-								<dt>Resident input</dt>
+								<dt>当前输入</dt>
 								<dd>{formatComposerTokens(used)}</dd>
 							</div>
 							<div>
-								<dt>Window size</dt>
+								<dt>窗口大小</dt>
 								<dd>{windowSize ? formatComposerTokens(windowSize) : "Unknown"}</dd>
 							</div>
 							<div>
-								<dt>Measurement</dt>
+								<dt>统计方式</dt>
 								<dd>
 									{contextRequest?.usage
 										? "API reported"
 										: contextRequest
 											? "Estimated"
-											: "No request yet"}
+											: "暂无请求"}
 								</dd>
 							</div>
 						</dl>
-						<p>Based on the latest model request in this conversation.</p>
+						<p>根据此对话最近一次模型请求统计。</p>
 					</div>
 				)}
 			</div>

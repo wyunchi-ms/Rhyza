@@ -17,7 +17,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getRhyzaBridge, useElectronProviderState } from "../hooks/useRhyzaBridge";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
@@ -25,10 +25,18 @@ import { errorToMessage } from "../shared/value";
 import { getProviderInfo, normalizeProviderId, providers } from "../shared/providers";
 import { useTranslation } from "../i18n";
 import { isLanguage, languageOptions } from "../i18n/language";
+import {
+	matchesSettingsSearch,
+	settingsCategories,
+	SettingsNavigation,
+} from "./settings/SettingsNavigation";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
 	const { t } = useTranslation();
+	const [settingsQuery, setSettingsQuery] = useState("");
+	const [activeSection, setActiveSection] = useState("language-heading");
+	const contentRef = useRef<HTMLElement>(null);
 	const provider = getProviderInfo(settings.provider);
 	const electron = useElectronProviderState(provider.id);
 	const externalAuth = provider.externalAuth || electron.providerStatus?.externalAuth === true;
@@ -36,6 +44,16 @@ const Settings: React.FC = () => {
 		electron.providerStatus?.setupInstructions ?? provider.setupInstructions;
 	const selectedModel = settings.defaultModel;
 	const customModel = selectedModel && !electron.models.some((model) => model.id === selectedModel);
+	const visibleCategories = settingsCategories.filter((category) =>
+		matchesSettingsSearch(settingsQuery, category.terms),
+	);
+	const selectedSection =
+		visibleCategories.find((category) => category.id === activeSection)?.id ??
+		visibleCategories[0]?.id;
+	const selectSection = (id: string) => {
+		setActiveSection(id);
+		contentRef.current?.scrollTo({ top: 0 });
+	};
 
 	const handleSelectWorkspace = async () => {
 		const bridge = getRhyzaBridge();
@@ -52,517 +70,570 @@ const Settings: React.FC = () => {
 	};
 
 	return (
-		<div className="settings-page page-scroll">
-			<div className="page-header">
-				<h1 className="page-title">{t("Settings")}</h1>
-				<p className="page-subtitle">
-					{t("Configure providers, models, and workspace preferences.")}
-				</p>
-			</div>
-
-			<div className="settings-sections">
-				<section className="settings-section" aria-labelledby="language-heading">
-					<header className="settings-section-header">
-						<h2 id="language-heading">{t("Language")}</h2>
-						<p>{t("Choose the language used throughout Rhyza.")}</p>
-					</header>
-					<div className="settings-panel">
-						<div className="settings-row settings-row--field">
-							<label htmlFor="language-select" className="settings-label">
-								{t("Language")}
-							</label>
-							<select
-								id="language-select"
-								className="field settings-input"
-								value={settings.language}
-								onChange={(event) => {
-									const language = event.target.value;
-									if (isLanguage(language)) updateSettings({ language });
-								}}
-							>
-								{languageOptions.map((option) => (
-									<option key={option.code} value={option.code}>
-										{option.label}
-									</option>
-								))}
-							</select>
-						</div>
-					</div>
-				</section>
-				<section className="settings-section" aria-labelledby="plugins-heading">
-					<header className="settings-section-header">
-						<h2 id="plugins-heading">
-							<Package size={17} aria-hidden="true" /> {t("Pi plugins")}
-						</h2>
-						<p>{t("These plugins are supported only with GitHub Copilot through Pi.")}</p>
-					</header>
-					<PluginSettings />
-				</section>
-
-				<section className="settings-section" aria-labelledby="appearance-heading">
-					<header className="settings-section-header">
-						<h2 id="appearance-heading">
-							<Palette size={17} aria-hidden="true" /> {t("Appearance")}
-						</h2>
-						<p>{t("Choose a comfortable environment for your workspace.")}</p>
-					</header>
-					<fieldset className="settings-panel theme-settings">
-						<legend className="sr-only">{t("App theme")}</legend>
-						<div className="theme-options">
-							<label className={clsx(settings.theme === "light" && "is-selected")}>
-								<input
-									type="radio"
-									name="app-theme"
-									value="light"
-									checked={settings.theme === "light"}
-									onChange={() => updateSettings({ theme: "light" })}
-								/>
-								<Sun size={18} aria-hidden="true" />
-								<span>
-									<strong>{t("Light")}</strong>
-									<small>{t("Bright surfaces and dark text")}</small>
-								</span>
-							</label>
-							<label className={clsx(settings.theme === "dark" && "is-selected")}>
-								<input
-									type="radio"
-									name="app-theme"
-									value="dark"
-									checked={settings.theme === "dark"}
-									onChange={() => updateSettings({ theme: "dark" })}
-								/>
-								<Moon size={18} aria-hidden="true" />
-								<span>
-									<strong>{t("Dark")}</strong>
-									<small>{t("Dim surfaces for low-light use")}</small>
-								</span>
-							</label>
-						</div>
-						<p className="settings-help settings-theme-note">
-							{t("Interactive diagrams follow the app theme automatically.")}
-						</p>
-					</fieldset>
-				</section>
-
-				<section className="settings-section" aria-labelledby="provider-heading">
-					<header className="settings-section-header">
-						<h2 id="provider-heading">
-							<Cloud size={17} aria-hidden="true" /> {t("AI provider")}
-						</h2>
-						<p>{t("Manage your connection and the model used for new requests.")}</p>
-					</header>
-					<div className="settings-panel">
-						<div className="settings-row settings-row--field">
-							<div className="settings-row-copy">
-								<label htmlFor="provider-select" className="settings-label">
-									{t("Provider")}
-								</label>
-								<p id="provider-help" className="settings-help">
-									Used for new messages, titles, and knowledge extraction. Changing provider resets
-									the model to its default.
-								</p>
+		<div className="settings-page">
+			<div className="settings-layout">
+				<SettingsNavigation
+					query={settingsQuery}
+					selectedSection={selectedSection}
+					visibleCategories={visibleCategories}
+					onQueryChange={(query) => {
+						setSettingsQuery(query);
+						const firstMatch = settingsCategories.find((category) =>
+							matchesSettingsSearch(query, category.terms),
+						);
+						if (firstMatch) selectSection(firstMatch.id);
+					}}
+					onSelect={selectSection}
+				/>
+				<main className="settings-content" ref={contentRef}>
+					<div className="settings-sections">
+						{visibleCategories.length === 0 && (
+							<p className="settings-no-results" role="status">
+								No matching settings. Try a different search.
+							</p>
+						)}
+						<section
+							className="settings-section"
+							aria-labelledby="language-heading"
+							hidden={selectedSection !== "language-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="language-heading">{t("Language")}</h1>
+								<p>{t("Choose the language used throughout Rhyza.")}</p>
+							</header>
+							<div className="settings-panel">
+								<div className="settings-row settings-row--field">
+									<label htmlFor="language-select" className="settings-label">
+										{t("Language")}
+									</label>
+									<select
+										id="language-select"
+										className="field settings-input"
+										value={settings.language}
+										onChange={(event) => {
+											const language = event.target.value;
+											if (isLanguage(language)) updateSettings({ language });
+										}}
+									>
+										{languageOptions.map((option) => (
+											<option key={option.code} value={option.code}>
+												{option.label}
+											</option>
+										))}
+									</select>
+								</div>
 							</div>
-							<select
-								id="provider-select"
-								value={provider.id}
-								onChange={(event) =>
-									updateSettings({ provider: normalizeProviderId(event.target.value) })
-								}
-								aria-describedby="provider-help"
-								className="field settings-input"
-							>
-								{providers.map((item) => (
-									<option key={item.id} value={item.id}>
-										{item.label}
-									</option>
-								))}
-							</select>
-						</div>
-						<div className="settings-row settings-provider-connection" aria-busy={electron.loading}>
-							<div className="settings-row-copy">
-								<h3>{provider.label}</h3>
-								<p className="settings-help" role="status">
-									{electron.isElectron
-										? electron.loading
-											? "Checking connection…"
-											: electron.providerStatus?.configured
-												? provider.id === "azure-openai"
-													? "Azure CLI sign-in is ready. Deployment access is checked on your first request."
-													: (electron.providerStatus.label ??
-														`Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`)
-												: externalAuth
-													? provider.id === "azure-openai"
-														? "Save your resource details and sign in with Azure CLI, then check sign-in."
-														: "Local CLI sign-in is required. Follow the setup instructions below."
-													: "Not signed in. OAuth/device flow progress appears below."
-										: "Provider controls require the Electron desktop runtime."}
+						</section>
+						<section
+							className="settings-section"
+							aria-labelledby="plugins-heading"
+							hidden={selectedSection !== "plugins-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="plugins-heading">
+									<Package size={17} aria-hidden="true" /> {t("Pi plugins")}
+								</h1>
+								<p>{t("These plugins are supported only with GitHub Copilot through Pi.")}</p>
+							</header>
+							<PluginSettings />
+						</section>
+
+						<section
+							className="settings-section"
+							aria-labelledby="appearance-heading"
+							hidden={selectedSection !== "appearance-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="appearance-heading">
+									<Palette size={17} aria-hidden="true" /> {t("Appearance")}
+								</h1>
+								<p>{t("Choose a comfortable environment for your workspace.")}</p>
+							</header>
+							<fieldset className="settings-panel theme-settings">
+								<legend className="sr-only">{t("App theme")}</legend>
+								<div className="theme-options">
+									<label className={clsx(settings.theme === "light" && "is-selected")}>
+										<input
+											type="radio"
+											name="app-theme"
+											value="light"
+											checked={settings.theme === "light"}
+											onChange={() => updateSettings({ theme: "light" })}
+										/>
+										<Sun size={18} aria-hidden="true" />
+										<span>
+											<strong>{t("Light")}</strong>
+											<small>{t("Bright surfaces and dark text")}</small>
+										</span>
+									</label>
+									<label className={clsx(settings.theme === "dark" && "is-selected")}>
+										<input
+											type="radio"
+											name="app-theme"
+											value="dark"
+											checked={settings.theme === "dark"}
+											onChange={() => updateSettings({ theme: "dark" })}
+										/>
+										<Moon size={18} aria-hidden="true" />
+										<span>
+											<strong>{t("Dark")}</strong>
+											<small>{t("Dim surfaces for low-light use")}</small>
+										</span>
+									</label>
+								</div>
+								<p className="settings-help settings-theme-note">
+									{t("Interactive diagrams follow the app theme automatically.")}
 								</p>
-								{electron.error && (
-									<p role="alert" className="settings-error">
-										{electron.error}
-									</p>
+							</fieldset>
+						</section>
+
+						<section
+							className="settings-section"
+							aria-labelledby="provider-heading"
+							hidden={selectedSection !== "provider-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="provider-heading">
+									<Cloud size={17} aria-hidden="true" /> {t("AI provider")}
+								</h1>
+								<p>{t("Manage your connection and the model used for new requests.")}</p>
+							</header>
+							<div className="settings-panel">
+								<div className="settings-row settings-row--field">
+									<div className="settings-row-copy">
+										<label htmlFor="provider-select" className="settings-label">
+											{t("Provider")}
+										</label>
+										<p id="provider-help" className="settings-help">
+											Used for new messages, titles, and knowledge extraction. Changing provider
+											resets the model to its default.
+										</p>
+									</div>
+									<select
+										id="provider-select"
+										value={provider.id}
+										onChange={(event) =>
+											updateSettings({ provider: normalizeProviderId(event.target.value) })
+										}
+										aria-describedby="provider-help"
+										className="field settings-input"
+									>
+										{providers.map((item) => (
+											<option key={item.id} value={item.id}>
+												{item.label}
+											</option>
+										))}
+									</select>
+								</div>
+								<div
+									className="settings-row settings-provider-connection"
+									aria-busy={electron.loading}
+								>
+									<div className="settings-row-copy">
+										<h3>{provider.label}</h3>
+										<p className="settings-help" role="status">
+											{electron.isElectron
+												? electron.loading
+													? "Checking connection…"
+													: electron.providerStatus?.configured
+														? provider.id === "azure-openai"
+															? "Azure CLI sign-in is ready. Deployment access is checked on your first request."
+															: (electron.providerStatus.label ??
+																`Connected via ${electron.providerStatus.source ?? provider.runtimeLabel}.`)
+														: externalAuth
+															? provider.id === "azure-openai"
+																? "Save your resource details and sign in with Azure CLI, then check sign-in."
+																: "Local CLI sign-in is required. Follow the setup instructions below."
+															: "Not signed in. OAuth/device flow progress appears below."
+												: "Provider controls require the Electron desktop runtime."}
+										</p>
+										{electron.error && (
+											<p role="alert" className="settings-error">
+												{electron.error}
+											</p>
+										)}
+									</div>
+									<div className="settings-actions">
+										{!externalAuth && (
+											<button
+												type="button"
+												onClick={() =>
+													void (electron.providerStatus?.configured
+														? electron.logout()
+														: electron.login())
+												}
+												disabled={!electron.isElectron || electron.loading}
+												className="secondary-button"
+											>
+												{electron.action === "login"
+													? "Signing In…"
+													: electron.action === "logout"
+														? "Signing Out…"
+														: electron.providerStatus?.configured
+															? "Sign Out"
+															: "Sign In"}
+											</button>
+										)}
+										<button
+											type="button"
+											onClick={() => void electron.refresh()}
+											disabled={!electron.isElectron || electron.loading}
+											className="secondary-button"
+										>
+											{electron.loading && (
+												<LoaderCircle size={14} className="pi-plugin-spinner" aria-hidden="true" />
+											)}
+											{electron.action === "refresh"
+												? "Checking…"
+												: electron.providerStatus?.configured
+													? "Refresh status"
+													: provider.id === "azure-openai"
+														? "Check sign-in"
+														: "Check connection"}
+										</button>
+									</div>
+								</div>
+
+								{setupInstructions && (
+									<div className="settings-inset settings-setup-instructions">
+										<p>{setupInstructions}</p>
+										{externalAuth && (
+											<p>Sign-in and sign-out are managed by the local CLI, not Rhyza.</p>
+										)}
+									</div>
+								)}
+
+								{!externalAuth && electron.authEvents.length > 0 && (
+									<div role="status" className="settings-inset settings-auth-events">
+										{electron.authEvents.map((event, index) => (
+											<AuthEventItem key={`${event.type}-${index}`} event={event} />
+										))}
+									</div>
+								)}
+
+								{provider.id === "azure-openai" ? (
+									<AzureOpenAISettings
+										onSaved={electron.refresh}
+										connectionBusy={electron.loading}
+									/>
+								) : (
+									<div className="settings-row settings-row--field">
+										<div className="settings-row-copy">
+											<label htmlFor="model-select" className="settings-label">
+												{t("Default model")}
+											</label>
+											<p id="model-help" className="settings-help">
+												{t("Use the provider default or choose an available model.")}
+											</p>
+										</div>
+										<select
+											id="model-select"
+											value={selectedModel}
+											onChange={(e) => updateSettings({ defaultModel: e.target.value })}
+											aria-describedby="model-help"
+											className="field settings-input"
+										>
+											<option value="">{t("Use provider default")}</option>
+											{customModel && (
+												<option value={selectedModel}>{selectedModel} (custom)</option>
+											)}
+											{electron.models.map((model) => (
+												<option key={model.id} value={model.id}>
+													{model.name}
+												</option>
+											))}
+										</select>
+									</div>
+								)}
+								{provider.id === "claude-code" && (
+									<div className="settings-row settings-row--field">
+										<div className="settings-row-copy">
+											<label htmlFor="custom-model-id" className="settings-label">
+												Custom model ID or CLI alias
+											</label>
+											<p id="custom-model-help" className="settings-help">
+												{provider.label} may not publish a model catalog. The provider default works
+												without one; you can also enter a supported SDK/CLI model ID or alias.
+											</p>
+										</div>
+										<input
+											id="custom-model-id"
+											type="text"
+											value={selectedModel}
+											onChange={(event) => updateSettings({ defaultModel: event.target.value })}
+											placeholder={t("Leave blank for provider default")}
+											aria-describedby="custom-model-help"
+											className="field settings-input"
+										/>
+									</div>
 								)}
 							</div>
-							<div className="settings-actions">
-								{!externalAuth && (
+						</section>
+
+						<section
+							className="settings-section"
+							aria-labelledby="workspace-heading"
+							hidden={selectedSection !== "workspace-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="workspace-heading">
+									<Settings2 size={17} aria-hidden="true" /> {t("Workspace")}
+								</h1>
+								<p>{t("Set the working folder and how sessions use it.")}</p>
+							</header>
+							<div className="settings-panel">
+								<div className="settings-row settings-workspace-folder">
+									<div className="settings-row-copy">
+										<h3>{t("Workspace folder")}</h3>
+										<p className="settings-help settings-workspace-path">
+											{electron.isElectron
+												? (electron.workspace.path ?? t("No workspace selected."))
+												: t("Workspace selection requires the Electron desktop runtime.")}
+										</p>
+										{electron.workspaceError && (
+											<p role="alert" className="settings-error">
+												{electron.workspaceError}
+											</p>
+										)}
+									</div>
 									<button
 										type="button"
-										onClick={() =>
-											void (electron.providerStatus?.configured
-												? electron.logout()
-												: electron.login())
-										}
-										disabled={!electron.isElectron || electron.loading}
+										onClick={handleSelectWorkspace}
+										disabled={!electron.isElectron}
 										className="secondary-button"
 									>
-										{electron.action === "login"
-											? "Signing In…"
-											: electron.action === "logout"
-												? "Signing Out…"
-												: electron.providerStatus?.configured
-													? "Sign Out"
-													: "Sign In"}
+										{t("Choose Folder")}
 									</button>
-								)}
-								<button
-									type="button"
-									onClick={() => void electron.refresh()}
-									disabled={!electron.isElectron || electron.loading}
-									className="secondary-button"
-								>
-									{electron.loading && (
-										<LoaderCircle size={14} className="pi-plugin-spinner" aria-hidden="true" />
-									)}
-									{electron.action === "refresh"
-										? "Checking…"
-										: electron.providerStatus?.configured
-											? "Refresh status"
-											: provider.id === "azure-openai"
-												? "Check sign-in"
-												: "Check connection"}
-								</button>
-							</div>
-						</div>
-
-						{setupInstructions && (
-							<div className="settings-inset settings-setup-instructions">
-								<p>{setupInstructions}</p>
-								{externalAuth && (
-									<p>Sign-in and sign-out are managed by the local CLI, not Rhyza.</p>
-								)}
-							</div>
-						)}
-
-						{!externalAuth && electron.authEvents.length > 0 && (
-							<div role="status" className="settings-inset settings-auth-events">
-								{electron.authEvents.map((event, index) => (
-									<AuthEventItem key={`${event.type}-${index}`} event={event} />
-								))}
-							</div>
-						)}
-
-						{provider.id === "azure-openai" ? (
-							<AzureOpenAISettings onSaved={electron.refresh} connectionBusy={electron.loading} />
-						) : (
-							<div className="settings-row settings-row--field">
-								<div className="settings-row-copy">
-									<label htmlFor="model-select" className="settings-label">
-										{t("Default model")}
-									</label>
-									<p id="model-help" className="settings-help">
-										{t("Use the provider default or choose an available model.")}
-									</p>
 								</div>
-								<select
-									id="model-select"
-									value={selectedModel}
-									onChange={(e) => updateSettings({ defaultModel: e.target.value })}
-									aria-describedby="model-help"
-									className="field settings-input"
-								>
-									<option value="">{t("Use provider default")}</option>
-									{customModel && <option value={selectedModel}>{selectedModel} (custom)</option>}
-									{electron.models.map((model) => (
-										<option key={model.id} value={model.id}>
-											{model.name}
-										</option>
-									))}
-								</select>
-							</div>
-						)}
-						{provider.id === "claude-code" && (
-							<div className="settings-row settings-row--field">
-								<div className="settings-row-copy">
-									<label htmlFor="custom-model-id" className="settings-label">
-										Custom model ID or CLI alias
-									</label>
-									<p id="custom-model-help" className="settings-help">
-										{provider.label} may not publish a model catalog. The provider default works
-										without one; you can also enter a supported SDK/CLI model ID or alias.
-									</p>
+
+								<div className="settings-row">
+									<div className="settings-row-copy">
+										<h3 id="auto-extract-label">{t("Auto-extract knowledge")}</h3>
+										<p id="auto-extract-help" className="settings-help">
+											{t("Automatically propose ChangeSets after turns.")}
+										</p>
+									</div>
+									<button
+										type="button"
+										role="switch"
+										aria-checked={settings.autoExtract}
+										aria-labelledby="auto-extract-label"
+										aria-describedby="auto-extract-help"
+										onClick={() => updateSettings({ autoExtract: !settings.autoExtract })}
+										className="settings-switch"
+									>
+										<span className="settings-switch-track" aria-hidden="true" />
+									</button>
 								</div>
-								<input
-									id="custom-model-id"
-									type="text"
-									value={selectedModel}
-									onChange={(event) => updateSettings({ defaultModel: event.target.value })}
-									placeholder={t("Leave blank for provider default")}
-									aria-describedby="custom-model-help"
-									className="field settings-input"
-								/>
+
+								<div className="settings-row">
+									<div className="settings-row-copy">
+										<h3>{t("Worktree isolation")}</h3>
+										<p className="settings-help">
+											{t("Run writable sessions in separate Git worktrees.")}
+										</p>
+									</div>
+									<span className="settings-status">{t("Required for Git")}</span>
+								</div>
 							</div>
-						)}
+						</section>
+
+						<section
+							className="settings-section"
+							aria-labelledby="knowledge-heading"
+							hidden={selectedSection !== "knowledge-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="knowledge-heading">
+									<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
+								</h1>
+								<p>{t("Control knowledge updates and request behavior.")}</p>
+							</header>
+							<div className="settings-panel">
+								<div className="settings-row settings-row--field">
+									<label htmlFor="knowledge-mode" className="settings-label">
+										{t("Write mode")}
+									</label>
+									<select
+										id="knowledge-mode"
+										className="field settings-input"
+										value={settings.knowledgeMode}
+										onChange={(event) =>
+											updateSettings({
+												knowledgeMode: event.target.value as typeof settings.knowledgeMode,
+											})
+										}
+									>
+										<option value="suggest">{t("Suggest changes")}</option>
+										<option value="automatic">{t("Automatic")}</option>
+										<option value="hybrid">{t("Hybrid")}</option>
+										<option value="read_only">{t("Read only")}</option>
+									</select>
+								</div>
+								<div className="settings-row">
+									<div className="settings-row-copy">
+										<h3 id="knowledge-tools-label">{t("Knowledge tools in chat")}</h3>
+										<p id="knowledge-tools-help" className="settings-help">
+											{t(
+												"Let the main agent query the knowledge base when needed. The end-of-turn organizer always has access.",
+											)}
+										</p>
+									</div>
+									<button
+										type="button"
+										role="switch"
+										aria-checked={settings.knowledgeTools}
+										aria-labelledby="knowledge-tools-label"
+										aria-describedby="knowledge-tools-help"
+										onClick={() => updateSettings({ knowledgeTools: !settings.knowledgeTools })}
+										className="settings-switch"
+									>
+										<span className="settings-switch-track" aria-hidden="true" />
+									</button>
+								</div>
+								<div className="settings-row settings-row--field">
+									<label htmlFor="thinking-level" className="settings-label">
+										{t("Thinking level")}
+									</label>
+									<select
+										id="thinking-level"
+										className="field settings-input"
+										value={settings.thinkingLevel}
+										onChange={(event) =>
+											updateSettings({
+												thinkingLevel: event.target.value as typeof settings.thinkingLevel,
+											})
+										}
+									>
+										<option value="off">{t("Off")}</option>
+										<option value="low">{t("Low")}</option>
+										<option value="medium">{t("Medium")}</option>
+										<option value="high">{t("High")}</option>
+									</select>
+								</div>
+								<div className="settings-row settings-row--field">
+									<div className="settings-row-copy">
+										<label htmlFor="concurrent-questions" className="settings-label">
+											{t("Concurrent questions (1–10)")}
+										</label>
+										<p id="concurrent-questions-help" className="settings-help">
+											{t("Default: 5. Requests in the same conversation stay ordered.")}
+										</p>
+									</div>
+									<input
+										id="concurrent-questions"
+										className="field settings-input settings-input--number"
+										type="number"
+										min="1"
+										max="10"
+										aria-describedby="concurrent-questions-help"
+										value={settings.maxConcurrentRequests}
+										onChange={(event) =>
+											updateSettings({ maxConcurrentRequests: Number(event.target.value) })
+										}
+									/>
+								</div>
+								<div className="settings-row settings-row--field">
+									<label htmlFor="confidence-threshold" className="settings-label">
+										{t("Confidence threshold")}
+									</label>
+									<div className="settings-range-control">
+										<input
+											id="confidence-threshold"
+											type="range"
+											min="0"
+											max="1"
+											step="0.05"
+											value={settings.confidenceThreshold}
+											aria-valuetext={`${Math.round(settings.confidenceThreshold * 100)}%`}
+											onChange={(event) =>
+												updateSettings({ confidenceThreshold: Number(event.target.value) })
+											}
+										/>
+										<output htmlFor="confidence-threshold" aria-hidden="true">
+											{Math.round(settings.confidenceThreshold * 100)}%
+										</output>
+									</div>
+								</div>
+							</div>
+						</section>
+
+						<section
+							className="settings-section"
+							aria-labelledby="accessibility-heading"
+							hidden={selectedSection !== "accessibility-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="accessibility-heading">
+									<Accessibility size={17} aria-hidden="true" /> {t("Accessibility")}
+								</h1>
+								<p>{t("Adjust motion, contrast, and text size to suit you.")}</p>
+							</header>
+							<div className="settings-panel">
+								<div className="settings-row">
+									<div className="settings-row-copy">
+										<label htmlFor="reduce-motion" className="settings-label">
+											{t("Reduce motion")}
+										</label>
+										<p id="reduce-motion-help" className="settings-help">
+											{t("Limit animations and animated transitions.")}
+										</p>
+									</div>
+									<input
+										id="reduce-motion"
+										type="checkbox"
+										role="switch"
+										className="settings-switch-input"
+										aria-describedby="reduce-motion-help"
+										checked={settings.reduceMotion}
+										onChange={(event) => updateSettings({ reduceMotion: event.target.checked })}
+									/>
+								</div>
+								<div className="settings-row">
+									<div className="settings-row-copy">
+										<label htmlFor="high-contrast" className="settings-label">
+											{t("High contrast")}
+										</label>
+										<p id="high-contrast-help" className="settings-help">
+											{t("Increase contrast for text and interface borders.")}
+										</p>
+									</div>
+									<input
+										id="high-contrast"
+										type="checkbox"
+										role="switch"
+										className="settings-switch-input"
+										aria-describedby="high-contrast-help"
+										checked={settings.highContrast}
+										onChange={(event) => updateSettings({ highContrast: event.target.checked })}
+									/>
+								</div>
+								<div className="settings-row settings-row--field">
+									<label htmlFor="font-scale" className="settings-label">
+										{t("Font scale")}
+									</label>
+									<div className="settings-range-control">
+										<input
+											id="font-scale"
+											type="range"
+											min="0.85"
+											max="1.35"
+											step="0.05"
+											value={settings.fontScale}
+											aria-valuetext={`${Math.round(settings.fontScale * 100)}%`}
+											onChange={(event) =>
+												updateSettings({ fontScale: Number(event.target.value) })
+											}
+										/>
+										<output htmlFor="font-scale" aria-hidden="true">
+											{Math.round(settings.fontScale * 100)}%
+										</output>
+									</div>
+								</div>
+							</div>
+						</section>
 					</div>
-				</section>
-
-				<section className="settings-section" aria-labelledby="workspace-heading">
-					<header className="settings-section-header">
-						<h2 id="workspace-heading">
-							<Settings2 size={17} aria-hidden="true" /> {t("Workspace")}
-						</h2>
-						<p>{t("Set the working folder and how sessions use it.")}</p>
-					</header>
-					<div className="settings-panel">
-						<div className="settings-row settings-workspace-folder">
-							<div className="settings-row-copy">
-								<h3>{t("Workspace folder")}</h3>
-								<p className="settings-help settings-workspace-path">
-									{electron.isElectron
-										? (electron.workspace.path ?? t("No workspace selected."))
-										: t("Workspace selection requires the Electron desktop runtime.")}
-								</p>
-								{electron.workspaceError && (
-									<p role="alert" className="settings-error">
-										{electron.workspaceError}
-									</p>
-								)}
-							</div>
-							<button
-								type="button"
-								onClick={handleSelectWorkspace}
-								disabled={!electron.isElectron}
-								className="secondary-button"
-							>
-								{t("Choose Folder")}
-							</button>
-						</div>
-
-						<div className="settings-row">
-							<div className="settings-row-copy">
-								<h3 id="auto-extract-label">{t("Auto-extract knowledge")}</h3>
-								<p id="auto-extract-help" className="settings-help">
-									{t("Automatically propose ChangeSets after turns.")}
-								</p>
-							</div>
-							<button
-								type="button"
-								role="switch"
-								aria-checked={settings.autoExtract}
-								aria-labelledby="auto-extract-label"
-								aria-describedby="auto-extract-help"
-								onClick={() => updateSettings({ autoExtract: !settings.autoExtract })}
-								className="settings-switch"
-							>
-								<span className="settings-switch-track" aria-hidden="true" />
-							</button>
-						</div>
-
-						<div className="settings-row">
-							<div className="settings-row-copy">
-								<h3>{t("Worktree isolation")}</h3>
-								<p className="settings-help">
-									{t("Run writable sessions in separate Git worktrees.")}
-								</p>
-							</div>
-							<span className="settings-status">{t("Required for Git")}</span>
-						</div>
-					</div>
-				</section>
-
-				<section className="settings-section" aria-labelledby="knowledge-heading">
-					<header className="settings-section-header">
-						<h2 id="knowledge-heading">
-							<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
-						</h2>
-						<p>{t("Control knowledge updates and request behavior.")}</p>
-					</header>
-					<div className="settings-panel">
-						<div className="settings-row settings-row--field">
-							<label htmlFor="knowledge-mode" className="settings-label">
-								{t("Write mode")}
-							</label>
-							<select
-								id="knowledge-mode"
-								className="field settings-input"
-								value={settings.knowledgeMode}
-								onChange={(event) =>
-									updateSettings({
-										knowledgeMode: event.target.value as typeof settings.knowledgeMode,
-									})
-								}
-							>
-								<option value="suggest">{t("Suggest changes")}</option>
-								<option value="automatic">{t("Automatic")}</option>
-								<option value="hybrid">{t("Hybrid")}</option>
-								<option value="read_only">{t("Read only")}</option>
-							</select>
-						</div>
-						<div className="settings-row">
-							<div className="settings-row-copy">
-								<h3 id="knowledge-tools-label">{t("Knowledge tools in chat")}</h3>
-								<p id="knowledge-tools-help" className="settings-help">
-									{t(
-										"Let the main agent query the knowledge base when needed. The end-of-turn organizer always has access.",
-									)}
-								</p>
-							</div>
-							<button
-								type="button"
-								role="switch"
-								aria-checked={settings.knowledgeTools}
-								aria-labelledby="knowledge-tools-label"
-								aria-describedby="knowledge-tools-help"
-								onClick={() => updateSettings({ knowledgeTools: !settings.knowledgeTools })}
-								className="settings-switch"
-							>
-								<span className="settings-switch-track" aria-hidden="true" />
-							</button>
-						</div>
-						<div className="settings-row settings-row--field">
-							<label htmlFor="thinking-level" className="settings-label">
-								{t("Thinking level")}
-							</label>
-							<select
-								id="thinking-level"
-								className="field settings-input"
-								value={settings.thinkingLevel}
-								onChange={(event) =>
-									updateSettings({
-										thinkingLevel: event.target.value as typeof settings.thinkingLevel,
-									})
-								}
-							>
-								<option value="off">{t("Off")}</option>
-								<option value="low">{t("Low")}</option>
-								<option value="medium">{t("Medium")}</option>
-								<option value="high">{t("High")}</option>
-							</select>
-						</div>
-						<div className="settings-row settings-row--field">
-							<div className="settings-row-copy">
-								<label htmlFor="concurrent-questions" className="settings-label">
-									{t("Concurrent questions (1–10)")}
-								</label>
-								<p id="concurrent-questions-help" className="settings-help">
-									{t("Default: 5. Requests in the same conversation stay ordered.")}
-								</p>
-							</div>
-							<input
-								id="concurrent-questions"
-								className="field settings-input settings-input--number"
-								type="number"
-								min="1"
-								max="10"
-								aria-describedby="concurrent-questions-help"
-								value={settings.maxConcurrentRequests}
-								onChange={(event) =>
-									updateSettings({ maxConcurrentRequests: Number(event.target.value) })
-								}
-							/>
-						</div>
-						<div className="settings-row settings-row--field">
-							<label htmlFor="confidence-threshold" className="settings-label">
-								{t("Confidence threshold")}
-							</label>
-							<div className="settings-range-control">
-								<input
-									id="confidence-threshold"
-									type="range"
-									min="0"
-									max="1"
-									step="0.05"
-									value={settings.confidenceThreshold}
-									aria-valuetext={`${Math.round(settings.confidenceThreshold * 100)}%`}
-									onChange={(event) =>
-										updateSettings({ confidenceThreshold: Number(event.target.value) })
-									}
-								/>
-								<output htmlFor="confidence-threshold" aria-hidden="true">
-									{Math.round(settings.confidenceThreshold * 100)}%
-								</output>
-							</div>
-						</div>
-					</div>
-				</section>
-
-				<section className="settings-section" aria-labelledby="accessibility-heading">
-					<header className="settings-section-header">
-						<h2 id="accessibility-heading">
-							<Accessibility size={17} aria-hidden="true" /> {t("Accessibility")}
-						</h2>
-						<p>{t("Adjust motion, contrast, and text size to suit you.")}</p>
-					</header>
-					<div className="settings-panel">
-						<div className="settings-row">
-							<div className="settings-row-copy">
-								<label htmlFor="reduce-motion" className="settings-label">
-									{t("Reduce motion")}
-								</label>
-								<p id="reduce-motion-help" className="settings-help">
-									{t("Limit animations and animated transitions.")}
-								</p>
-							</div>
-							<input
-								id="reduce-motion"
-								type="checkbox"
-								role="switch"
-								className="settings-switch-input"
-								aria-describedby="reduce-motion-help"
-								checked={settings.reduceMotion}
-								onChange={(event) => updateSettings({ reduceMotion: event.target.checked })}
-							/>
-						</div>
-						<div className="settings-row">
-							<div className="settings-row-copy">
-								<label htmlFor="high-contrast" className="settings-label">
-									{t("High contrast")}
-								</label>
-								<p id="high-contrast-help" className="settings-help">
-									{t("Increase contrast for text and interface borders.")}
-								</p>
-							</div>
-							<input
-								id="high-contrast"
-								type="checkbox"
-								role="switch"
-								className="settings-switch-input"
-								aria-describedby="high-contrast-help"
-								checked={settings.highContrast}
-								onChange={(event) => updateSettings({ highContrast: event.target.checked })}
-							/>
-						</div>
-						<div className="settings-row settings-row--field">
-							<label htmlFor="font-scale" className="settings-label">
-								{t("Font scale")}
-							</label>
-							<div className="settings-range-control">
-								<input
-									id="font-scale"
-									type="range"
-									min="0.85"
-									max="1.35"
-									step="0.05"
-									value={settings.fontScale}
-									aria-valuetext={`${Math.round(settings.fontScale * 100)}%`}
-									onChange={(event) => updateSettings({ fontScale: Number(event.target.value) })}
-								/>
-								<output htmlFor="font-scale" aria-hidden="true">
-									{Math.round(settings.fontScale * 100)}%
-								</output>
-							</div>
-						</div>
-					</div>
-				</section>
+				</main>
 			</div>
 		</div>
 	);

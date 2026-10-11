@@ -275,7 +275,7 @@ export function SessionGraph({
 	};
 
 	return (
-		<section className="session-graph-page" aria-label="Conversation graph">
+		<section className="session-graph-page" aria-label="对话关系图">
 			<header className="session-graph-toolbar">
 				<div className="session-graph-heading">
 					<div>
@@ -302,8 +302,8 @@ export function SessionGraph({
 						type="button"
 						className="secondary-button"
 						onClick={createSession}
-						title="New chat"
-						aria-label="New chat"
+						title="新建对话"
+						aria-label="新建对话"
 					>
 						<Plus size={16} />
 					</button>
@@ -351,7 +351,7 @@ export function SessionGraph({
 					</ReactFlow>
 				) : leafStatuses.length > 0 ? (
 					<div className="session-filter-empty" role="status">
-						<p>No leaves match these statuses.</p>
+						<p>没有符合这些状态的末端节点。</p>
 						<button type="button" className="secondary-button" onClick={onClearFilter}>
 							Clear filter
 						</button>
@@ -359,8 +359,8 @@ export function SessionGraph({
 				) : (
 					<div className="session-graph-empty">
 						<GitBranch size={38} />
-						<strong>No conversations yet</strong>
-						<span>Create a chat to start growing your graph.</span>
+						<strong>还没有对话</strong>
+						<span>新建对话，开始构建你的思路网络。</span>
 						<button type="button" className="command-button" onClick={createSession}>
 							<Plus size={15} /> New chat
 						</button>
@@ -368,7 +368,7 @@ export function SessionGraph({
 				)}
 			</div>
 			<footer className="session-graph-footer">
-				<span>Drag to pan · scroll to zoom · click a node to chat</span>
+				<span>拖动平移 · 滚动缩放 · 点击节点开始对话</span>
 			</footer>
 		</section>
 	);
@@ -593,7 +593,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 						onBlur={leavePreview}
 						onPointerDown={(event) => event.stopPropagation()}
 					>
-						<header>Conversation preview</header>
+						<header>对话预览</header>
 						<RoundPreviewContent round={data.round} />
 					</div>,
 					document.body,

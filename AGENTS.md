@@ -1,5 +1,11 @@
 # Rhyza agent instructions
 
+## Documentation ownership
+
+- Start with [docs/README.md](docs/README.md) for the eight core documentation roles. Keep this file focused on agent/contributor rules, not product descriptions or dynamic task progress.
+- Put product/visual rules in `docs/DESIGN.md`, verified pending work in `docs/TODO.md`, system boundaries in `docs/architecture.md`, development commands in `docs/development.md`, and component contracts in `docs/component-api.md`. Preserve detailed topic documents rather than copying them into every overview.
+- Generate architecture diagrams from `docs/diagrams/*.architecture.json` with the local `extensions/pi-archify/skills/archify/bin/archify.mjs` CLI; do not hand-edit generated HTML.
+
 ## Code formatting
 
 - Keep source code readable. Do not compress function bodies, event handlers, JSX, or CSS rules onto one line to save space. Use normal multiline blocks for functions containing statements; concise expression callbacks are fine when the formatter keeps them readable.

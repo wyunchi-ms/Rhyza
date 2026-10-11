@@ -172,14 +172,14 @@ function TodoChecklistPanel({
 				<div className="workspace-todo-actions">
 					<button
 						type="button"
-						title="Refresh TODOs"
-						aria-label="Refresh workspace TODOs"
+						title="刷新待办事项"
+						aria-label="刷新工作区待办事项"
 						disabled={loading}
 						onClick={onRefresh}
 					>
 						<RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
 					</button>
-					<button type="button" title="Close" aria-label="Close workspace TODOs" onClick={onClose}>
+					<button type="button" title="关闭" aria-label="关闭工作区待办事项" onClick={onClose}>
 						<X size={16} />
 					</button>
 				</div>
@@ -206,14 +206,12 @@ function TodoChecklistPanel({
 						<span>{error}</span>
 					</div>
 				)}
-				{loading && !todos && (
-					<div className="workspace-todo-empty">Loading workspace checklists…</div>
-				)}
+				{loading && !todos && <div className="workspace-todo-empty">正在加载工作区清单…</div>}
 				{!loading && !error && todos?.files.length === 0 && (
 					<div className="workspace-todo-empty">
 						<ListChecks size={28} />
-						<strong>No TODO checklist found</strong>
-						<span>Create a TODO.md with Markdown checkboxes to track agent progress here.</span>
+						<strong>未找到待办清单</strong>
+						<span>创建包含 Markdown 复选框的 TODO.md，即可在此跟踪 Agent 进度。</span>
 					</div>
 				)}
 				{todos?.files.map((file) => (
@@ -246,7 +244,7 @@ function TodoTree({ nodes, level = 1 }: { nodes: WorkspaceTodoNode[]; level?: nu
 							<Circle size={16} aria-hidden="true" />
 						)}
 						<span>{node.text}</span>
-						<small className="workspace-todo-status">{node.completed ? "Done" : "Open"}</small>
+						<small className="workspace-todo-status">{node.completed ? "已完成" : "未完成"}</small>
 						<small className="workspace-todo-line">L{node.line}</small>
 					</div>
 					{node.children.length > 0 && <TodoTree nodes={node.children} level={level + 1} />}

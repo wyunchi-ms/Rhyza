@@ -117,7 +117,7 @@ export function ConversationFind({
 	if (!open) return null;
 	const position = matches.length ? activeIndex + 1 : 0;
 	return (
-		<div className="conversation-find" role="search" aria-label="Find in conversation">
+		<div className="conversation-find" role="search" aria-label="在对话中查找">
 			<Search size={15} aria-hidden="true" />
 			<input
 				ref={inputRef}
@@ -136,8 +136,8 @@ export function ConversationFind({
 						move(event.shiftKey ? -1 : 1);
 					}
 				}}
-				placeholder="Find in conversation"
-				aria-label="Find in conversation"
+				placeholder="在对话中查找"
+				aria-label="在对话中查找"
 			/>
 			<span className="conversation-find-count" aria-live="polite">
 				{position}/{matches.length}
@@ -146,8 +146,8 @@ export function ConversationFind({
 				type="button"
 				onClick={() => move(-1)}
 				disabled={!matches.length}
-				title="Previous match (Shift+Enter)"
-				aria-label="Previous match"
+				title="上一个匹配项（Shift+Enter）"
+				aria-label="上一个匹配项"
 			>
 				<ChevronUp size={16} />
 			</button>
@@ -155,12 +155,12 @@ export function ConversationFind({
 				type="button"
 				onClick={() => move(1)}
 				disabled={!matches.length}
-				title="Next match (Enter)"
-				aria-label="Next match"
+				title="下一个匹配项（Enter）"
+				aria-label="下一个匹配项"
 			>
 				<ChevronDown size={16} />
 			</button>
-			<button type="button" onClick={close} title="Close find" aria-label="Close find">
+			<button type="button" onClick={close} title="关闭查找" aria-label="关闭查找">
 				<X size={16} />
 			</button>
 		</div>

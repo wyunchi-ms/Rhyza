@@ -670,6 +670,62 @@ html[data-theme] .sources-page .sources-search {
 	margin-bottom: 1.5rem;
 }
 
+html[data-theme] .sources-page .sources-workspace-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.25rem;
+	margin-bottom: 1rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 9px;
+	background: var(--color-surface);
+	padding: 1rem 1.25rem;
+}
+
+html[data-theme] .sources-page .sources-workspace-copy {
+	min-width: 0;
+}
+
+html[data-theme] .sources-page .sources-workspace-copy h2 {
+	color: var(--color-primary);
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+html[data-theme] .sources-page .sources-workspace-copy > p {
+	margin-top: 0.25rem;
+	color: var(--color-secondary);
+	font-size: 0.75rem;
+	line-height: 1.5;
+}
+
+html[data-theme] .sources-page .sources-workspace-copy .sources-workspace-path {
+	margin-top: 0.5rem;
+	color: var(--color-primary);
+	font-family: var(--font-mono, monospace);
+	overflow-wrap: anywhere;
+}
+
+html[data-theme] .sources-page .sources-workspace-copy .sources-workspace-error {
+	color: var(--color-primary);
+}
+
+html[data-theme] .sources-page .sources-workspace-card > button {
+	flex-shrink: 0;
+}
+
+@media (max-width: 40rem) {
+	html[data-theme] .sources-page .sources-workspace-card {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	html[data-theme] .sources-page .sources-workspace-card > button {
+		align-self: flex-start;
+	}
+}
+
 html[data-theme] .sources-page .sources-search-field {
 	position: relative;
 	display: flex;

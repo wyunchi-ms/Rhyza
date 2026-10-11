@@ -1,13 +1,159 @@
 html[data-theme] .settings-page {
 	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
 	background: var(--color-bg);
 	color: var(--color-primary);
 	font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
 	container: settings / inline-size;
 }
 
+.settings-page .settings-layout {
+	display: grid;
+	grid-template-columns: 15rem minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+}
+
+.settings-page .settings-navigation {
+	min-width: 0;
+	overflow-y: auto;
+	border-right: 1px solid var(--ui-border);
+	background: var(--ui-surface-muted);
+	padding: 1.25rem 0.75rem;
+}
+
+.settings-page .settings-back {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-bottom: 1.6rem;
+	border-radius: 0.5rem;
+	padding: 0.55rem 0.7rem;
+	color: var(--color-secondary);
+	font-size: 0.8rem;
+	text-decoration: none;
+}
+
+.settings-page .settings-back:hover {
+	background: var(--ui-hover);
+	color: var(--color-primary);
+}
+
+.settings-page .settings-back:focus-visible {
+	outline: 2px solid var(--ui-brand-accent);
+	outline-offset: 2px;
+}
+
+.settings-page .settings-navigation-heading {
+	margin: 0 0 0.85rem;
+	color: var(--color-primary);
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+html[data-theme] .settings-page .settings-search {
+	display: flex;
+	min-height: 2.4rem;
+	align-items: center;
+	gap: 0.55rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.55rem;
+	background: var(--ui-surface-muted);
+	padding-inline: 0.65rem;
+	color: var(--color-secondary);
+}
+
+.settings-page .settings-search:focus-within {
+	border-color: var(--ui-brand-accent);
+	box-shadow: 0 0 0 3px var(--ui-brand-soft);
+}
+
+.settings-page .settings-search input {
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--color-primary);
+	font: inherit;
+	font-size: 0.75rem;
+}
+
+.settings-page .settings-search input::placeholder {
+	color: var(--color-secondary);
+}
+
+.settings-page .settings-navigation nav {
+	display: grid;
+	gap: 0.2rem;
+	margin-top: 0.9rem;
+}
+
+html[data-theme] .settings-page .settings-navigation nav button {
+	display: block;
+	width: 100%;
+	border: 0;
+	border-radius: 0.5rem;
+	padding: 0.55rem 0.7rem;
+	background: transparent;
+	color: var(--color-secondary);
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 0.78rem;
+	font-weight: 500;
+	text-align: left;
+	transition:
+		background-color 160ms ease,
+		color 160ms ease,
+		transform 160ms ease;
+}
+
+html[data-theme] .settings-page .settings-navigation nav button:hover {
+	background: var(--ui-hover);
+	color: var(--color-primary);
+}
+
+html[data-theme] .settings-page .settings-navigation nav button:active {
+	transform: translateY(1px);
+}
+
+html[data-theme] .settings-page .settings-navigation nav button.is-active {
+	background: var(--ui-hover);
+	color: var(--color-primary);
+	font-weight: 600;
+	box-shadow: inset 2px 0 0 var(--ui-brand-accent);
+}
+
+.settings-page .settings-navigation nav button:focus-visible {
+	outline: 2px solid var(--ui-brand-accent);
+	outline-offset: 2px;
+}
+
+.settings-page .settings-navigation-empty,
+.settings-page .settings-no-results {
+	color: var(--color-secondary);
+	font-size: 0.78rem;
+	line-height: 1.6;
+}
+
+.settings-page .settings-no-results {
+	padding: 1.25rem 0;
+}
+
+.settings-page .settings-content {
+	min-width: 0;
+	overflow-y: auto;
+	padding: 2.5rem max(1.5rem, calc((100% - 48rem) / 2)) 4rem;
+}
+
 .settings-page .settings-sections {
-	gap: 2.25rem;
+	display: flex;
+	flex-direction: column;
+	gap: 2.35rem;
 }
 
 .settings-page .settings-section {
@@ -15,10 +161,10 @@ html[data-theme] .settings-page {
 }
 
 .settings-page .settings-section-header {
-	margin-bottom: 0.85rem;
+	margin-bottom: 0.7rem;
 }
 
-html[data-theme] .settings-page .settings-section-header h2 {
+html[data-theme] .settings-page .settings-section-header h1 {
 	display: flex;
 	align-items: center;
 	gap: 0.55rem;
@@ -30,7 +176,7 @@ html[data-theme] .settings-page .settings-section-header h2 {
 	line-height: 1.5;
 }
 
-.settings-page .settings-section-header h2 svg {
+.settings-page .settings-section-header h1 svg {
 	flex: 0 0 auto;
 	color: var(--color-secondary);
 	stroke-width: 1.7;
@@ -555,6 +701,53 @@ html.high-contrast .settings-page .settings-section-header p {
 	color: var(--color-primary);
 }
 
+@container settings (max-width: 38rem) {
+	.settings-page .settings-layout {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+
+	.settings-page .settings-navigation {
+		border-bottom: 1px solid var(--ui-border);
+		border-right: 0;
+		padding: 0.6rem 1rem;
+	}
+
+	.settings-page .settings-back {
+		margin-bottom: 0.3rem;
+	}
+
+	.settings-page .settings-navigation-heading {
+		display: none;
+	}
+
+	.settings-page .settings-navigation nav {
+		display: flex;
+		gap: 0.25rem;
+		margin-top: 0.55rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.settings-page .settings-navigation nav::-webkit-scrollbar {
+		display: none;
+	}
+
+	.settings-page .settings-content {
+		padding: 1.5rem 1rem 3rem;
+	}
+
+	html[data-theme] .settings-page .settings-navigation nav button {
+		flex: 0 0 auto;
+		width: auto;
+		white-space: nowrap;
+	}
+
+	html[data-theme] .settings-page .settings-navigation nav button.is-active {
+		box-shadow: inset 0 -2px 0 var(--ui-brand-accent);
+	}
+}
+
 @container settings (max-width: 36rem) {
 	.settings-page .settings-row--field {
 		grid-template-columns: minmax(0, 1fr);
@@ -611,6 +804,12 @@ html.high-contrast .settings-page .settings-section-header p {
 	.settings-page *::after {
 		animation: none !important;
 		transition: none !important;
+	}
+}
+
+@media (forced-colors: active) {
+	.settings-page .settings-navigation nav button.is-active {
+		outline: 1px solid Highlight;
 	}
 }
 
