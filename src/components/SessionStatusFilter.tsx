@@ -60,14 +60,12 @@ export function SessionStatusFilter({
 					"sidebar-icon-button session-filter-trigger",
 					statuses.length > 0 && "is-active",
 				)}
-				aria-label="Filter by leaf status"
+				aria-label="按末端节点状态筛选"
 				aria-haspopup="menu"
 				aria-expanded={open}
 				aria-controls={open ? menuId : undefined}
 				title={
-					statuses.length
-						? `Leaf status filter: ${statuses.length} selected`
-						: "Filter by leaf status"
+					statuses.length ? `末端节点状态筛选：已选 ${statuses.length} 项` : "按末端节点状态筛选"
 				}
 				onClick={() => setOpen((value) => !value)}
 			>
@@ -80,7 +78,7 @@ export function SessionStatusFilter({
 						ref={menuRef}
 						id={menuId}
 						role="menu"
-						aria-label="Filter by leaf status"
+						aria-label="按末端节点状态筛选"
 						className="session-status-menu session-filter-menu"
 						style={position}
 						onKeyDown={(event) => {
@@ -110,8 +108,8 @@ export function SessionStatusFilter({
 							}
 						}}
 					>
-						<div className="session-status-menu-title">Leaf status</div>
-						<p className="session-filter-hint">Show matching leaves and their paths.</p>
+						<div className="session-status-menu-title">末端节点状态</div>
+						<p className="session-filter-hint">显示符合条件的末端节点及其路径。</p>
 						<button
 							type="button"
 							role="menuitemcheckbox"
@@ -120,7 +118,7 @@ export function SessionStatusFilter({
 							onClick={() => onChange([])}
 						>
 							<ListFilter size={16} className="session-status-option-icon" />
-							<span className="session-filter-label">All statuses</span>
+							<span className="session-filter-label">所有状态</span>
 							{statuses.length === 0 && <Check size={14} />}
 						</button>
 						<div role="separator" className="session-menu-divider" />

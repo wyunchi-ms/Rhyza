@@ -3,8 +3,18 @@ import { Archive, FileCode, FolderGit2, Plus, RefreshCw, Search, X } from "lucid
 import { useEffect, useRef, useState } from "react";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import type { SourceSearchHit } from "../shared/ipc";
-import { useAppStore } from "../store";
+import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
+import { errorToMessage } from "../shared/value";
 import { useTranslation } from "../i18n";
+
+const sourceStatusLabels: Record<string, string> = {
+	indexed: "已索引",
+	scanning: "索引中",
+	error: "错误",
+	archived: "已归档",
+	pending: "待处理",
+	stale: "已过期",
+};
 
 const Sources = () => {
 	const { t } = useTranslation();
@@ -19,6 +29,9 @@ const Sources = () => {
 	const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
 	const [searchError, setSearchError] = useState<string | null>(null);
 	const [archivingIds, setArchivingIds] = useState<string[]>([]);
+	const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+	const [workspaceBusy, setWorkspaceBusy] = useState(false);
+	const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 	const searchRequest = useRef(0);
 	const activeSources = sources.filter((source) => source.status !== "archived");
 	const indexedCount = activeSources.filter((source) => source.status === "indexed").length;
@@ -35,12 +48,60 @@ const Sources = () => {
 			setLoading(false);
 			return;
 		}
+		let cancelled = false;
+		setLoading(true);
 		void bridge
 			.sourceList()
-			.then(upsertSources)
-			.catch((reason) => setError(String(reason)))
-			.finally(() => setLoading(false));
-	}, [upsertSources]);
+			.then((items) => {
+				if (!cancelled) upsertSources(items);
+			})
+			.catch((reason) => {
+				if (!cancelled) setError(String(reason));
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [upsertSources, workspacePath]);
+
+	useEffect(() => {
+		const bridge = getRhyzaBridge();
+		if (!bridge) return;
+		let cancelled = false;
+		void bridge.getWorkspace().then(
+			(workspace) => {
+				if (!cancelled) setWorkspacePath(workspace.path);
+			},
+			(reason: unknown) => {
+				if (!cancelled) setWorkspaceError(errorToMessage(reason));
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const selectWorkspace = async () => {
+		const bridge = getRhyzaBridge();
+		if (!bridge?.isElectron) {
+			setWorkspaceError("选择工作区需要在 Electron 桌面应用中进行。");
+			return;
+		}
+		setWorkspaceBusy(true);
+		setWorkspaceError(null);
+		try {
+			const workspace = await bridge.selectWorkspace();
+			setWorkspacePath(workspace.path);
+			setWorkspacePersistencePath(workspace.path);
+			loadWorkspaceState(bridge.appStateLoad());
+		} catch (reason) {
+			setWorkspaceError(errorToMessage(reason));
+		} finally {
+			setWorkspaceBusy(false);
+		}
+	};
 
 	const addSources = async () => {
 		const bridge = getRhyzaBridge();
@@ -145,6 +206,28 @@ const Sources = () => {
 					{busy ? t("Adding sources…") : t("Add sources")}
 				</button>
 			</header>
+			<section className="sources-workspace-card" aria-labelledby="sources-workspace-heading">
+				<div className="sources-workspace-copy">
+					<h2 id="sources-workspace-heading">当前工作区</h2>
+					<p>对话使用的工作目录。资料来源需另行添加并索引。</p>
+					<p className="sources-workspace-path" title={workspacePath ?? undefined}>
+						{workspacePath ?? "尚未选择工作区"}
+					</p>
+					{workspaceError && (
+						<p className="sources-workspace-error" role="alert">
+							{workspaceError}
+						</p>
+					)}
+				</div>
+				<button
+					type="button"
+					className="secondary-button"
+					disabled={!getRhyzaBridge()?.isElectron || workspaceBusy}
+					onClick={() => void selectWorkspace()}
+				>
+					{workspaceBusy ? "正在选择…" : workspacePath ? "更改工作区" : "选择工作区"}
+				</button>
+			</section>
 			<form
 				className="sources-search"
 				role="search"
@@ -204,8 +287,8 @@ const Sources = () => {
 							<h2 id="sources-results-title">{t("Search results")}</h2>
 							<span role="status">
 								{searching
-									? "Searching…"
-									: `${hits.length === 50 ? "First " : ""}${hits.length} ${hits.length === 1 ? "match" : "matches"}`}
+									? "正在搜索…"
+									: `${hits.length === 50 ? "前 " : "共 "}${hits.length} 条匹配结果`}
 							</span>
 						</div>
 						{searchedQuery !== null && hits.length === 0 && (
@@ -271,11 +354,7 @@ const Sources = () => {
 											{source.revision && (
 												<span title={source.revision}>{source.revision.slice(0, 10)}</span>
 											)}
-											{staleRefs > 0 && (
-												<span>
-													{staleRefs} stale {staleRefs === 1 ? "reference" : "references"}
-												</span>
-											)}
+											{staleRefs > 0 && <span>{staleRefs} 个来源引用已过期</span>}
 										</p>
 										{source.error && (
 											<p className="source-error" role="alert">
@@ -293,13 +372,13 @@ const Sources = () => {
 													: "status-progress",
 										)}
 									>
-										{source.status}
+										{sourceStatusLabels[source.status] ?? source.status}
 									</span>
 									<div className="source-actions">
 										<button
 											type="button"
-											title="Reindex"
-											aria-label={`Reindex ${source.name}`}
+											title="重新索引"
+											aria-label={`重新索引：${source.name}`}
 											disabled={source.status === "scanning" || archivingIds.includes(source.id)}
 											onClick={() => void refresh(source.id)}
 											className="icon-button"
@@ -311,8 +390,8 @@ const Sources = () => {
 										</button>
 										<button
 											type="button"
-											title="Archive source"
-											aria-label={`Archive source ${source.name}`}
+											title="归档资料来源"
+											aria-label={`归档资料来源：${source.name}`}
 											disabled={archivingIds.includes(source.id)}
 											onClick={() => void archive(source.id)}
 											className="icon-button"

@@ -348,7 +348,7 @@ const SessionGroup = ({
 					}
 				}}
 				onBlur={finishRename}
-				aria-label="Session title"
+				aria-label="对话标题"
 			/>
 		);
 
@@ -427,21 +427,21 @@ const SessionGroup = ({
 								<LoaderCircle
 									size={12}
 									className="animate-spin"
-									aria-label={running ? "Running" : "Generating title"}
+									aria-label={running ? "运行中" : "正在生成标题"}
 								/>
 							)}
 							{!isBranchPoint && status === "interrupted" && (
 								<AlertCircle
 									size={12}
 									className="text-amber-600"
-									aria-label="Interrupted; this session can be continued"
+									aria-label="已中断；可以继续此对话"
 								/>
 							)}
 							{!isBranchPoint && status === "warning" && (
-								<AlertCircle size={12} className="text-amber-500" aria-label="Warning" />
+								<AlertCircle size={12} className="text-amber-500" aria-label="警告" />
 							)}
 							{!isBranchPoint && status === "error" && (
-								<AlertCircle size={12} className="text-red-500" aria-label="Error" />
+								<AlertCircle size={12} className="text-red-500" aria-label="错误" />
 							)}
 						</button>
 					</div>
@@ -454,8 +454,8 @@ const SessionGroup = ({
 						{isBranchPoint && (
 							<button
 								type="button"
-								title="Regenerate branch titles"
-								aria-label={`Regenerate titles under ${node.title}`}
+								title="重新生成分支标题"
+								aria-label={`重新生成“${node.title}”下的标题`}
 								className="p-1 rounded hover:bg-black/10"
 								onClick={(event) => {
 									event.stopPropagation();
@@ -467,8 +467,8 @@ const SessionGroup = ({
 						)}
 						<button
 							type="button"
-							title="Rename session"
-							aria-label={`Rename ${node.title}`}
+							title="重命名对话"
+							aria-label={`重命名“${node.title}”`}
 							className="p-1 rounded hover:bg-black/10"
 							onClick={(event) => {
 								event.stopPropagation();
@@ -479,13 +479,13 @@ const SessionGroup = ({
 						</button>
 						<button
 							type="button"
-							title="Delete session"
-							aria-label={`Delete session ${session?.title ?? node.title}`}
+							title="删除对话"
+							aria-label={`删除对话“${session?.title ?? node.title}”`}
 							className="p-1 rounded hover:bg-red-500/20 hover:text-red-600"
 							onClick={() => {
 								if (
 									window.confirm(
-										`Delete session “${session?.title ?? node.title}” and all its messages and branches?`,
+										`确定删除对话“${session?.title ?? node.title}”及其全部消息和分支吗？`,
 									)
 								)
 									onDelete(node.sessionId);

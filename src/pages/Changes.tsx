@@ -211,7 +211,7 @@ const Changes = () => {
 								<h2>{t("Loading code changes…")}</h2>
 							</div>
 						) : codeDiff ? (
-							<pre className="changes-code-diff" tabIndex={0} aria-label="Session code diff">
+							<pre className="changes-code-diff" tabIndex={0} aria-label="对话代码差异">
 								{codeDiff}
 							</pre>
 						) : (

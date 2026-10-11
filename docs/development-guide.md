@@ -1,6 +1,6 @@
 # Rhyza 开发指南
 
-本指南说明当前 Electron MVP 的开发环境、架构边界、命令和验证方式。产品语义约束见 [产品记忆与设计原则](product-memory-and-design-principles.md)。
+本指南保留当前 Electron MVP 的环境、Provider、持久化与安全细节。日常开发从 [development.md](development.md) 开始；模块概览与 Archify 图见 [architecture.md](architecture.md)。产品语义约束见 [产品记忆与设计原则](product-memory-and-design-principles.md)。
 
 [项目首页](../README.md) · [文档导航](README.md) · [贡献指南](../CONTRIBUTING.md)
 

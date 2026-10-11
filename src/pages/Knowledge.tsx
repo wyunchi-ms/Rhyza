@@ -224,8 +224,8 @@ const Knowledge = () => {
 								type="button"
 								className="knowledge-search-clear"
 								onClick={() => setSearch("")}
-								aria-label="Clear search"
-								title="Clear search"
+								aria-label="清除搜索"
+								title="清除搜索"
 							>
 								<X size={14} />
 							</button>
@@ -320,7 +320,7 @@ const Knowledge = () => {
 									<EntityPreview entity={entityDraft} onEdit={() => setIsEditingEntity(true)} />
 								)}
 							</section>
-							<aside className="knowledge-inspector" aria-label="Entity details and relations">
+							<aside className="knowledge-inspector" aria-label="实体详情和关联关系">
 								<EntityMetaPanel
 									entity={selected}
 									onOpenHistory={() =>
@@ -340,7 +340,7 @@ const Knowledge = () => {
 							<section className="knowledge-primary-detail">
 								<DiagramViewer diagram={diagram} />
 							</section>
-							<aside className="knowledge-inspector" aria-label="Diagram details and connections">
+							<aside className="knowledge-inspector" aria-label="图表详情和关联项">
 								<DiagramEditor
 									diagram={diagram}
 									entities={activeEntities}
@@ -446,7 +446,7 @@ function MarkdownPreview({ content }: { content: string }) {
 					{normalizeMarkdownMathDelimiters(content)}
 				</ReactMarkdown>
 			) : (
-				<p className="text-secondary">Add content to start this entity note.</p>
+				<p className="text-secondary">添加内容以开始编写此实体笔记。</p>
 			)}
 		</div>
 	);
@@ -478,7 +478,7 @@ function EntityCenterEditor({
 			<div className="mx-auto max-w-4xl space-y-5">
 				<div className="flex items-center justify-between gap-3">
 					<div>
-						<span className="entity-editor-label">Editing entity</span>
+						<span className="entity-editor-label">正在编辑实体</span>
 						<h2 className="entity-preview-title">{draft.name || "Untitled entity"}</h2>
 					</div>
 					<button type="button" className="secondary-button" onClick={onCancel}>
@@ -510,9 +510,9 @@ function EntityCenterEditor({
 							onDraftChange({ ...draft, confidence: event.target.value as Entity["confidence"] })
 						}
 					>
-						<option value="confirmed">Confirmed</option>
-						<option value="inferred">Inferred</option>
-						<option value="disputed">Disputed</option>
+						<option value="confirmed">已确认</option>
+						<option value="inferred">推断</option>
+						<option value="disputed">有争议</option>
 					</select>
 				</label>
 				<label className="form-label">
@@ -559,7 +559,7 @@ function EntityCenterEditor({
 					Save with diff
 				</button>
 				<section>
-					<h3 className="section-label">Live preview</h3>
+					<h3 className="section-label">实时预览</h3>
 					<MarkdownPreview content={draft.content.trim() || draft.summary} />
 				</section>
 			</div>
@@ -708,8 +708,8 @@ function EntityMetaPanel({
 				<div className="flex shrink-0 items-center gap-1">
 					<button
 						type="button"
-						title="View entity change history"
-						aria-label="View entity change history"
+						title="查看实体变更历史"
+						aria-label="查看实体变更历史"
 						onClick={onOpenHistory}
 						className="icon-button"
 					>
@@ -717,7 +717,7 @@ function EntityMetaPanel({
 					</button>
 					<button
 						type="button"
-						title="Archive entity"
+						title="归档实体"
 						onClick={() => {
 							if (window.confirm(`Archive “${entity.name}” and its relations?`))
 								softDeleteEntity(entity.id);
@@ -730,14 +730,14 @@ function EntityMetaPanel({
 			</div>
 			<section>
 				<div className="entity-section-heading">
-					<h3 className="section-label">Relations</h3>
+					<h3 className="section-label">关联关系</h3>
 					<span className="entity-section-actions">
 						<small>{entityRelations.length}</small>
 						<button
 							type="button"
 							onClick={() => openRelationEditor()}
-							title="Add relation"
-							aria-label="Add relation"
+							title="添加关联"
+							aria-label="添加关联"
 						>
 							<Plus size={14} />
 						</button>
@@ -769,7 +769,7 @@ function EntityMetaPanel({
 									<button
 										type="button"
 										className="entity-relation-edit"
-										title="Edit relation"
+										title="编辑关联"
 										aria-label={`Edit relation to ${other?.name ?? otherId}`}
 										onClick={() => openRelationEditor(relation)}
 									>
@@ -778,7 +778,7 @@ function EntityMetaPanel({
 									<button
 										type="button"
 										className="entity-relation-delete"
-										title="Archive relation"
+										title="归档关联"
 										aria-label={`Archive relation to ${other?.name ?? otherId}`}
 										onClick={() => softDeleteRelation(relation.id)}
 									>
@@ -788,7 +788,7 @@ function EntityMetaPanel({
 							</div>
 						);
 					})}
-					{entityRelations.length === 0 && <p className="text-xs text-secondary">No relations.</p>}
+					{entityRelations.length === 0 && <p className="text-xs text-secondary">暂无关联关系。</p>}
 				</div>
 				{relationForm && (
 					<form
@@ -803,14 +803,14 @@ function EntityMetaPanel({
 							<button
 								type="button"
 								onClick={() => setRelationForm(null)}
-								title="Close relation form"
-								aria-label="Close relation form"
+								title="关闭关联表单"
+								aria-label="关闭关联表单"
 							>
 								<X size={14} />
 							</button>
 						</div>
 						<label>
-							<span>Related entity</span>
+							<span>关联实体</span>
 							<select
 								className="field"
 								value={relationForm.relatedEntityId}
@@ -818,7 +818,7 @@ function EntityMetaPanel({
 									setRelationForm({ ...relationForm, relatedEntityId: event.target.value })
 								}
 							>
-								<option value="">Select entity</option>
+								<option value="">选择实体</option>
 								{entities
 									.filter((item) => !item.deletedAt && item.id !== entity.id)
 									.map((item) => (
@@ -829,16 +829,16 @@ function EntityMetaPanel({
 							</select>
 						</label>
 						<label>
-							<span>Relation type</span>
+							<span>关系类型</span>
 							<input
 								className="field"
 								value={relationForm.type}
 								onChange={(event) => setRelationForm({ ...relationForm, type: event.target.value })}
-								placeholder="related_to"
+								placeholder="例如：相关于"
 							/>
 						</label>
 						<label>
-							<span>Description</span>
+							<span>描述</span>
 							<textarea
 								className="field"
 								rows={3}
@@ -846,7 +846,7 @@ function EntityMetaPanel({
 								onChange={(event) =>
 									setRelationForm({ ...relationForm, description: event.target.value })
 								}
-								placeholder="Describe how these entities are connected"
+								placeholder="描述这些实体之间的关联方式"
 							/>
 						</label>
 						<div className="entity-relation-form-actions">
@@ -862,7 +862,7 @@ function EntityMetaPanel({
 								className="command-button"
 								disabled={!relationForm.relatedEntityId || !relationForm.type.trim()}
 							>
-								{relationForm.relation ? "Save changes" : "Add relation"}
+								{relationForm.relation ? "保存更改" : "添加关联"}
 							</button>
 						</div>
 					</form>
@@ -870,7 +870,7 @@ function EntityMetaPanel({
 			</section>
 			<section>
 				<div className="entity-connected-heading">
-					<h3 className="section-label">Connected diagrams</h3>
+					<h3 className="section-label">关联图表</h3>
 					<span>{linkedDiagrams.length}</span>
 				</div>
 				<div className="entity-diagram-list">
@@ -894,13 +894,13 @@ function EntityMetaPanel({
 						</button>
 					))}
 					{linkedDiagrams.length === 0 && (
-						<p className="text-xs text-secondary">No diagrams reference this entity yet.</p>
+						<p className="text-xs text-secondary">还没有图表引用此实体。</p>
 					)}
 				</div>
 			</section>
 			<details className="entity-sources-disclosure">
 				<summary>
-					<span>Sources</span>
+					<span>来源</span>
 					<span className="entity-sources-summary-meta">
 						<small>{sources.length}</small>
 						<ChevronDown size={14} aria-hidden="true" />
@@ -945,7 +945,7 @@ function EntityMetaPanel({
 							{formatSourceLocation(source)}
 						</div>
 					))}
-					{sources.length === 0 && <p className="text-xs text-secondary">No sources.</p>}
+					{sources.length === 0 && <p className="text-xs text-secondary">暂无来源。</p>}
 				</div>
 			</details>
 		</div>
@@ -1064,14 +1064,14 @@ function DiagramEditor({
 		>
 			<div className="knowledge-inspector-heading">
 				<div className="min-w-0">
-					<span className="knowledge-inspector-type">Diagram</span>
+					<span className="knowledge-inspector-type">图表</span>
 					<h2 title={diagram.name}>{diagram.name}</h2>
 				</div>
 				<div className="flex shrink-0 items-center gap-1">
 					<button
 						type="button"
-						title="View diagram change history"
-						aria-label="View diagram change history"
+						title="查看图表变更历史"
+						aria-label="查看图表变更历史"
 						onClick={onOpenHistory}
 						className="icon-button"
 					>
@@ -1079,7 +1079,7 @@ function DiagramEditor({
 					</button>
 					<button
 						type="button"
-						title="Archive diagram"
+						title="归档图表"
 						className="secondary-button shrink-0 text-red-600"
 						onClick={() => {
 							if (window.confirm(`Archive diagram “${diagram.name}”?`)) {
@@ -1107,15 +1107,15 @@ function DiagramEditor({
 					value={draft.type}
 					onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}
 				>
-					<option value="architecture">Architecture</option>
-					<option value="workflow">Workflow</option>
-					<option value="dataflow">Data flow</option>
-					<option value="lifecycle">Lifecycle</option>
-					<option value="structure">Structure</option>
-					<option value="flowchart">Flowchart</option>
-					<option value="sequence">Sequence</option>
-					<option value="swimlane">Swimlane</option>
-					<option value="dependency">Dependency</option>
+					<option value="architecture">架构图</option>
+					<option value="workflow">工作流</option>
+					<option value="dataflow">数据流</option>
+					<option value="lifecycle">生命周期</option>
+					<option value="structure">结构图</option>
+					<option value="flowchart">流程图</option>
+					<option value="sequence">时序图</option>
+					<option value="swimlane">泳道图</option>
+					<option value="dependency">依赖图</option>
 				</select>
 			</label>
 			<section aria-labelledby="diagram-linked-heading">
@@ -1135,8 +1135,8 @@ function DiagramEditor({
 									editing: false,
 								})
 							}
-							title="Connect entity"
-							aria-label="Connect entity"
+							title="关联实体"
+							aria-label="关联实体"
 						>
 							<Plus size={14} />
 						</button>
@@ -1162,7 +1162,7 @@ function DiagramEditor({
 								<button
 									type="button"
 									className="entity-relation-edit"
-									title="Edit connected entity"
+									title="编辑关联实体"
 									aria-label={`Edit connection for ${node.label}`}
 									onClick={() =>
 										setEntityLinkForm({ nodeId: node.id, entityId: entity.id, editing: true })
@@ -1173,7 +1173,7 @@ function DiagramEditor({
 								<button
 									type="button"
 									className="entity-relation-delete"
-									title="Remove connected entity"
+									title="移除关联实体"
 									aria-label={`Remove connection for ${node.label}`}
 									onClick={() => removeEntityLink(node.id)}
 								>
@@ -1182,9 +1182,7 @@ function DiagramEditor({
 							</span>
 						</div>
 					))}
-					{linkedNodes.length === 0 && (
-						<p className="text-xs text-secondary">No connected entities.</p>
-					)}
+					{linkedNodes.length === 0 && <p className="text-xs text-secondary">暂无关联实体。</p>}
 				</div>
 				{entityLinkForm && (
 					<div className="entity-relation-form">
@@ -1193,14 +1191,14 @@ function DiagramEditor({
 							<button
 								type="button"
 								onClick={() => setEntityLinkForm(null)}
-								title="Close connection form"
-								aria-label="Close connection form"
+								title="关闭关联表单"
+								aria-label="关闭关联表单"
 							>
 								<X size={14} />
 							</button>
 						</div>
 						<label>
-							<span>Diagram node</span>
+							<span>图表节点</span>
 							<select
 								className="field"
 								disabled={entityLinkForm.editing}
@@ -1220,7 +1218,7 @@ function DiagramEditor({
 							</select>
 						</label>
 						<label>
-							<span>Entity</span>
+							<span>实体</span>
 							<select
 								className="field"
 								value={entityLinkForm.entityId}
@@ -1228,7 +1226,7 @@ function DiagramEditor({
 									setEntityLinkForm({ ...entityLinkForm, entityId: event.target.value })
 								}
 							>
-								<option value="">Select entity</option>
+								<option value="">选择实体</option>
 								{entities.map((entity) => (
 									<option key={entity.id} value={entity.id}>
 										{entity.name}
@@ -1250,7 +1248,7 @@ function DiagramEditor({
 								disabled={!entityLinkForm.nodeId || !entityLinkForm.entityId}
 								onClick={saveEntityLink}
 							>
-								{entityLinkForm.editing ? "Save changes" : "Connect entity"}
+								{entityLinkForm.editing ? "保存更改" : "关联实体"}
 							</button>
 						</div>
 					</div>

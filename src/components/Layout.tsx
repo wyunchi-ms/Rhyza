@@ -5,8 +5,10 @@ import {
 	Library,
 	FolderOpen,
 	GitBranch,
+	History,
 	PanelLeftClose,
 	PanelLeftOpen,
+	Search,
 	Settings,
 } from "lucide-react";
 import type React from "react";
@@ -62,6 +64,8 @@ const LayoutContent: React.FC = () => {
 	const desktopTitleBar = window.rhyza?.platform === "win32";
 	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 	const { pathname } = useLocation();
+	const isSettingsPage = pathname === "/settings";
+	const workspaceSidebarVisible = sidebarVisible && !isSettingsPage;
 	useEffect(() => {
 		if (!isCompactViewport) setCompactSidebarOpen(false);
 	}, [isCompactViewport]);
@@ -113,19 +117,21 @@ const LayoutContent: React.FC = () => {
 		<div className="app-frame">
 			{desktopTitleBar && (
 				<DesktopTitleBar
-					sidebarVisible={sidebarVisible}
+					sidebarVisible={workspaceSidebarVisible}
+					showSidebarControls={!isSettingsPage}
 					onToggleSidebar={sidebarVisible ? closeSidebar : openSidebar}
+					onOpenSearch={() => setGlobalSearchOpen(true)}
 				/>
 			)}
-			<div className={clsx("app-shell", !sidebarVisible && "has-collapsed-sidebar")}>
+			<div className={clsx("app-shell", !workspaceSidebarVisible && "has-collapsed-sidebar")}>
 				<aside
-					className={clsx("app-sidebar", !sidebarVisible && "is-collapsed")}
+					className={clsx("app-sidebar", !workspaceSidebarVisible && "is-collapsed")}
 					aria-label={t("Workspace sidebar")}
-					aria-hidden={!sidebarVisible}
-					inert={!sidebarVisible}
+					aria-hidden={!workspaceSidebarVisible}
+					inert={!workspaceSidebarVisible}
 					style={{
-						width: sidebarVisible ? sidebarWidth : 0,
-						flexBasis: sidebarVisible ? sidebarWidth : 0,
+						width: workspaceSidebarVisible ? sidebarWidth : 0,
+						flexBasis: workspaceSidebarVisible ? sidebarWidth : 0,
 					}}
 				>
 					{!desktopTitleBar && (
@@ -138,6 +144,15 @@ const LayoutContent: React.FC = () => {
 								aria-label={t("Close sidebar")}
 							>
 								<PanelLeftClose size={17} />
+							</button>
+							<button
+								type="button"
+								className="sidebar-icon-button"
+								onClick={() => setGlobalSearchOpen(true)}
+								title={t("Search all chats")}
+								aria-label={t("Search all chats")}
+							>
+								<Search size={16} />
 							</button>
 						</div>
 					)}
@@ -188,23 +203,14 @@ const LayoutContent: React.FC = () => {
 							/>
 						</div>
 					)}
+					<nav className="app-sidebar-footer" aria-label={t("Workspace navigation")}>
+						<SidebarNavIcon to="/knowledge" icon={<Library size={14} />} label={t("Knowledge")} />
+						<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Sources")} />
+						<SidebarNavIcon to="/changes" icon={<History size={14} />} label={t("Changes")} />
+						<SidebarNavIcon to="/settings" icon={<Settings size={14} />} label={t("Settings")} />
+					</nav>
 				</aside>
-				<nav
-					className="app-sidebar-footer"
-					aria-label={t("Workspace navigation")}
-					style={{
-						width: sidebarVisible
-							? isCompactViewport
-								? Math.min(272, viewportWidth - 56)
-								: sidebarWidth
-							: 96,
-					}}
-				>
-					<SidebarNavIcon to="/knowledge" icon={<Library size={14} />} label={t("Knowledge")} />
-					<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Sources")} />
-					<SidebarNavIcon to="/settings" icon={<Settings size={14} />} label={t("Settings")} />
-				</nav>
-				{isCompactViewport && sidebarVisible && (
+				{isCompactViewport && workspaceSidebarVisible && (
 					<button
 						type="button"
 						className="sidebar-scrim"
@@ -212,7 +218,7 @@ const LayoutContent: React.FC = () => {
 						aria-label={t("Close navigation sidebar")}
 					/>
 				)}
-				{sidebarVisible && !isCompactViewport && (
+				{workspaceSidebarVisible && !isCompactViewport && (
 					<PanelResizeHandle
 						side="left"
 						label={t("Resize navigation sidebar")}
@@ -224,7 +230,7 @@ const LayoutContent: React.FC = () => {
 						onCommit={currentSize.commit}
 					/>
 				)}
-				{!sidebarVisible && !desktopTitleBar && (
+				{!sidebarVisible && !desktopTitleBar && !isSettingsPage && (
 					<button
 						type="button"
 						className="sidebar-reopen"
@@ -246,10 +252,14 @@ const LayoutContent: React.FC = () => {
 
 function DesktopTitleBar({
 	sidebarVisible,
+	showSidebarControls,
 	onToggleSidebar,
+	onOpenSearch,
 }: {
 	sidebarVisible: boolean;
+	showSidebarControls: boolean;
 	onToggleSidebar: () => void;
+	onOpenSearch: () => void;
 }) {
 	const [menuError, setMenuError] = useState<string | null>(null);
 	return (
@@ -273,13 +283,23 @@ function DesktopTitleBar({
 			>
 				<Ellipsis size={15} />
 			</button>
+			{showSidebarControls && (
+				<button
+					type="button"
+					onClick={onToggleSidebar}
+					aria-label={sidebarVisible ? "Close sidebar" : "Open sidebar"}
+					title={sidebarVisible ? "Close sidebar" : "Open sidebar"}
+				>
+					{sidebarVisible ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+				</button>
+			)}
 			<button
 				type="button"
-				onClick={onToggleSidebar}
-				aria-label={sidebarVisible ? "Close sidebar" : "Open sidebar"}
-				title={sidebarVisible ? "Close sidebar" : "Open sidebar"}
+				onClick={onOpenSearch}
+				aria-label="Search all chats"
+				title="Search all chats"
 			>
-				{sidebarVisible ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+				<Search size={15} />
 			</button>
 			{menuError && <span role="alert">{menuError}</span>}
 		</header>

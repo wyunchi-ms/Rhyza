@@ -185,13 +185,13 @@ export function AnswerOutline({
 	return (
 		<nav
 			className="answer-outline"
-			aria-label="Answer contents"
+			aria-label="回答目录"
 			data-outline-turn-id={turnId}
 			style={placement}
 		>
 			<div className="answer-outline-title">
 				<ListTree size={14} aria-hidden="true" />
-				<span>In this answer</span>
+				<span>本回答内容</span>
 			</div>
 			<ol ref={listRef} className="answer-outline-list">
 				{headings.map((heading) => (

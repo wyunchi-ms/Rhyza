@@ -1,0 +1,75 @@
+{
+	"schema_version": 1,
+	"diagram_type": "architecture",
+	"meta": {
+		"title": "Rhyza 运行时边界",
+		"locale": "zh-CN",
+		"quality_profile": "showcase"
+	},
+	"components": [
+		{
+			"id": "renderer",
+			"type": "frontend",
+			"label": "React Renderer",
+			"sublabel": "页面 · Store",
+			"pos": [70, 240],
+			"size": [166, 72]
+		},
+		{
+			"id": "preload",
+			"type": "security",
+			"label": "Preload",
+			"sublabel": "contextBridge",
+			"pos": [310, 240],
+			"size": [160, 72]
+		},
+		{
+			"id": "main",
+			"type": "backend",
+			"label": "Electron Main",
+			"sublabel": "IPC handlers",
+			"pos": [545, 240],
+			"size": [170, 72]
+		},
+		{
+			"id": "agents",
+			"type": "backend",
+			"label": "AgentService",
+			"sublabel": "Pi · Codex · Claude",
+			"pos": [790, 90],
+			"size": [174, 72]
+		},
+		{
+			"id": "providers",
+			"type": "external",
+			"label": "AI Providers",
+			"sublabel": "模型服务",
+			"pos": [1035, 90],
+			"size": [160, 72]
+		},
+		{
+			"id": "workspace",
+			"type": "database",
+			"label": "AppStateStore",
+			"sublabel": "Workspace 状态",
+			"pos": [790, 240],
+			"size": [174, 72]
+		},
+		{
+			"id": "sources",
+			"type": "backend",
+			"label": "SourceService",
+			"sublabel": "受限文本读取",
+			"pos": [790, 390],
+			"size": [174, 72]
+		}
+	],
+	"connections": [
+		{ "from": "renderer", "to": "preload", "label": "window.rhyza" },
+		{ "from": "preload", "to": "main", "label": "校验 IPC" },
+		{ "from": "main", "to": "agents" },
+		{ "from": "agents", "to": "providers" },
+		{ "from": "main", "to": "workspace" },
+		{ "from": "main", "to": "sources" }
+	]
+}

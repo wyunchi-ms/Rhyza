@@ -1,0 +1,84 @@
+{
+	"schema_version": 1,
+	"diagram_type": "architecture",
+	"meta": {
+		"title": "Rhyza 文档职责",
+		"locale": "zh-CN",
+		"quality_profile": "showcase"
+	},
+	"components": [
+		{
+			"id": "overview",
+			"type": "frontend",
+			"label": "project-overview.md",
+			"sublabel": "范围与入口",
+			"pos": [40, 195],
+			"size": [220, 76]
+		},
+		{
+			"id": "agents",
+			"type": "security",
+			"label": "AGENTS.md",
+			"sublabel": "协作规则",
+			"pos": [365, 30],
+			"size": [195, 76]
+		},
+		{
+			"id": "design",
+			"type": "frontend",
+			"label": "DESIGN.md",
+			"sublabel": "产品与视觉原则",
+			"pos": [365, 135],
+			"size": [195, 76]
+		},
+		{
+			"id": "architecture",
+			"type": "backend",
+			"label": "architecture.md",
+			"sublabel": "模块与数据流",
+			"pos": [365, 240],
+			"size": [195, 76]
+		},
+		{
+			"id": "guide",
+			"type": "frontend",
+			"label": "user-guide.md",
+			"sublabel": "用户操作",
+			"pos": [365, 345],
+			"size": [195, 76]
+		},
+		{
+			"id": "todo",
+			"type": "database",
+			"label": "TODO.md",
+			"sublabel": "待办与边界",
+			"pos": [685, 30],
+			"size": [200, 76]
+		},
+		{
+			"id": "development",
+			"type": "backend",
+			"label": "development.md",
+			"sublabel": "命令与验证",
+			"pos": [685, 240],
+			"size": [200, 76]
+		},
+		{
+			"id": "components",
+			"type": "backend",
+			"label": "component-api.md",
+			"sublabel": "组件契约",
+			"pos": [685, 345],
+			"size": [200, 76]
+		}
+	],
+	"connections": [
+		{ "from": "overview", "to": "agents" },
+		{ "from": "overview", "to": "design" },
+		{ "from": "overview", "to": "architecture" },
+		{ "from": "overview", "to": "guide" },
+		{ "from": "agents", "to": "todo" },
+		{ "from": "architecture", "to": "development" },
+		{ "from": "architecture", "to": "components" }
+	]
+}

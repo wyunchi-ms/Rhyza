@@ -112,6 +112,7 @@ _当前 Knowledge 界面，使用虚构的订单服务演示数据。_
 | [使用指南](docs/user-guide.md)                                     | 首次配置、日常工作流、Provider 与常见问题 |
 | [功能与限制](docs/features.md)                                     | 已实现、部分实现与尚未实现的能力          |
 | [开发指南](docs/development-guide.md)                              | 环境、架构、命令、持久化和验证            |
+| [项目文档地图](docs/README.md)                                      | 文档分工、架构图、设计与组件接口入口      |
 | [性能诊断](docs/performance-diagnostics.md)                        | 输入卡顿、渲染与持久化耗时排查            |
 | [HTML Preview 协议](docs/html-previews.md)                         | 扩展如何交付可交互 HTML                   |
 | [产品记忆与设计原则](docs/product-memory-and-design-principles.md) | 分支、引用和知识对象的设计约束            |
