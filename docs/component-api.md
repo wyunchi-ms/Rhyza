@@ -6,7 +6,7 @@
 
 ## 设置页组件
 
-`src/pages/Settings.tsx` 负责选择当前分区、Store 更新和 Provider/Workspace 操作；`src/pages/settings/SettingsNavigation.tsx` 负责返回入口、搜索框和分区按钮。`SettingsNavigation` 接收 `query`、`selectedSection`、`visibleCategories`，以及 `onQueryChange` / `onSelect` 回调。分类 ID 与分区标题的 `id` 必须一一对应；搜索只保留匹配分类，点击分类不修改 `HashRouter` 路由。右侧只显示当前分区，并在切换时回到内容顶部。
+`src/pages/Settings.tsx` 负责选择当前分区、Store 更新和 Provider 操作；工作区选择只在 `src/pages/Sources.tsx`。`src/pages/settings/SettingsNavigation.tsx` 负责返回入口、搜索框和分区按钮。`SettingsNavigation` 接收 `query`、`selectedSection`、`visibleCategories`，以及 `onQueryChange` / `onSelect` 回调。分类 ID 与分区标题的 `id` 必须一一对应；搜索只保留匹配分类，点击分类不修改 `HashRouter` 路由。右侧只显示当前分区，并在切换时回到内容顶部。
 
 设置页整体在 `src/components/Layout.tsx` 中与工作区侧边栏互斥展示；布局和窄屏规则在 `src/pages/settings-page.css`。变更分类时同步维护分类定义、标题、搜索词、隐藏条件及 `tests/ui-refinement.test.cjs` 的交互检查。
 

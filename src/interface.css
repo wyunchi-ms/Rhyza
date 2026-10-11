@@ -85,6 +85,17 @@ button:disabled {
 	outline-offset: 3px;
 }
 
+html[data-theme]
+	:is(
+		input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+		select,
+		textarea
+	):focus-visible {
+	outline: none;
+	border-color: var(--ui-brand-accent);
+	box-shadow: 0 0 0 2px rgb(var(--ui-brand-rgb) / 14%);
+}
+
 ::selection {
 	background: var(--ui-brand-soft-strong);
 	color: var(--color-primary);
@@ -149,16 +160,55 @@ html[data-theme] .app-sidebar {
 }
 
 html[data-theme] .app-sidebar-footer .sidebar-nav-icon {
+	position: relative;
 	width: 26px;
 	height: 26px;
 }
 
-html[data-theme] .sidebar-nav-icon.is-active {
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon::after {
+	position: absolute;
+	z-index: 10;
+	bottom: calc(100% + 8px);
+	left: 0;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.45rem;
 	background: var(--color-surface);
-	color: var(--ui-brand-ink);
-	box-shadow:
-		var(--ui-shadow-sm),
-		inset 0 0 0 1px var(--ui-border);
+	padding: 0.35rem 0.55rem;
+	color: var(--color-primary);
+	box-shadow: var(--ui-shadow-sm);
+	content: attr(data-tooltip);
+	font-size: 0.7rem;
+	font-weight: 500;
+	opacity: 0;
+	pointer-events: none;
+	white-space: nowrap;
+	transform: translateY(3px);
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
+	visibility: hidden;
+}
+
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon:nth-last-child(-n + 2)::after {
+	right: 0;
+	left: auto;
+}
+
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon:is(:hover, :focus-visible)::after {
+	opacity: 1;
+	transform: translateY(0);
+	visibility: visible;
+}
+
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon.is-active {
+	background: var(--ui-action);
+	color: var(--ui-on-action);
+	box-shadow: var(--ui-shadow-sm);
+}
+
+html[data-theme] .app-sidebar-footer .sidebar-nav-icon.is-active:hover {
+	background: var(--ui-action-hover);
+	color: var(--ui-on-action);
 }
 
 html[data-theme] :is(.sidebar-icon-button, .topbar-button, .response-collapse, .icon-button) {

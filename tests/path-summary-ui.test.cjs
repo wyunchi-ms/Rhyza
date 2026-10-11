@@ -65,6 +65,13 @@ if (!process.versions.electron) {
 			"new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
 		);
 	};
+	const ctrlClick = async (selector) => {
+		await host(`document.querySelector(${JSON.stringify(selector)})
+			.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }))`);
+		await host(
+			"new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+		);
+	};
 	const pointerClick = async (selector) => {
 		const point = await host(`(() => {
 			const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
@@ -143,7 +150,7 @@ if (!process.versions.electron) {
 		});
 		const url = `http://127.0.0.1:${server.httpServer.address().port}/`;
 		await browser.loadURL(url);
-		await until('Boolean(document.querySelector(".path-summary-mode-button"))', "merge mode entry");
+		await until('Boolean(document.querySelector(".session-tree-header"))', "chat list");
 		await host(
 			'import("/src/store/index.ts").then(module => { window.uiStore = module.useAppStore; })',
 		);
@@ -206,9 +213,37 @@ if (!process.versions.electron) {
 				cancelAuxiliaryRequest: () => { window.summaryResolve?.({ canceled: true, error: "Canceled", usage: { input: 10, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.005 } }); return Promise.resolve({ canceled: true }); }
 			}; void 0;`);
 		assert.equal(await host('Boolean(document.querySelector(".path-summary-toolbar"))'), false);
-		await click(`${activeView} .path-summary-mode-button`);
-		assert.equal(await host('document.querySelector(".path-summary-generate").disabled'), true);
-		await click(listRow("u2"));
+		assert.equal(await host('Boolean(document.querySelector(".path-summary-mode-button"))'), false);
+		await ctrlClick(listRow("u2"));
+		assert.equal(await host('document.querySelector(".path-summary-generate").disabled'), false);
+		assert.equal(await host("window.uiStore.getState().activeSessionId"), "left");
+		assert.equal(
+			await host(
+				'document.querySelector(".path-summary-prompt").getBoundingClientRect().bottom < document.querySelector(".path-summary-controls").getBoundingClientRect().top',
+			),
+			true,
+			"summary instructions appear above the selection actions",
+		);
+		assert.equal(
+			await host('Boolean(document.querySelector(".path-summary-selection-details"))'),
+			false,
+			"selected nodes are highlighted in place without a duplicate list",
+		);
+		await sleep(200);
+		assert.equal(
+			await host(`(() => {
+				const selected = document.querySelector(".session-node-button.is-current.is-summary-selected");
+				if (!selected) return false;
+				const swatch = document.createElement("span");
+				swatch.style.background = "var(--ui-action)";
+				document.body.append(swatch);
+				const matches = getComputedStyle(selected).backgroundColor === getComputedStyle(swatch).backgroundColor;
+				swatch.remove();
+				return matches;
+			})()`),
+			true,
+			"the current node remains visibly selected",
+		);
 		await click(listRow("r2"));
 		assert.equal(
 			await host(
@@ -249,6 +284,23 @@ if (!process.versions.electron) {
 			),
 			"true",
 		);
+		const activeGraphNodeId = await host(
+			`document.querySelector(${JSON.stringify(`${activeView} .session-graph-node.is-active`)})?.closest(".react-flow__node")?.dataset.id`,
+		);
+		assert.ok(activeGraphNodeId, "graph has a current node");
+		const activeGraphNodeWasSelected =
+			(await host(
+				`document.querySelector(${JSON.stringify(graphNode(activeGraphNodeId))}).getAttribute("aria-pressed")`,
+			)) === "true";
+		if (!activeGraphNodeWasSelected) await click(graphNode(activeGraphNodeId));
+		assert.equal(
+			await host(
+				`getComputedStyle(document.querySelector(${JSON.stringify(`${activeView} .session-graph-node.is-active.is-summary-selected`)})).outlineWidth`,
+			),
+			"3px",
+			"graph selection remains visible on the active node",
+		);
+		if (!activeGraphNodeWasSelected) await click(graphNode(activeGraphNodeId));
 		await sleep(420);
 		await pointerClick(graphNode("u1"));
 		assert.equal(
@@ -301,6 +353,21 @@ if (!process.versions.electron) {
 			'!document.querySelector(".path-summary-toolbar") && window.uiStore.getState().sessions.length === 4',
 			"successful summary",
 		);
+		await switchView();
+		await until(
+			`Boolean(document.querySelector(${JSON.stringify(graphNode("u2"))}))`,
+			"graph entry after summary",
+		);
+		await ctrlClick(graphNode("u2"));
+		assert.equal(
+			await host(
+				`document.querySelector(${JSON.stringify(graphNode("u2"))}).getAttribute("aria-pressed")`,
+			),
+			"true",
+			"Ctrl-click enters graph multiselect directly",
+		);
+		await click(".path-summary-cancel");
+		await switchView();
 		const captured = await host("window.summaryRequests[0]");
 		assert.deepEqual(captured.paths.map((item) => item.id).sort(), ["r2", "u3"]);
 		assert.equal(captured.prompt, "Focus on differences between branches");
@@ -491,8 +558,7 @@ if (!process.versions.electron) {
 			summaryId,
 			"sources navigate to the original path",
 		);
-		await click(`${activeView} .path-summary-mode-button`);
-		await click(listRow("u2"));
+		await ctrlClick(listRow("u2"));
 		await host('window.summaryMode = "error"');
 		await click(".path-summary-generate");
 		await until(
@@ -613,7 +679,7 @@ if (!process.versions.electron) {
 				await sleep(60);
 				if (width <= 900 && (await host('Boolean(document.querySelector(".sidebar-reopen"))')))
 					await click(".sidebar-reopen");
-				await click(`${activeView} .path-summary-mode-button`);
+				await ctrlClick(listRow("u2"));
 				const layout = await host(`(() => {
 					const toolbar = document.querySelector(".path-summary-toolbar").getBoundingClientRect();
 					return [...document.querySelectorAll(".path-summary-controls button")].map(button => {

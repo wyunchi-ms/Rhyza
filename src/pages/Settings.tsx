@@ -11,7 +11,6 @@ import {
 	Moon,
 	Package,
 	Palette,
-	Settings2,
 	ShieldAlert,
 	Sun,
 	Trash2,
@@ -19,7 +18,7 @@ import {
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { getRhyzaBridge, useElectronProviderState } from "../hooks/useRhyzaBridge";
-import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
+import { useAppStore } from "../store";
 import type { AuthBridgeEvent } from "../shared/ipc";
 import { errorToMessage } from "../shared/value";
 import { getProviderInfo, normalizeProviderId, providers } from "../shared/providers";
@@ -35,7 +34,7 @@ const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
 	const { t } = useTranslation();
 	const [settingsQuery, setSettingsQuery] = useState("");
-	const [activeSection, setActiveSection] = useState("language-heading");
+	const [activeSection, setActiveSection] = useState("provider-heading");
 	const contentRef = useRef<HTMLElement>(null);
 	const provider = getProviderInfo(settings.provider);
 	const electron = useElectronProviderState(provider.id);
@@ -53,20 +52,6 @@ const Settings: React.FC = () => {
 	const selectSection = (id: string) => {
 		setActiveSection(id);
 		contentRef.current?.scrollTo({ top: 0 });
-	};
-
-	const handleSelectWorkspace = async () => {
-		const bridge = getRhyzaBridge();
-		if (!bridge) return;
-		electron.setWorkspaceError(null);
-		try {
-			const workspace = await bridge.selectWorkspace();
-			setWorkspacePersistencePath(workspace.path);
-			electron.setWorkspace(workspace);
-			loadWorkspaceState(bridge.appStateLoad());
-		} catch (error) {
-			electron.setWorkspaceError(errorToMessage(error));
-		}
 	};
 
 	return (
@@ -372,40 +357,16 @@ const Settings: React.FC = () => {
 
 						<section
 							className="settings-section"
-							aria-labelledby="workspace-heading"
-							hidden={selectedSection !== "workspace-heading"}
+							aria-labelledby="knowledge-heading"
+							hidden={selectedSection !== "knowledge-heading"}
 						>
 							<header className="settings-section-header">
-								<h1 id="workspace-heading">
-									<Settings2 size={17} aria-hidden="true" /> {t("Workspace")}
+								<h1 id="knowledge-heading">
+									<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
 								</h1>
-								<p>{t("Set the working folder and how sessions use it.")}</p>
+								<p>{t("Control knowledge updates and request behavior.")}</p>
 							</header>
 							<div className="settings-panel">
-								<div className="settings-row settings-workspace-folder">
-									<div className="settings-row-copy">
-										<h3>{t("Workspace folder")}</h3>
-										<p className="settings-help settings-workspace-path">
-											{electron.isElectron
-												? (electron.workspace.path ?? t("No workspace selected."))
-												: t("Workspace selection requires the Electron desktop runtime.")}
-										</p>
-										{electron.workspaceError && (
-											<p role="alert" className="settings-error">
-												{electron.workspaceError}
-											</p>
-										)}
-									</div>
-									<button
-										type="button"
-										onClick={handleSelectWorkspace}
-										disabled={!electron.isElectron}
-										className="secondary-button"
-									>
-										{t("Choose Folder")}
-									</button>
-								</div>
-
 								<div className="settings-row">
 									<div className="settings-row-copy">
 										<h3 id="auto-extract-label">{t("Auto-extract knowledge")}</h3>
@@ -426,30 +387,6 @@ const Settings: React.FC = () => {
 									</button>
 								</div>
 
-								<div className="settings-row">
-									<div className="settings-row-copy">
-										<h3>{t("Worktree isolation")}</h3>
-										<p className="settings-help">
-											{t("Run writable sessions in separate Git worktrees.")}
-										</p>
-									</div>
-									<span className="settings-status">{t("Required for Git")}</span>
-								</div>
-							</div>
-						</section>
-
-						<section
-							className="settings-section"
-							aria-labelledby="knowledge-heading"
-							hidden={selectedSection !== "knowledge-heading"}
-						>
-							<header className="settings-section-header">
-								<h1 id="knowledge-heading">
-									<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
-								</h1>
-								<p>{t("Control knowledge updates and request behavior.")}</p>
-							</header>
-							<div className="settings-panel">
 								<div className="settings-row settings-row--field">
 									<label htmlFor="knowledge-mode" className="settings-label">
 										{t("Write mode")}

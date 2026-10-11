@@ -6,6 +6,7 @@ import {
 	FolderOpen,
 	GitBranch,
 	History,
+	MessageSquare,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Search,
@@ -40,7 +41,7 @@ const LayoutContent: React.FC = () => {
 	const isCompactViewport = viewportWidth <= 900;
 	const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
-	const sidebarSize = usePanelSize("rhyza-layout-sidebar-width", 260, 200, sidebarMax);
+	const sidebarSize = usePanelSize("rhyza-layout-sidebar-width", 260, 200);
 	const [graphMode, setGraphModeState] = useState(false);
 	const [leafStatuses, setLeafStatuses] = useState<LeafStatusFilter[]>([]);
 	const [graphVisited, setGraphVisited] = useState(false);
@@ -50,12 +51,11 @@ const LayoutContent: React.FC = () => {
 	};
 	const graphMax = isCompactViewport
 		? Math.max(200, viewportWidth - 32)
-		: Math.max(360, viewportWidth - 480);
+		: Math.max(360, viewportWidth - 600);
 	const graphSize = usePanelSize(
 		"rhyza-layout-graph-width",
 		Math.min(640, viewportWidth * 0.48),
 		360,
-		graphMax,
 	);
 	const currentSize = graphMode ? graphSize : sidebarSize;
 	const currentMax = graphMode ? graphMax : sidebarMax;
@@ -204,6 +204,7 @@ const LayoutContent: React.FC = () => {
 						</div>
 					)}
 					<nav className="app-sidebar-footer" aria-label={t("Workspace navigation")}>
+						<SidebarNavIcon to="/" icon={<MessageSquare size={14} />} label={t("Chats")} />
 						<SidebarNavIcon to="/knowledge" icon={<Library size={14} />} label={t("Knowledge")} />
 						<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Sources")} />
 						<SidebarNavIcon to="/changes" icon={<History size={14} />} label={t("Changes")} />
@@ -311,7 +312,7 @@ function SidebarNavIcon({ to, icon, label }: { to: string; icon: React.ReactNode
 		<NavLink
 			to={to}
 			className={({ isActive }) => clsx("sidebar-nav-icon", isActive && "is-active")}
-			title={label}
+			data-tooltip={label}
 			aria-label={label}
 		>
 			{icon}

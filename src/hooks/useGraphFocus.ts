@@ -16,6 +16,8 @@ export function useGraphFocus(
 	const frame = useRef(0);
 	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const opening = useRef(true);
+	const wasVisible = useRef(false);
+	const lastNodeId = useRef<string | undefined>(undefined);
 	const cancel = useCallback(() => {
 		cancelAnimationFrame(frame.current);
 		clearTimeout(timer.current);
@@ -56,11 +58,15 @@ export function useGraphFocus(
 	);
 	useEffect(() => {
 		if (!visible) {
-			opening.current = true;
+			wasVisible.current = false;
 			cancel();
 			return;
 		}
 		if (!nodeId || !flow) return;
+		const returningToSameNode = !wasVisible.current && lastNodeId.current === nodeId;
+		wasVisible.current = true;
+		lastNodeId.current = nodeId;
+		if (returningToSameNode && !opening.current) return;
 		// Retry when the hidden canvas gains a size, and wait for the sidebar
 		// transition to settle. Focus changes during opening must still maximize.
 		const schedule = () => {
