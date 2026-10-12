@@ -714,6 +714,350 @@ html[data-theme] .sources-page .sources-workspace-card > button {
 	flex-shrink: 0;
 }
 
+.workspace-picker,
+.source-index-settings,
+.source-removal-dialog {
+	width: min(36rem, calc(100vw - 2rem));
+	max-height: calc(100dvh - 3rem);
+	margin: auto;
+	overflow: auto;
+	border: 1px solid var(--ui-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+	padding: 0;
+	color: var(--color-text);
+	box-shadow: var(--ui-shadow-panel);
+}
+
+.workspace-picker::backdrop,
+.source-index-settings::backdrop,
+.source-removal-dialog::backdrop {
+	background: rgb(21 25 27 / 45%);
+}
+
+.workspace-picker-header,
+.workspace-picker-footer,
+.source-index-settings-header,
+.source-index-settings-footer,
+.source-removal-header,
+.source-removal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 1.25rem;
+}
+
+.workspace-picker-header,
+.source-index-settings-header,
+.source-removal-header {
+	align-items: flex-start;
+}
+
+.workspace-picker-header h2,
+.source-index-settings-header h2,
+.source-removal-header h2 {
+	color: var(--color-primary);
+	font-size: 1.125rem;
+	font-weight: 600;
+}
+
+.workspace-picker-header p,
+.workspace-picker-history > p,
+.workspace-picker-footer p,
+.source-index-settings-header p,
+.source-index-settings-footer p {
+	margin-top: 0.375rem;
+	color: var(--color-secondary);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.workspace-picker-header > button,
+.workspace-picker-footer > button,
+.source-index-settings-header > button,
+.source-removal-header > button {
+	flex-shrink: 0;
+}
+
+.workspace-picker-history {
+	padding: 0 0.75rem 0.75rem;
+}
+
+.workspace-picker-history h3 {
+	padding: 0 0.5rem 0.625rem;
+	color: var(--color-secondary);
+	font-size: 0.75rem;
+	font-weight: 500;
+}
+
+.workspace-picker-history > p {
+	padding: 0.75rem 0.5rem 1rem;
+}
+
+.workspace-picker-list {
+	display: grid;
+	max-height: min(24rem, 50dvh);
+	gap: 0.25rem;
+	overflow: auto;
+	padding: 0.25rem;
+	list-style: none;
+}
+
+.workspace-picker-entry {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 0.75rem;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	padding: 0.875rem 0.625rem;
+	color: var(--color-primary);
+	text-align: left;
+}
+
+.workspace-picker-entry > svg {
+	flex-shrink: 0;
+	color: var(--color-secondary);
+}
+
+.workspace-picker-entry:not(:disabled):hover {
+	background: var(--ui-hover);
+}
+
+.workspace-picker-entry:not(:disabled):active {
+	background: var(--ui-selected);
+}
+
+.workspace-picker-entry.is-current {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft);
+	cursor: default;
+}
+
+.workspace-picker-entry:disabled:not(.is-current) {
+	opacity: 0.6;
+}
+
+.workspace-picker-entry-copy {
+	display: grid;
+	min-width: 0;
+	flex: 1;
+	gap: 0.25rem;
+}
+
+.workspace-picker-entry-copy strong {
+	font-size: 0.875rem;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.workspace-picker-entry-copy > span {
+	color: var(--color-secondary);
+	font-family: var(--font-mono, monospace);
+	font-size: 0.6875rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+.workspace-picker-current {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 0.25rem;
+	color: var(--ui-brand-ink);
+	font-size: 0.6875rem;
+}
+
+.workspace-picker-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin: 0 1.25rem 1rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 8px;
+	background: var(--ui-surface-muted);
+	padding: 0.75rem;
+	font-size: 0.8125rem;
+	overflow-wrap: anywhere;
+}
+
+.workspace-picker-footer,
+.source-index-settings-footer,
+.source-removal-footer {
+	border-top: 1px solid var(--ui-border);
+}
+
+.workspace-picker-footer p,
+.source-index-settings-footer p {
+	margin-top: 0;
+}
+
+.source-index-settings {
+	width: min(42rem, calc(100vw - 2rem));
+}
+
+.source-index-settings-body {
+	display: grid;
+	gap: 1.25rem;
+	padding: 0 1.25rem 1.25rem;
+}
+
+.source-index-settings-body h3,
+.source-index-patterns > label {
+	color: var(--color-primary);
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.source-index-settings-body p {
+	color: var(--color-secondary);
+	font-size: 0.75rem;
+	line-height: 1.5;
+}
+
+.source-index-settings-body section > p {
+	margin-top: 0.375rem;
+}
+
+.source-excluded-directories {
+	display: grid;
+	max-height: 14rem;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.25rem;
+	overflow: auto;
+	margin-block: 0.75rem;
+	padding: 0.25rem;
+}
+
+.source-excluded-directories label {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 0.5rem;
+	border-radius: 6px;
+	padding: 0.5rem;
+	font-size: 0.8125rem;
+}
+
+.source-excluded-directories label:not(.is-automatic):hover {
+	background: var(--ui-hover);
+}
+
+.source-excluded-directories label:not(.is-automatic) {
+	cursor: pointer;
+}
+
+.source-excluded-directories input,
+.source-excluded-directories svg {
+	flex-shrink: 0;
+}
+
+.source-excluded-directories span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.source-excluded-directories small {
+	margin-left: auto;
+	color: var(--color-secondary);
+	font-size: 0.6875rem;
+}
+
+.source-index-patterns {
+	display: grid;
+	gap: 0.375rem;
+}
+
+.source-index-patterns textarea {
+	width: 100%;
+	min-height: 6rem;
+	resize: vertical;
+	font-family: var(--font-mono, monospace);
+	font-size: 0.8125rem;
+}
+
+.source-index-settings-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 8px;
+	background: var(--ui-surface-muted);
+	padding: 0.75rem;
+	overflow-wrap: anywhere;
+}
+
+.source-index-settings-error > p {
+	color: var(--color-primary);
+}
+
+.source-index-settings-footer > div {
+	display: flex;
+	flex-shrink: 0;
+	gap: 0.5rem;
+}
+
+.source-index-settings-footer button {
+	white-space: nowrap;
+}
+
+.source-removal-body {
+	display: grid;
+	gap: 0.75rem;
+	padding: 0 1.25rem 1.25rem;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.source-removal-target {
+	display: grid;
+	gap: 0.25rem;
+	border-radius: 8px;
+	background: var(--ui-surface-muted);
+	padding: 0.75rem;
+	overflow-wrap: anywhere;
+}
+
+.source-removal-target span {
+	color: var(--color-secondary);
+	font-family: var(--font-mono, monospace);
+	font-size: 0.6875rem;
+}
+
+.source-removal-error {
+	border: 1px solid var(--ui-border);
+	border-radius: 8px;
+	background: var(--ui-surface-muted);
+	padding: 0.75rem;
+}
+
+.source-removal-footer {
+	justify-content: flex-end;
+}
+
+.source-removal-footer button {
+	white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+	.workspace-picker-footer,
+	.source-index-settings-footer {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.workspace-picker-current {
+		max-width: 5rem;
+	}
+
+	.source-excluded-directories {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
 @media (max-width: 40rem) {
 	html[data-theme] .sources-page .sources-workspace-card {
 		align-items: stretch;
@@ -754,6 +1098,14 @@ html[data-theme] .sources-page .sources-content {
 	flex: 1;
 	overflow-y: auto;
 	scrollbar-gutter: stable;
+}
+
+html[data-theme] .sources-page .sources-add-button {
+	inline-size: 2.4rem;
+	block-size: 2.4rem;
+	flex-shrink: 0;
+	margin-inline-start: auto;
+	padding: 0;
 }
 
 html[data-theme] .sources-page .sources-list {

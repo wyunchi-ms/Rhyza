@@ -3,6 +3,22 @@ import type { ConversationRound } from "./conversationGraph";
 
 export type LeafStatusFilter = SessionProgressStatus | "unmarked";
 
+export function normalizeLeafStatuses(value: unknown): LeafStatusFilter[] {
+	if (!Array.isArray(value)) return [];
+	return [
+		...new Set(
+			value.filter(
+				(status): status is LeafStatusFilter =>
+					status === "unmarked" ||
+					status === "todo" ||
+					status === "in_progress" ||
+					status === "complete" ||
+					status === "parked",
+			),
+		),
+	];
+}
+
 export function filterConversationRounds(
 	rounds: ConversationRound[],
 	sessions: SessionNode[],

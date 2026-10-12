@@ -71,7 +71,7 @@ Azure OpenAI 的默认模型是保存的 deployment，Azure 用量与 Copilot �
 
 ### 3. 开始一次探索
 
-1. 在 **Sources → Add sources** 添加想研究的代码或文档目录。
+1. 在 **Workspace → Sources → Add sources** 添加想研究的代码或文档目录。
 2. 点击左侧 **Chats → New chat**，试着问：
 
    > 请根据这个项目的源码解释一次请求的完整处理路径，并指出值得继续研究的两个问题。

@@ -33,7 +33,9 @@ import {
 	validatePiPluginRemoveRequest,
 	validateIdRequest,
 	validateSourceSearchRequest,
+	validateSourceIndexingSaveRequest,
 	validateWorkspaceDiffRequest,
+	validateWorkspaceSwitchRequest,
 	validateSummaryRequest,
 	validatePathSummaryRequest,
 	validateKnowledgeExtractionRequest,
@@ -332,10 +334,20 @@ function registerIpcHandlers(): void {
 			path: await settingsStore.getWorkspacePath(),
 		})),
 	);
+	ipcMain.handle(ipcChannels.workspaceHistory, async (event) =>
+		withValidSender(event, () => settingsStore.getWorkspaceHistory()),
+	);
+	ipcMain.handle(ipcChannels.switchWorkspace, async (event, payload) =>
+		withValidSender(event, async () => {
+			const request = validateWorkspaceSwitchRequest(payload);
+			await settingsStore.switchWorkspace(request.path);
+			return { path: await settingsStore.getWorkspacePath() };
+		}),
+	);
 	ipcMain.handle(ipcChannels.selectWorkspace, async (event) =>
 		withValidSender(event, async () => {
 			const selection = await dialog.showOpenDialog(mainWindow!, {
-				properties: ["openDirectory"],
+				properties: ["openDirectory", "createDirectory"],
 				title: "Select Rhyza workspace",
 			});
 			if (!selection.canceled && selection.filePaths[0]) {
@@ -359,8 +371,19 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.sourceRefresh, async (event, payload) =>
 		withValidSender(event, () => sourceService.refresh(validateIdRequest(payload).id)),
 	);
-	ipcMain.handle(ipcChannels.sourceArchive, async (event, payload) =>
-		withValidSender(event, () => sourceService.archive(validateIdRequest(payload).id)),
+	ipcMain.handle(ipcChannels.sourceIndexingGet, async (event, payload) =>
+		withValidSender(event, () => sourceService.getIndexingConfig(validateIdRequest(payload).id)),
+	);
+	ipcMain.handle(ipcChannels.sourceIndexingSave, async (event, payload) =>
+		withValidSender(event, () =>
+			sourceService.saveIndexingConfig(validateSourceIndexingSaveRequest(payload)),
+		),
+	);
+	ipcMain.handle(ipcChannels.sourceRemove, async (event, payload) =>
+		withValidSender(event, async () => {
+			await sourceService.remove(validateIdRequest(payload).id);
+			return { ok: true as const };
+		}),
 	);
 	ipcMain.handle(ipcChannels.sourceSearch, async (event, payload) =>
 		withValidSender(event, () => sourceService.search(validateSourceSearchRequest(payload))),

@@ -28,9 +28,10 @@
 | Agent        | 动态模型目录            | Partial   | Copilot/Codex 可刷新目录；Claude Code 支持别名；Azure OpenAI 使用保存的 deployment，无自动能力发现 |
 | Agent        | GitHub Enterprise 域名  | Planned   | 当前认证流程固定使用 `github.com`                                             |
 | Sources      | 本地目录索引            | Available | 代码/文本文件清单、Git revision 和状态持久化                                  |
+| Sources      | 索引排除配置            | Available | 每个资料源多选排除目录与自定义规则，保存到 Catalog 后立即重新索引              |
 | Sources      | 文本搜索与片段读取      | Available | 确定性 keyword/path ranking；读取有路径和长度边界                             |
 | Sources      | Embedding/向量检索      | Planned   | `indexed` 目前不表示语义向量索引                                              |
-| Sources      | Reindex/Archive         | Available | 支持刷新扫描和归档；不删除原目录                                              |
+| Sources      | Reindex/Delete source   | Available | 支持刷新扫描和确认删除；仅移除当前 Workspace 注册，保留文件及历史对话/知识      |
 | Knowledge    | Entity/Relation/Diagram | Available | Workspace 级存储、来源、版本和链接                                            |
 | Knowledge    | 自动提取                | Available | 每轮后按策略生成或提交知识变更                                                |
 | Knowledge    | Proposed ChangeSet      | Available | Suggest 模式可接受或拒绝变更                                                  |
@@ -42,6 +43,7 @@
 | Diagram      | 通用 HTML Preview       | Available | 自包含 HTML 经 Main 校验后保存快照并在沙箱 iframe 展示                        |
 | Diagram      | Archify 交互图表        | Available | 作为可选 Pi extension 安装，不内置到宿主                                      |
 | Workspace    | 按路径隔离状态          | Available | 规范化 Workspace Path 映射独立 state/source 文件                              |
+| Workspace    | 历史列表切换            | Available | Workspace 页展示最近工作区，历史全局持久化；添加目录时才打开系统选择器          |
 | Workspace    | Git Worktree 隔离       | Partial   | 可写 Session 会尝试创建；失败时回退原 Workspace                               |
 | Workspace    | Diff 与 patch 导出      | Available | Changes 页读取当前 Session 绑定目录                                           |
 | Settings     | Light/Dark              | Available | App 与 HTML/Diagram 预览同步主题                                              |
@@ -77,7 +79,7 @@ Rhyza 的基本单位是 Session 和 Turn。用户从历史回答继续时，新
 - Chats 列表展示层级、标题、状态和 usage；
 - Node view 以图形节点预览 Conversation Round；
 - 全局搜索查找所有 Chat；
-- Chats 顶部可按叶节点的标记状态多选筛选，保留命中叶节点的祖先路径；列表和 Node view 共用筛选条件，不切换当前阅读中的会话；
+- Chats 顶部可按叶节点的标记状态多选筛选，保留命中叶节点的祖先路径；列表和 Node view 共用筛选条件，不切换当前阅读中的会话；条件按 Workspace 保存，切回工作区或重启应用时恢复上次选择；
 - Explain 节点标题显示所引用内容的简短预览，已有的普通 `explain` 标题同样适用，手动改过的标题保留；
 - 宽屏阅读 Markdown 回答时，中间区域左侧显示当前聚焦回答的标题目录，可跳转并高亮当前章节；空间不足时先收窄正文，达到最小宽度或回答没有标题时不显示目录；
 - Markdown 标题支持逐节折叠，目录跳转和页面内查找会展开目标章节，折叠不会重置嵌入式 HTML 预览；
@@ -86,6 +88,8 @@ Rhyza 的基本单位是 Session 和 Turn。用户从历史回答继续时，新
 ## 2. Sources
 
 Source Catalog 按 Workspace 隔离。扫描只建立受支持文本文件的相对路径清单，并记录 Git revision（若适用）。搜索时按 query 拆分关键词，结合路径权重和文本命中排序；Agent 只能读取已索引 Source 中的相对路径片段。
+
+扫描与旧清单加载共享排除策略：默认过滤内部调试数据、依赖、构建产物及缓存，读取 Source 范围内的根级和嵌套 `.gitignore`，并支持根级 `.rhyzaignore` 覆盖 Git 规则。默认目录排除不可被反向规则解除。旧清单剔除忽略项后同步文件数，搜索与 Agent 读取不会绕过清单。具体目录、优先级及示例见[使用指南](user-guide.md#35-添加和搜索-sources)。
 
 安全与资源边界：
 
