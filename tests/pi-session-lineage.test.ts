@@ -44,6 +44,14 @@ test("frontend nodes map one-to-one to persistent Pi sessions with real parent p
 			persistedAfterFirstMessage.map((session) => session.id),
 			["kb-root"],
 		);
+		root.sessionManager.appendCustomEntry("rhyza.mcp-loadout", {
+			frontendTurnId: "root-assistant",
+			tools: ["tool_search", "mcp__fixture__early"],
+		});
+		root.sessionManager.appendCustomEntry("rhyza.mcp-loadout", {
+			frontendTurnId: "root-later-assistant",
+			tools: ["tool_search", "mcp__fixture__early", "mcp__fixture__later"],
+		});
 
 		const reopenedRoot = await openOrCreatePiSession({
 			workspacePath: path.join(dataRoot, "root-worktree"),
@@ -80,6 +88,15 @@ test("frontend nodes map one-to-one to persistent Pi sessions with real parent p
 		assert.equal(
 			child.sessionManager.getEntries().filter((entry) => entry.type === "custom_message").length,
 			1,
+		);
+		const inherited = child.sessionManager
+			.getEntries()
+			.find((entry) => entry.type === "custom" && entry.customType === "rhyza.mcp-loadout");
+		assert(inherited?.type === "custom");
+		assert.deepEqual(
+			inherited.data,
+			{ frontendTurnId: "root-assistant", tools: ["tool_search", "mcp__fixture__early"] },
+			"A branch must not inherit tools discovered after its selected parent turn.",
 		);
 		child.sessionManager.appendMessage({
 			role: "assistant",

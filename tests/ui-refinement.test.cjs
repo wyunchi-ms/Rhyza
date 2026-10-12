@@ -980,6 +980,7 @@ if (!process.versions.electron) {
 		for (const heading of [
 			"provider-heading",
 			"plugins-heading",
+			"mcp-heading",
 			"knowledge-heading",
 			"language-heading",
 			"appearance-heading",

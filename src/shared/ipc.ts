@@ -1,4 +1,12 @@
 import { isRecord } from "./value.js";
+import type {
+	McpActionRequest,
+	McpEvent,
+	McpOverview,
+	McpResourceRequest,
+	McpSaveRequest,
+	McpTarget,
+} from "./mcp.js";
 
 export const RHYZA_BRIDGE_NAME = "rhyza" as const;
 
@@ -14,6 +22,14 @@ export const ipcChannels = {
 	pluginInstall: "rhyza:plugin-install",
 	pluginSelectLocal: "rhyza:plugin-select-local",
 	pluginRemove: "rhyza:plugin-remove",
+	mcpList: "rhyza:mcp-list",
+	mcpEdit: "rhyza:mcp-edit",
+	mcpSave: "rhyza:mcp-save",
+	mcpRemove: "rhyza:mcp-remove",
+	mcpTrust: "rhyza:mcp-trust",
+	mcpAction: "rhyza:mcp-action",
+	mcpResources: "rhyza:mcp-resources",
+	mcpEvent: "rhyza:mcp-event",
 	getWorkspace: "rhyza:get-workspace",
 	workspaceHistory: "rhyza:workspace-history",
 	switchWorkspace: "rhyza:switch-workspace",
@@ -644,6 +660,14 @@ export interface RhyzaBridge {
 	pluginInstall(request: PiPluginInstallRequest): Promise<PiPluginMutationResponse>;
 	pluginSelectLocal(): Promise<{ source: string | null }>;
 	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;
+	mcpList(): Promise<McpOverview>;
+	mcpEdit(request: McpTarget): Promise<McpSaveRequest>;
+	mcpSave(request: McpSaveRequest): Promise<{ ok: true }>;
+	mcpRemove(request: McpTarget): Promise<{ ok: true }>;
+	mcpTrust(request: { trusted: boolean }): Promise<{ ok: true }>;
+	mcpAction(request: McpActionRequest): Promise<{ ok: true }>;
+	mcpResources(request: McpResourceRequest): Promise<string>;
+	onMcpEvent(listener: (event: McpEvent) => void): () => void;
 	getWorkspace(): Promise<WorkspaceInfo>;
 	workspaceHistory(): Promise<WorkspaceHistoryEntry[]>;
 	switchWorkspace(request: WorkspaceSwitchRequest): Promise<WorkspaceInfo>;

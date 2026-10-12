@@ -156,11 +156,15 @@ test("SDK upgrade preserves host context, cache evidence, and explicit feature g
 	assert.equal(JSON.parse(await readFile(settingsPath, "utf8")).cacheWarming, "idle");
 });
 
-test("Pi SDK roadmap persists exactly the eight requested, unfinished capabilities", async () => {
+test("Pi SDK roadmap preserves eight capabilities with only MCP and discovery delivered", async () => {
 	const content = await readFile(new URL("../docs/TODO-pi-sdk.md", import.meta.url), "utf8");
 	const todos = parseTodoChecklist(content);
 	assert.equal(todos.length, 8);
-	assert(todos.every((todo) => !todo.completed && todo.children.length === 0));
+	assert(todos.every((todo) => todo.children.length === 0));
+	assert.deepEqual(
+		todos.map((todo) => todo.completed),
+		[true, true, false, false, false, false, false, false],
+	);
 	assert.deepEqual(
 		todos.map((todo) => todo.text.split("：")[0]),
 		[

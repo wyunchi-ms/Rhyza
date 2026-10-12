@@ -1,0 +1,211 @@
+.mcp-settings,
+.mcp-editor fieldset,
+.mcp-details {
+	display: grid;
+	gap: 1rem;
+	min-width: 0;
+}
+
+.mcp-editor fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.mcp-settings label {
+	display: grid;
+	gap: 0.4rem;
+	font-size: 0.8rem;
+	font-weight: 500;
+	min-width: 0;
+}
+
+.mcp-settings .field {
+	width: 100%;
+	min-width: 0;
+}
+
+.mcp-settings textarea {
+	font-family: var(--font-mono, monospace);
+	resize: vertical;
+}
+
+.mcp-toolbar,
+.mcp-server-heading,
+.mcp-trust {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.mcp-toolbar {
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+
+.mcp-toolbar h2,
+.mcp-confirmation h2 {
+	margin: 0;
+	font-size: 0.95rem;
+}
+
+.mcp-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.mcp-actions button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	white-space: nowrap;
+}
+
+.mcp-trust > div,
+.mcp-server-heading > div {
+	flex: 1;
+	min-width: 0;
+}
+
+.mcp-server-list,
+.mcp-server {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.mcp-server-heading > div {
+	display: grid;
+	gap: 0.2rem;
+}
+
+.mcp-state {
+	font-size: 0.75rem;
+	color: var(--color-secondary);
+}
+
+.mcp-state.is-connected {
+	color: var(--ui-brand-accent);
+}
+
+.mcp-state.is-failed,
+.mcp-error {
+	color: var(--ui-danger);
+}
+
+.mcp-error {
+	overflow-wrap: anywhere;
+	font-size: 0.8rem;
+}
+
+.mcp-notice,
+.mcp-empty,
+.mcp-loading {
+	margin: 0;
+	padding: 0.8rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	background: var(--ui-surface-muted);
+	color: var(--color-secondary);
+	font-size: 0.8rem;
+	line-height: 1.6;
+}
+
+.mcp-form-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+}
+
+.mcp-tools {
+	display: grid;
+}
+
+.mcp-tool {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 9rem 10rem;
+	gap: 0.75rem;
+	padding-block: 0.85rem;
+	border-bottom: 1px solid var(--ui-border);
+}
+
+.mcp-tool > div,
+.mcp-tool strong,
+.mcp-server strong {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+
+.mcp-tool small {
+	display: block;
+	color: var(--color-secondary);
+}
+
+.mcp-resources,
+.mcp-editor details {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.mcp-resources > *,
+.mcp-editor details > * {
+	margin-block: 0.5rem;
+}
+
+.mcp-settings summary {
+	cursor: pointer;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.mcp-resource-preview {
+	max-height: 24rem;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	padding: 0.75rem;
+	background: var(--ui-surface-muted);
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	font-size: 0.75rem;
+}
+
+.mcp-confirmation {
+	max-width: min(32rem, calc(100vw - 2rem));
+	padding: 1.4rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.65rem;
+	background: var(--color-bg);
+	color: var(--color-primary);
+}
+
+.mcp-confirmation::backdrop {
+	background: rgb(15 23 42 / 45%);
+}
+
+.mcp-confirmation p {
+	font-size: 0.85rem;
+	line-height: 1.65;
+}
+
+@container settings (max-width: 850px) {
+	.mcp-tool {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.mcp-tool > div {
+		grid-column: 1 / -1;
+	}
+}
+
+@container settings (max-width: 550px) {
+	.mcp-form-grid,
+	.mcp-tool {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.mcp-trust {
+		flex-wrap: wrap;
+	}
+}

@@ -271,6 +271,33 @@ Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离�
 - Light / Dark；
 - Diagram 会跟随 App 主题。
 
+### MCP servers
+
+进入 **Settings → MCP servers → Add server**，选择 `stdio` 本地程序或 `Streamable HTTP` 端点。MCP 用于经 Pi 执行的 Copilot、Codex 和 Azure OpenAI 聊天；Claude Code 不使用这里的服务器。标题、路径汇总和知识提取不会因此获得 MCP 工具。
+
+本地服务器填写一个可执行程序，参数填写 JSON 字符串数组，不把整条 shell 命令填入 Executable。相对 Working directory 从实际聊天目录（包括隔离 Worktree）解析。HTTP 只允许 HTTPS，或 loopback HTTP；不支持旧版 SSE。环境变量和 Header 使用 JSON 对象，可引用 `${ENVIRONMENT_VARIABLE}`；不支持 `!command` 获取凭据。已有字面量凭据显示为 `${RHYZA_STORED_SECRET}`，原样保存会保留原值；更改程序、参数、工作目录、URL 或 OAuth client 时，必须移除或重新输入隐藏凭据。
+
+**Import MCP configuration** 接受带 `mcpServers` 的 JSON，每次选择一个服务器，检查表单后保存，不会直接启用整份导入文件。用户配置保存在 `~\.pi\agent\mcp.json`；项目配置保存在原 Workspace 的 `.pi\mcp.json`，不是生成的 Worktree。项目配置必须先经 **Trust project** 确认才会加载，同名项目服务器覆盖用户服务器。不要把凭据写进受版本控制的项目文件。**Revoke trust** 会断开项目连接并清除该 Workspace 的工具授权，保留聊天记录。
+
+保存后查看连接状态；失败会显示错误，可用 **Reconnect** 重试。未提供 `Authorization` Header 的 HTTP 服务器可使用 **Sign in** 在浏览器完成 OAuth/PKCE，支持已注册 client、凭据持久化和刷新；**Cancel sign-in** 取消等待，**Sign out** 移除 OAuth 登录。OAuth 凭据由 Pi 在本地管理，不进入设置页。直接修改配置文件后，点击 **Refresh** 或发送下一轮聊天会重新加载配置，不热替换正在执行的请求。
+
+在 **Tools & resources** 审核工具并保存：
+
+| 设置 | 行为 |
+| --- | --- |
+| Blocked | 默认拒绝新工具；服务器的 read-only/destructive 标记只是提示，不能自动授权 |
+| Approved read | 允许在只读聊天调用该精确工具；需自行确认其确实不会修改数据 |
+| Approved write | 仅允许可写且成功隔离的聊天调用 |
+| Discover on demand | 模型用 `tool_search` 查找并加载，不把全部工具声明放入每轮请求 |
+| Always available | 小型、常用工具直接进入当前工具集 |
+| Hidden | 不可调用；与 Blocked 的授权设置相互独立 |
+
+授权按 Workspace、配置来源、服务器身份和原始工具名称保存，不支持通配授权。修改服务器身份会清空原授权，重新连接后需再次审核。按需加载的工具会随会话重启恢复；从历史回答创建分支时，只继承那个回答时的工具集，不继承父会话后来发现的工具。
+
+展开 **Resources**，可列出资源或 URI templates，粘贴 `nextCursor` 继续下一页，再填写 URI 读取文本预览。预览最多 128 KiB（按 UTF-8 字节计算），超限明确报错；非文本资源没有文本预览。聊天中的资源工具需明确指定服务器。
+
+本地 MCP 程序以当前 OS 账号运行，**不是沙箱**。授权为 read 不会强制约束服务器实际行为；Worktree 也不能隔离远程 API、数据库或其他外部副作用。只连接和授权已审核的服务器。此入口不启用 Codemode，也不直接加载 Pi 插件注册的 extension-only MCP 服务器；需把相同配置加入用户或项目配置后审核。
+
 ### Knowledge policy
 
 - **Auto-extract Knowledge**：每轮完成后运行知识提取。
@@ -305,6 +332,10 @@ Windows 中的 `~` 表示当前用户目录，例如 `C:\Users\<username>`。
 | `~\.pi-graph\diagnostics\performance-YYYY-MM-DD.jsonl` | 结构化性能诊断                                         |
 | `~\.pi\agent\auth.json`                                | Pi Provider 凭据                                       |
 | `~\.pi\agent\settings.json`                            | Pi package 等共享配置                                  |
+| `~\.pi\agent\mcp.json`                                 | 用户级 MCP 服务器配置，可能含字面量凭据                |
+| `~\.pi\agent\mcp-auth.json`                            | SDK 管理的 MCP OAuth 凭据，不进入 Renderer             |
+| `<Workspace>\.pi\mcp.json`                            | 项目 MCP 配置，必须显式信任                            |
+| `~\.pi-graph\mcp\<hash>.json`                         | 按 Workspace 保存的项目信任及精确工具授权              |
 | `~\.pi\agent\rhyza-sessions\`                          | Rhyza 的 Pi 会话记录                                   |
 | `~\.pi\agent\models-store.json`                        | Pi 动态模型目录缓存                                    |
 | `%USERPROFILE%\.codex`                                 | Codex Desktop/CLI 与 Rhyza 共享的 Codex 配置和登录状态 |

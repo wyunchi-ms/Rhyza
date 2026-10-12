@@ -1,4 +1,5 @@
 import type { PiPluginInfo } from "../shared/ipc";
+import { McpSettings } from "./settings/McpSettings";
 import { AzureOpenAISettings } from "../components/AzureOpenAISettings";
 import clsx from "clsx";
 import {
@@ -121,6 +122,17 @@ const Settings: React.FC = () => {
 								<p>{t("These plugins are supported only with GitHub Copilot through Pi.")}</p>
 							</header>
 							<PluginSettings />
+						</section>
+						<section
+							className="settings-section"
+							aria-labelledby="mcp-heading"
+							hidden={selectedSection !== "mcp-heading"}
+						>
+							<header className="settings-section-header">
+								<h1 id="mcp-heading">{t("MCP servers")}</h1>
+								<p>{t("Connect external tools and resources with explicit permissions.")}</p>
+							</header>
+							{selectedSection === "mcp-heading" && <McpSettings />}
 						</section>
 
 						<section

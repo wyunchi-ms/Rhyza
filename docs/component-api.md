@@ -18,6 +18,18 @@ Renderer 只通过 `window.rhyza` 访问桌面能力。类型、channel 与参�
 
 新增 bridge 方法的完整顺序和安全约束见[开发指南详解](development-guide.md#preload-与-ipc)；功能对用户的承诺以[功能矩阵](features.md)为准。
 
+### MCP 配置与操作
+
+`McpSettings` 只在选中 `mcp-heading` 时挂载，通过 `mcpList()` 读取当前 Workspace 的连接状态和配置错误；不在访问其他设置分区时启动 MCP。`mcpEdit({ scope, name })` 返回编辑草稿，env、Header 和 OAuth client secret 的字面量用 `${RHYZA_STORED_SECRET}` 替代；原始凭据及 OAuth token 不进入 Renderer。保存失败保留草稿，背景状态刷新不清除操作错误。
+
+`mcpSave({ scope, name, config, policy })` 的 config 由 `src/shared/mcp.ts` 校验，接受 stdio / HTTP、direct / deferred / hidden exposure 和逐工具覆盖；`policy.tools` 只接受原始工具名称及 blocked / read / write。Main 将隐藏占位符绑定到原字段及原目的地，服务器身份变更会撤销原授权。`mcpRemove({ scope, name })` 只删除配置与当前 Workspace 的授权，不删除聊天。`mcpTrust({ trusted })` 作用于当前 Workspace；信任、撤销和删除使用原生模态 dialog，提交期间禁止重复确认和关闭，失败保留窗口。
+
+`mcpAction({ scope, name, action })` 支持 reconnect / login / logout / cancel-login，通过 SDK 的公开 `/mcp` command 执行；登录事件包含浏览器 URL，取消作用于当前登录目标。`mcpResources({ scope, name, action, cursor?, uri? })` 支持 list / templates / read，返回至多 128 KiB 的文本或资源 JSON，读取超限及无效配置会拒绝。`onMcpEvent()` 返回取消订阅函数；changed 事件触发节流刷新，auth 事件更新浏览器登录入口。
+
+共享声明在 `src/shared/ipc.ts`，校验与 MCP 数据类型在 `src/shared/mcp.ts`。两个 preload（`.ts` 与实际发货的 `.cjs`）必须同步白名单；所有 Main handler 校验 sender，并从 SettingsStore 取得当前 Workspace，不接受 Renderer 任意指定目录。
+
+历史工具集恢复必须等待 SDK 实际注册工具，再将可见工具加入当前声明集；收到 `tools/list` 不代表注册已完成，资源元数据发现仍可能进行中。等待沿用至多 10 秒的启动边界，不重新激活 hidden 或已从服务器撤回的工具。
+
 ### 工作区选择
 
 `WorkspacePicker` 使用原生模态 `dialog` 提供焦点约束、Escape 关闭及关闭后焦点恢复。`workspaceHistory()` 返回全局最近使用列表（`path`、`lastUsedAt`）；`switchWorkspace({ path })` 只接受历史中的目录并验证其仍存在；`selectWorkspace()` 仅由 **Add workspace** 调用系统选择器。取消目录选择不重载当前状态。成功切换后，Sources 同步 persistence scope、加载该目录状态并清空旧搜索结果；目录校验失败在列表内显示，原工作区不变。

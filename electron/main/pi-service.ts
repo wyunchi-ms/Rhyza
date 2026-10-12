@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
 	createAgentSession,
+	createToolSearchExtension,
 	defineTool,
 	DefaultResourceLoader,
 	getAgentDir,
@@ -53,6 +54,7 @@ import type { AzureOpenAIConfig } from "../../src/shared/ipc.js";
 import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
+import { McpService, type McpRuntime } from "./mcp-service.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
 import {
@@ -87,6 +89,9 @@ interface ActiveSession {
 
 	unsubscribe: () => void;
 	sourceRefs: Map<string, SourceReference>;
+	mcpRevision: number;
+	mcp: McpRuntime;
+	writable: boolean;
 }
 
 type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
@@ -112,6 +117,7 @@ export class PiService {
 	private azureConfigSaving = false;
 	private activeInferenceCount = 0;
 	private readonly pathSummaryControllers = new Set<AbortController>();
+	readonly mcp: McpService;
 
 	constructor(
 		userDataPath: string,
@@ -119,11 +125,13 @@ export class PiService {
 		protected readonly emitAgentEvent: (event: AgentBridgeEvent) => void = () => {},
 		agentDir: string = getAgentDir(),
 		protected readonly sourceService?: SourceService,
+		mcp?: McpService,
 	) {
 		this.agentDir = agentDir;
 		this.azureOpenAI = new AzureOpenAIProvider(userDataPath);
 		this.requestDumpDir = path.join(userDataPath, "model-request-dumps");
 		this.worktreeService = new WorktreeService(userDataPath);
+		this.mcp = mcp ?? new McpService(agentDir, userDataPath);
 	}
 
 	async getAzureOpenAIConfig(): Promise<AzureOpenAIConfig | null> {
@@ -416,6 +424,12 @@ export class PiService {
 				await session.sendUserMessage(promptContent);
 			} finally {
 				unsubscribeUsage();
+				session.sessionManager.appendCustomEntry("rhyza.mcp-loadout", {
+					frontendTurnId: request.frontendTurnId,
+					tools: session
+						.getActiveToolNames()
+						.filter((name) => name.startsWith("mcp__") || name === "tool_search"),
+				});
 			}
 			return {
 				ok: true,
@@ -776,11 +790,14 @@ export class PiService {
 		request: PiPromptRequest,
 		model: PiModel | undefined,
 	): Promise<ActiveSession> {
+		await this.mcp.refresh(workspacePath);
 		const modelKey = model ? `${model.provider}/${model.id}` : undefined;
 		const activeSession = this.activeSessions.get(request.frontendSessionId);
 		if (
 			activeSession?.sourceWorkspacePath === workspacePath &&
-			activeSession.sessionGeneration === request.sessionGeneration
+			activeSession.sessionGeneration === request.sessionGeneration &&
+			activeSession.mcpRevision === this.mcp.revision(workspacePath) &&
+			activeSession.writable === (request.writable === true)
 		) {
 			activeSession.frontendTurnId = request.frontendTurnId;
 			if (model && activeSession.modelKey !== modelKey) {
@@ -797,189 +814,212 @@ export class PiService {
 			request.writable === true,
 		);
 		const settingsManager = this.createSessionSettings(sessionWorkspace.path);
-		const resourceLoader = new DefaultResourceLoader({
-			cwd: sessionWorkspace.path,
-			agentDir: this.agentDir,
-			settingsManager,
-
-			appendSystemPromptOverride: (base) => [
-				...base,
-				workspaceExplorationGuidance,
-				todoTrackingGuidance,
-				...(this.sourceService ? [sourceRetrievalGuidance] : []),
-				...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
-				responsePresentationGuidance,
-			],
-		});
-		await resourceLoader.reload();
-		const extensionToolNames = resourceLoader
-			.getExtensions()
-			.extensions.flatMap((extension) => [...extension.tools.keys()]);
-		const { sessionManager } = await openOrCreatePiSession({
-			workspacePath: sessionWorkspace.path,
-			sessionDir: path.join(this.agentDir, "rhyza-sessions"),
-			frontendSessionId: request.sessionGeneration
-				? `${request.frontendSessionId}-${request.sessionGeneration}`
-				: request.frontendSessionId,
-			parentFrontendSessionId: request.parentFrontendSessionId,
-			forkedFromTurnId: request.forkedFromTurnId,
-			transcript: request.transcript,
-		});
-		const sourceRefs = new Map<string, SourceReference>();
-		const knowledgeInventory: KnowledgeInventoryHolder = {
-			current: request.knowledgeInventory ?? emptyKnowledgeInventory(),
-		};
-		const customTools = [
-			...this.createSourceTools(sourceRefs, workspacePath),
-			...(request.knowledgeTools ? this.createKnowledgeTools(knowledgeInventory) : []),
-		];
-		const builtInTools =
-			request.writable && sessionWorkspace.isolated
-				? ["read", "grep", "find", "ls", "edit", "write", "bash"]
-				: ["read", "grep", "find", "ls"];
-		const { session } = await createAgentSession({
-			cwd: sessionWorkspace.path,
-			agentDir: this.agentDir,
-			modelRuntime: await this.getModelRuntime(),
-			model,
-			thinkingLevel: request.thinkingLevel ?? "medium",
-			sessionManager,
-			settingsManager,
-			resourceLoader,
-			tools: [
-				...new Set([
-					...builtInTools,
-					...customTools.map((tool) => tool.name),
-					...extensionToolNames,
-				]),
-			],
-			customTools,
-		});
-		let requestSequence = 0;
-		let activeRequestId: string | undefined;
-		let activeSnapshot: AgentModelRequestSnapshot | undefined;
-		let activeCache: AgentCacheEvidence | undefined;
-		const originalStream = session.agent.streamFunction;
-		session.agent.streamFunction = async (requestModel, context, options) => {
-			activeRequestId = crypto.randomUUID();
-			activeCache = undefined;
-			const frontendTurnId = created.frontendTurnId ?? "unmapped";
-			const dumpPath = path.join(
-				this.requestDumpDir,
-				safeDumpPart(request.frontendSessionId),
-				safeDumpPart(frontendTurnId),
-				`${String(requestSequence + 1).padStart(3, "0")}-${activeRequestId}.json`,
-			);
-			const snapshot: AgentModelRequestSnapshot = {
-				id: activeRequestId,
-				sequence: ++requestSequence,
-				timestamp: new Date().toISOString(),
-				model: requestModel.id,
-				provider: requestModel.provider,
-				api: requestModel.api,
-				thinking: options?.reasoning ?? "off",
-				frontendTurnId,
-				contextWindow: requestModel.contextWindow,
-				dumpPath,
-				context: sanitizeForRenderer({
-					systemPrompt: getCurrentSystemPrompt(context.messages),
-					messages: context.messages,
-					tools: getCurrentTools(context.messages),
-				}) as AgentModelRequestSnapshot["context"],
-			};
-			activeSnapshot = snapshot;
-			await writeRequestDump(dumpPath, snapshot);
-			this.emitAgentEvent({
-				type: "model_request",
-				sessionId: session.sessionId,
-				frontendSessionId: request.frontendSessionId,
-				requestId: activeRequestId,
-				modelRequest: snapshot,
-			});
-			return originalStream(requestModel, context, {
-				...options,
-				onProviderStreamEvent: async (data, streamModel) => {
-					await options?.onProviderStreamEvent?.(data, streamModel);
-					const cache = providerStreamCacheEvidence(data, streamModel.api);
-					if (cache) activeCache = cache;
-				},
-			});
-		};
-		const originalOnPayload = session.agent.onPayload;
-		session.agent.onPayload = async (payload, payloadModel) => {
-			const transformed = originalOnPayload
-				? await originalOnPayload(payload, payloadModel)
-				: payload;
-			const finalPayload = transformed === undefined ? payload : transformed;
-			const sanitizedPayload = sanitizeForRenderer(finalPayload);
-			if (activeSnapshot) {
-				activeSnapshot = { ...activeSnapshot, wirePayload: sanitizedPayload };
-				if (activeSnapshot.dumpPath)
-					await writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
-			}
-			this.emitAgentEvent({
-				type: "wire_request",
-				sessionId: session.sessionId,
-				frontendSessionId: request.frontendSessionId,
-				requestId: activeRequestId,
-				wirePayload: sanitizedPayload,
-			});
-			return transformed;
-		};
-		const unsubscribe = session.subscribe((event) => {
-			this.emitAgentEvent(
-				toAgentBridgeEvent(
-					session.sessionId,
-					request.frontendSessionId,
-					event,
-					activeRequestId,
-					activeCache,
-				),
-			);
-			if (
-				event.type === "message_end" &&
-				"message" in event &&
-				typeof event.message === "object" &&
-				event.message !== null &&
-				"role" in event.message &&
-				event.message.role === "assistant"
-			) {
-				const usage = getEventUsage(event);
-				if (activeSnapshot && usage) {
-					activeSnapshot = {
-						...activeSnapshot,
-						usage,
-						cache: activeCache ?? responseCacheEvidence(event.message),
-					};
-					if (activeSnapshot.dumpPath)
-						void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
-				}
-				activeRequestId = undefined;
-				activeSnapshot = undefined;
-				activeCache = undefined;
-			}
-		});
-		const created: ActiveSession = {
-			session,
-			sourceWorkspacePath: workspacePath,
-			workspacePath: sessionWorkspace.path,
-			isolated: sessionWorkspace.isolated,
-			frontendSessionId: request.frontendSessionId,
-			frontendTurnId: request.frontendTurnId,
-			modelKey,
-			sessionGeneration: request.sessionGeneration,
-			knowledgeInventory,
-			unsubscribe,
-			sourceRefs,
-		};
-		if (model?.provider === codexAppServerProviderId) {
-			this.codexAppServer.registerSession(session.sessionId, {
+		const mcp = this.mcp.createRuntime(
+			workspacePath,
+			() => request.writable === true && sessionWorkspace.isolated,
+		);
+		try {
+			const resourceLoader = new DefaultResourceLoader({
 				cwd: sessionWorkspace.path,
-				writable: request.writable === true,
+				agentDir: this.agentDir,
+				settingsManager,
+				extensionFactories: [createToolSearchExtension(), mcp.extension],
+
+				appendSystemPromptOverride: (base) => [
+					...base,
+					workspaceExplorationGuidance,
+					todoTrackingGuidance,
+					...(this.sourceService ? [sourceRetrievalGuidance] : []),
+					...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
+					responsePresentationGuidance,
+				],
 			});
+			await resourceLoader.reload();
+			const extensionToolNames = resourceLoader
+				.getExtensions()
+				.extensions.flatMap((extension) => [...extension.tools.keys()])
+				.filter((name) => name !== "tool_search");
+			const { sessionManager } = await openOrCreatePiSession({
+				workspacePath: sessionWorkspace.path,
+				sessionDir: path.join(this.agentDir, "rhyza-sessions"),
+				frontendSessionId: request.sessionGeneration
+					? `${request.frontendSessionId}-${request.sessionGeneration}`
+					: request.frontendSessionId,
+				parentFrontendSessionId: request.parentFrontendSessionId,
+				forkedFromTurnId: request.forkedFromTurnId,
+				transcript: request.transcript,
+			});
+			const sourceRefs = new Map<string, SourceReference>();
+			const knowledgeInventory: KnowledgeInventoryHolder = {
+				current: request.knowledgeInventory ?? emptyKnowledgeInventory(),
+			};
+			const customTools = [
+				...this.createSourceTools(sourceRefs, workspacePath),
+				...(request.knowledgeTools ? this.createKnowledgeTools(knowledgeInventory) : []),
+			];
+			const builtInTools =
+				request.writable && sessionWorkspace.isolated
+					? ["read", "grep", "find", "ls", "edit", "write", "bash"]
+					: ["read", "grep", "find", "ls"];
+			settingsManager.applyOverrides({
+				defaultTools: [
+					...new Set([
+						...builtInTools,
+						...customTools.map((tool) => tool.name),
+						...extensionToolNames,
+					]),
+				],
+			});
+			const { session } = await createAgentSession({
+				cwd: sessionWorkspace.path,
+				agentDir: this.agentDir,
+				modelRuntime: await this.getModelRuntime(),
+				model,
+				thinkingLevel: request.thinkingLevel ?? "medium",
+				sessionManager,
+				settingsManager,
+				resourceLoader,
+				excludeTools:
+					request.writable && sessionWorkspace.isolated
+						? ["powershell", "codemode"]
+						: ["edit", "write", "bash", "powershell", "codemode"],
+				customTools,
+			});
+			let requestSequence = 0;
+			let activeRequestId: string | undefined;
+			let activeSnapshot: AgentModelRequestSnapshot | undefined;
+			let activeCache: AgentCacheEvidence | undefined;
+			const originalStream = session.agent.streamFunction;
+			session.agent.streamFunction = async (requestModel, context, options) => {
+				activeRequestId = crypto.randomUUID();
+				activeCache = undefined;
+				const frontendTurnId = created.frontendTurnId ?? "unmapped";
+				const dumpPath = path.join(
+					this.requestDumpDir,
+					safeDumpPart(request.frontendSessionId),
+					safeDumpPart(frontendTurnId),
+					`${String(requestSequence + 1).padStart(3, "0")}-${activeRequestId}.json`,
+				);
+				const snapshot: AgentModelRequestSnapshot = {
+					id: activeRequestId,
+					sequence: ++requestSequence,
+					timestamp: new Date().toISOString(),
+					model: requestModel.id,
+					provider: requestModel.provider,
+					api: requestModel.api,
+					thinking: options?.reasoning ?? "off",
+					frontendTurnId,
+					contextWindow: requestModel.contextWindow,
+					dumpPath,
+					context: sanitizeForRenderer({
+						systemPrompt: getCurrentSystemPrompt(context.messages),
+						messages: context.messages,
+						tools: getCurrentTools(context.messages),
+					}) as AgentModelRequestSnapshot["context"],
+				};
+				activeSnapshot = snapshot;
+				await writeRequestDump(dumpPath, snapshot);
+				this.emitAgentEvent({
+					type: "model_request",
+					sessionId: session.sessionId,
+					frontendSessionId: request.frontendSessionId,
+					requestId: activeRequestId,
+					modelRequest: snapshot,
+				});
+				return originalStream(requestModel, context, {
+					...options,
+					onProviderStreamEvent: async (data, streamModel) => {
+						await options?.onProviderStreamEvent?.(data, streamModel);
+						const cache = providerStreamCacheEvidence(data, streamModel.api);
+						if (cache) activeCache = cache;
+					},
+				});
+			};
+			const originalOnPayload = session.agent.onPayload;
+			session.agent.onPayload = async (payload, payloadModel) => {
+				const transformed = originalOnPayload
+					? await originalOnPayload(payload, payloadModel)
+					: payload;
+				const finalPayload = transformed === undefined ? payload : transformed;
+				const sanitizedPayload = sanitizeForRenderer(finalPayload);
+				if (activeSnapshot) {
+					activeSnapshot = { ...activeSnapshot, wirePayload: sanitizedPayload };
+					if (activeSnapshot.dumpPath)
+						await writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+				}
+				this.emitAgentEvent({
+					type: "wire_request",
+					sessionId: session.sessionId,
+					frontendSessionId: request.frontendSessionId,
+					requestId: activeRequestId,
+					wirePayload: sanitizedPayload,
+				});
+				return transformed;
+			};
+			const unsubscribe = session.subscribe((event) => {
+				this.emitAgentEvent(
+					toAgentBridgeEvent(
+						session.sessionId,
+						request.frontendSessionId,
+						event,
+						activeRequestId,
+						activeCache,
+					),
+				);
+				if (
+					event.type === "message_end" &&
+					"message" in event &&
+					typeof event.message === "object" &&
+					event.message !== null &&
+					"role" in event.message &&
+					event.message.role === "assistant"
+				) {
+					const usage = getEventUsage(event);
+					if (activeSnapshot && usage) {
+						activeSnapshot = {
+							...activeSnapshot,
+							usage,
+							cache: activeCache ?? responseCacheEvidence(event.message),
+						};
+						if (activeSnapshot.dumpPath)
+							void writeRequestDump(activeSnapshot.dumpPath, activeSnapshot);
+					}
+					activeRequestId = undefined;
+					activeSnapshot = undefined;
+					activeCache = undefined;
+				}
+			});
+			const created: ActiveSession = {
+				session,
+				sourceWorkspacePath: workspacePath,
+				workspacePath: sessionWorkspace.path,
+				isolated: sessionWorkspace.isolated,
+				frontendSessionId: request.frontendSessionId,
+				frontendTurnId: request.frontendTurnId,
+				modelKey,
+				sessionGeneration: request.sessionGeneration,
+				knowledgeInventory,
+				unsubscribe,
+				sourceRefs,
+				mcp,
+				mcpRevision: this.mcp.revision(workspacePath),
+				writable: request.writable === true,
+			};
+			mcp.session = session;
+			await session.bindExtensions({});
+			if (model?.provider === codexAppServerProviderId) {
+				this.codexAppServer.registerSession(session.sessionId, {
+					cwd: sessionWorkspace.path,
+					writable: request.writable === true,
+				});
+			}
+			this.activeSessions.set(request.frontendSessionId, created);
+			return created;
+		} catch (error) {
+			mcp.session?.dispose();
+			await mcp.close();
+			throw error;
 		}
-		this.activeSessions.set(request.frontendSessionId, created);
-		return created;
 	}
 
 	private createSourceTools(sourceRefs: Map<string, SourceReference>, workspacePath: string) {
@@ -1137,6 +1177,7 @@ export class PiService {
 		activeSession.unsubscribe();
 		this.codexAppServer.unregisterSession(activeSession.session.sessionId);
 		activeSession.session.dispose();
+		void activeSession.mcp.close();
 		this.activeSessions.delete(frontendSessionId);
 	}
 
@@ -1159,6 +1200,7 @@ export class PiService {
 		this.pendingAuxiliaryCancels.clear();
 		this.disposeAllSessions();
 		void this.codexAppServer.dispose();
+		void this.mcp.dispose();
 	}
 }
 

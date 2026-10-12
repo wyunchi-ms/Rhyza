@@ -27,3 +27,5 @@ npm run electron:dev
 工作区历史回归使用 `npm run test:workspace-history`，覆盖历史迁移、持久化、目录校验，以及隔离临时数据目录中的桌面选择列表、preload IPC 和状态切换。
 
 资料源索引回归使用 `npm run test:source-indexing`，覆盖默认/ignore 规则、旧清单过滤、每源排除配置、保存并重新索引，以及确认删除、失败保留、Workspace 隔离与历史数据保留的桌面流程。
+
+MCP 回归使用 `npm run test:mcp`，覆盖 stdio / HTTP、真实 OAuth/PKCE 与刷新/取消、工具发现和调用权限、外部配置变更与分支恢复，并编译 Main 后用真实 preload 检查服务器表单、导入、项目信任、权限/exposure、资源预览及错误保留。服务器、账号和 Workspace 都使用本地合成数据及 OS 临时目录，不联系真实 MCP 服务。

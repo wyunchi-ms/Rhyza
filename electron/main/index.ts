@@ -16,6 +16,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { AgentService } from "./agent-service.js";
 import { PiPluginService } from "./pi-plugin-service.js";
 import { listComposerSkills } from "./composer-skills.js";
+import { McpService } from "./mcp-service.js";
+import {
+	validateMcpAction,
+	validateMcpResource,
+	validateMcpSave,
+	validateMcpTarget,
+} from "../../src/shared/mcp.js";
 import { SettingsStore } from "./settings-store.js";
 import { SourceService } from "./source-service.js";
 import {
@@ -284,6 +291,59 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.pluginList, async (event) =>
 		withValidSender(event, () => piPluginService.list()),
 	);
+	ipcMain.handle(ipcChannels.mcpList, async (event) =>
+		withValidSender(event, async () =>
+			piService.mcp.overview(await settingsStore.getWorkspacePath()),
+		),
+	);
+	ipcMain.handle(ipcChannels.mcpEdit, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.mcp.edit(await settingsStore.requireWorkspacePath(), validateMcpTarget(payload)),
+		),
+	);
+	ipcMain.handle(ipcChannels.mcpSave, async (event, payload) =>
+		withValidSender(event, async () => {
+			await piService.mcp.save(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpSave(payload),
+			);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpRemove, async (event, payload) =>
+		withValidSender(event, async () => {
+			await piService.mcp.remove(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpTarget(payload),
+			);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpTrust, async (event, payload) =>
+		withValidSender(event, async () => {
+			if (!payload || typeof payload !== "object" || typeof payload.trusted !== "boolean")
+				throw new Error("Invalid MCP project trust.");
+			await piService.mcp.trust(await settingsStore.requireWorkspacePath(), payload.trusted);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpAction, async (event, payload) =>
+		withValidSender(event, async () => {
+			await piService.mcp.action(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpAction(payload),
+			);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpResources, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.mcp.resources(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpResource(payload),
+			),
+		),
+	);
 	ipcMain.handle(ipcChannels.composerSkills, async (event, payload) =>
 		withValidSender(event, async () => {
 			const { providerId } = validateProviderStatusRequest(payload);
@@ -541,6 +601,17 @@ app.whenReady().then(async () => {
 		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
 		undefined,
 		sourceService,
+		new McpService(
+			getAgentDir(),
+			dataRootPath,
+			(event) => mainWindow?.webContents.send(ipcChannels.mcpEvent, event),
+			(url) => {
+				const parsed = new URL(url);
+				if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password)
+					throw new Error("Invalid MCP authorization URL.");
+				return shell.openExternal(url);
+			},
+		),
 	);
 	app.once("before-quit", () => {
 		void piService.dispose();

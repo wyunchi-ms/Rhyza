@@ -7,6 +7,7 @@
 	--color-surface: #ffffff;
 	--ui-surface-muted: #f0f3f4;
 	--ui-brand-accent: #286f63;
+	--ui-danger: #b42318;
 	--ui-brand-ink: #226357;
 	--ui-brand-border: #a4c6be;
 	--ui-brand-soft-strong: #d7e9e3;
@@ -33,6 +34,7 @@
 	--color-surface: #1c2225;
 	--ui-surface-muted: #222a2d;
 	--ui-brand-accent: #8ec5b4;
+	--ui-danger: #fda4a4;
 	--ui-brand-ink: #a2d3c4;
 	--ui-brand-border: #466e63;
 	--ui-brand-soft-strong: #2c4840;

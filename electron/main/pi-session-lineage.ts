@@ -2,6 +2,7 @@ import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type { AgentTranscriptTurn } from "../../src/shared/ipc.js";
+import { isRecord } from "../../src/shared/value.js";
 
 export interface PiSessionLineageOptions {
 	workspacePath: string;
@@ -66,6 +67,22 @@ async function openOrCreatePiSessionUnlocked(
 		parentSession: parentResolution.file,
 	});
 	for (const turn of options.transcript) appendTranscriptTurn(sessionManager, turn);
+	if (parentResolution.file && options.forkedFromTurnId) {
+		const parent = SessionManager.open(parentResolution.file, options.sessionDir);
+		const loadout = parent
+			.getEntries()
+			.slice()
+			.reverse()
+			.find(
+				(entry) =>
+					entry.type === "custom" &&
+					entry.customType === "rhyza.mcp-loadout" &&
+					isRecord(entry.data) &&
+					entry.data.frontendTurnId === options.forkedFromTurnId,
+			);
+		if (loadout?.type === "custom")
+			sessionManager.appendCustomEntry("rhyza.mcp-loadout", loadout.data);
+	}
 	if (options.parentFrontendSessionId || options.forkedFromTurnId) {
 		sessionManager.appendCustomEntry("rhyza.branch", {
 			frontendSessionId: options.frontendSessionId,

@@ -43,6 +43,7 @@ Electron Main
   ├─ PiService           Pi Session、Provider、模型、Session lineage
   ├─ CodexAppServer      官方 App Server 进程、共享认证与 Codex 流式响应
   ├─ PiPluginService     Pi package 安装与移除
+  ├─ McpService          SDK MCP 连接、OAuth、权限与资源预览
   ├─ SourceService       本地文本扫描、搜索与受限读取
   ├─ AppStateStore       按 Workspace 持久化 Zustand state
   ├─ WorktreeService     Session Worktree、status、diff
@@ -61,7 +62,7 @@ Electron Main
 - `/knowledge`：Entity 和 Diagram；
 - `/sources`：Source Catalog 与搜索；
 - `/changes`：Knowledge/Code 变更；
-- `/settings`：Provider、Plugin、Workspace、Knowledge policy 和无障碍设置。
+- `/settings`：Provider、Plugin、MCP servers、Knowledge policy 和无障碍设置。
 
 Zustand Store 管理 Session、Turn、Knowledge、Settings 和布局。持久化适配器通过 preload 调用 Main，不应直接从 Renderer 使用 Node 文件系统。
 
@@ -100,7 +101,9 @@ Pi 插件的设置入口面向 GitHub Copilot。Codex 和 Azure OpenAI 当前复
 
 Pi 1.0 的 Provider 收到规范化的 `TranscriptContext`；系统提示词与工具声明保存在 system messages 中，适配器使用 `getCurrentSystemPrompt()` / `getCurrentTools()` 读取。模型请求快照同时保留完整 transcript 和解析后的当前提示词、工具，兼容现有诊断界面。
 
-本次升级不自动加载 MCP、Codemode 或 Tool Search，不启用 PowerShell、路由、分类或出图。主聊天、标题生成和知识提取都将会话 settings 的 `getCacheWarmingMode()` 固定返回 `"off"`，因为 SDK 的保活读取只看全局设置、不接受 `applyOverrides`。该宿主策略跨 reload 保持关闭，不改用户的 Pi 全局设置。后续接入与费用统计的 TODO 见 [Pi SDK 待办](TODO-pi-sdk.md)。
+主聊天显式加载宿主 MCP 和 Tool Search，使用用户及受信任的原 Workspace 配置。工具默认拒绝，逐次校验精确授权；write 额外要求可写且成功隔离。主聊天用 defaultTools / excludeTools 保留内置工具边界，而不使用会限制动态发现的 tools allowlist。按需加载的工具按前端 turn 持久化，分支只继承选定 turn 的快照。配置变更关闭旧连接，辅助会话不因这一接入获得 MCP。详见[架构边界](architecture.md#mcp-边界)和[使用操作](user-guide.md#mcp-servers)。
+
+不启用 Codemode、PowerShell、路由、分类或出图。主聊天、标题生成和知识提取都将会话 settings 的 `getCacheWarmingMode()` 固定返回 `"off"`，因为 SDK 的保活读取只看全局设置、不接受 `applyOverrides`。该宿主策略跨 reload 保持关闭，不改用户的 Pi 全局设置。后续接入与费用统计的 TODO 见 [Pi SDK 待办](TODO-pi-sdk.md)。
 
 ### Sources
 
@@ -184,6 +187,7 @@ Rhyza 是工具型桌面应用，采用 redesign-preserve 模式：保留工作�
 | `npm run test:ui`                        | 五个页面的深浅主题、窄窗口、文字对比度和导航回归 |
 | `npm run test:workspace-history`         | 历史迁移、持久化、目录校验和真实 preload 的桌面切换回归 |
 | `npm run test:source-indexing`           | 排除规则、旧清单迁移、每源配置持久化及真实 preload 的配置界面回归 |
+| `npm run test:mcp`                       | MCP 连接/OAuth、工具权限与分支恢复，以及真实 preload 的设置操作回归 |
 | `npm run test:formatter`                 | 在临时目录验证格式化与 hook 路径处理               |
 | `npm run smoke:ipc`                      | IPC payload 和边界 smoke                           |
 | `npm run smoke:branch-usage`             | 分支 usage 聚合 smoke                              |
@@ -261,6 +265,7 @@ npm run format:check
 - Source read 不允许绝对路径、`..` 或未索引文件。
 - 性能诊断只记录分类、计数和耗时；请求快照可能含对话和检索代码，不能作为匿名日志公开分享。
 - 不得把 Pi package 描述为沙箱插件；它可以当前用户权限执行代码。
+- MCP 程序也以当前 OS 账号运行；精确工具授权不验证工具的实际行为，Worktree 不能隔离外部服务。配置文件可能含字面量凭据，日志和编辑草稿必须隐藏凭据。
 - Worktree 失败回退时必须区分 Provider 权限；当前 Codex sandbox 根据请求的可写标记选择，不能统一宣称回退后只读。
 
 ## 8. 可观测性

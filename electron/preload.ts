@@ -30,6 +30,21 @@ const bridge: RhyzaBridge = {
 	pluginInstall: (request) => ipcRenderer.invoke(ipcChannels.pluginInstall, request),
 	pluginSelectLocal: () => ipcRenderer.invoke(ipcChannels.pluginSelectLocal),
 	pluginRemove: (request) => ipcRenderer.invoke(ipcChannels.pluginRemove, request),
+	mcpList: () => ipcRenderer.invoke(ipcChannels.mcpList),
+	mcpEdit: (request) => ipcRenderer.invoke(ipcChannels.mcpEdit, request),
+	mcpSave: (request) => ipcRenderer.invoke(ipcChannels.mcpSave, request),
+	mcpRemove: (request) => ipcRenderer.invoke(ipcChannels.mcpRemove, request),
+	mcpTrust: (request) => ipcRenderer.invoke(ipcChannels.mcpTrust, request),
+	mcpAction: (request) => ipcRenderer.invoke(ipcChannels.mcpAction, request),
+	mcpResources: (request) => ipcRenderer.invoke(ipcChannels.mcpResources, request),
+	onMcpEvent: (listener) => {
+		const wrapped = (
+			_event: Electron.IpcRendererEvent,
+			payload: import("../src/shared/mcp.js").McpEvent,
+		) => listener(payload);
+		ipcRenderer.on(ipcChannels.mcpEvent, wrapped);
+		return () => ipcRenderer.removeListener(ipcChannels.mcpEvent, wrapped);
+	},
 	getWorkspace: () => ipcRenderer.invoke(ipcChannels.getWorkspace),
 	workspaceHistory: () => ipcRenderer.invoke(ipcChannels.workspaceHistory),
 	switchWorkspace: (request) => ipcRenderer.invoke(ipcChannels.switchWorkspace, request),
