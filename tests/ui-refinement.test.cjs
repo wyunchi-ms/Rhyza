@@ -157,6 +157,7 @@ if (!process.versions.electron) {
 	}
 
 	async function checkContrast(label) {
+		await sleep(180);
 		const contrasts = await host(`(() => {
 			const rgb = color => color.match(/[\\d.]+/g)?.map(Number) ?? [];
 			const luminance = color => rgb(color).slice(0, 3)
@@ -177,13 +178,133 @@ if (!process.versions.electron) {
 				const foreground = luminance(getComputedStyle(element).color);
 				const behind = luminance(getComputedStyle(background).backgroundColor);
 				return {
-					text: element.textContent.trim().slice(0, 55),
+					text: (element.textContent.trim() || element.getAttribute("aria-label") || "").slice(0, 55),
 					ratio: (Math.max(foreground, behind) + 0.05) / (Math.min(foreground, behind) + 0.05)
 				};
 			});
 		})()`);
 		for (const { text, ratio } of contrasts) {
 			assert.ok(ratio >= 4.5, `${label}: "${text}" contrast ${ratio.toFixed(2)} < 4.5`);
+		}
+	}
+
+	async function checkWorkspaceSources(
+		label,
+		{ workspace = "Workspace", sources = "Sources", addSources = "Add sources" } = {},
+	) {
+		const result = await host(`(() => {
+			const heading = document.querySelector(".sources-catalog .library-section-heading");
+			const button = heading.querySelector(".command-button");
+			const title = heading.querySelector("h2");
+			const headingRect = heading.getBoundingClientRect();
+			const buttonRect = button.getBoundingClientRect();
+			const titleRect = title.getBoundingClientRect();
+			return {
+				pageTitle: document.querySelector(".page-title").textContent.trim(),
+				navigationLabel: document.querySelector('.app-sidebar-footer a[href="#/sources"]')
+					.getAttribute("aria-label"),
+				sectionTitle: title.firstChild.textContent.trim(),
+				buttonLabel: button.getAttribute("aria-label"),
+				buttonTooltip: button.title,
+				buttonText: button.textContent.trim(),
+				addIcon: Boolean(button.querySelector(".lucide-plus[aria-hidden=true]")),
+				headingText: heading.textContent.trim().replace(/\\s+/g, " "),
+				workspaceParagraphs: document.querySelectorAll(".sources-workspace-copy > p").length,
+				workspacePath: Boolean(document.querySelector(".sources-workspace-path")),
+				buttonCount: document.querySelectorAll(".sources-page .command-button").length,
+				pageHeaderButtons: document.querySelectorAll(".sources-page .page-header button").length,
+				emptyStateButtons: document.querySelectorAll(".sources-empty-state button").length,
+				sourceCount: Number(title.querySelector(".library-count").textContent),
+				rowCount: document.querySelectorAll(".source-row").length,
+				rowStatuses: document.querySelectorAll(".source-row .source-status").length,
+				rightAlignment: Math.abs(headingRect.right - buttonRect.right),
+				centerAlignment: Math.abs((titleRect.top + titleRect.bottom) / 2
+					- (buttonRect.top + buttonRect.bottom) / 2),
+				visible: buttonRect.width > 0 && buttonRect.left >= 0
+					&& buttonRect.right <= innerWidth,
+				squareButton: Math.abs(buttonRect.width - buttonRect.height) <= 1,
+				desktop: innerWidth >= 768
+			};
+		})()`);
+		assert.equal(result.pageTitle, workspace, `${label}: workspace page title`);
+		assert.equal(result.navigationLabel, workspace, `${label}: workspace navigation label`);
+		assert.equal(result.sectionTitle, sources, `${label}: sources is a subsection`);
+		assert.equal(result.buttonLabel, addSources, `${label}: add sources label`);
+		assert.equal(result.buttonTooltip, addSources, `${label}: localized icon tooltip`);
+		assert.equal(result.buttonText, "", `${label}: add sources is icon-only`);
+		assert.equal(result.addIcon, true, `${label}: add sources shows a decorative plus icon`);
+		assert.equal(
+			result.headingText,
+			`${sources} ${result.sourceCount}`,
+			`${label}: no indexed or scanning summary in the heading`,
+		);
+		assert.equal(result.workspaceParagraphs, 1, `${label}: workspace copy is reduced to its path`);
+		assert.equal(result.workspacePath, true, `${label}: workspace path remains visible`);
+		assert.equal(result.buttonCount, 1, `${label}: one consistent add sources action`);
+		assert.equal(result.pageHeaderButtons, 0, `${label}: no page-level source action`);
+		assert.equal(result.emptyStateButtons, 0, `${label}: no duplicate empty-state action`);
+		assert.equal(result.sourceCount, result.rowCount, `${label}: source count remains accurate`);
+		assert.equal(result.rowStatuses, result.rowCount, `${label}: individual source status remains`);
+		assert.ok(result.rightAlignment <= 1, `${label}: action at the right of the sources heading`);
+		assert.equal(result.visible, true, `${label}: add sources is not clipped`);
+		assert.equal(result.squareButton, true, `${label}: compact square icon action`);
+		if (result.desktop)
+			assert.ok(result.centerAlignment <= 1, `${label}: action shares the sources title row`);
+	}
+
+	async function checkAddSourcesAction() {
+		await host(`window.rhyza = {
+			sourceAdd: () => new Promise((resolve, reject) => {
+				window.uiResolveSources = resolve;
+				window.uiRejectSources = reject;
+			})
+		}; undefined;`);
+		try {
+			await host('document.querySelector(".sources-add-button").click()');
+			await until(
+				'document.querySelector(".sources-add-button").disabled',
+				"adding sources disables the section action",
+			);
+			assert.equal(
+				await host('document.querySelector(".sources-add-button").getAttribute("aria-label")'),
+				"Adding sources…",
+			);
+			assert.equal(
+				await host('document.querySelector(".sources-add-button").getAttribute("aria-busy")'),
+				"true",
+			);
+			assert.equal(
+				await host('Boolean(document.querySelector(".sources-add-button .animate-spin"))'),
+				true,
+			);
+			await host('window.uiRejectSources(new Error("Could not add the selected folder."))');
+			await until(
+				'document.querySelector(".library-feedback[role=alert]")?.textContent.trim() === "Could not add the selected folder."',
+				"add sources failure is visible",
+			);
+			assert.equal(await host('document.querySelector(".sources-add-button").disabled'), false);
+			await host('document.querySelector(".sources-add-button").click()');
+			await until('!document.querySelector(".library-feedback")', "retry clears the source error");
+			await host(`window.uiResolveSources([{
+				id: "ui-added-source",
+				name: "Added handbook",
+				path: "C:\\\\demo\\\\added-handbook",
+				fileCount: 6,
+				status: "indexed",
+				type: "docs"
+			}])`);
+			await until(
+				'document.querySelectorAll(".source-row").length === 1',
+				"source added to catalog",
+			);
+			assert.equal(await host('document.querySelector(".sources-add-button").disabled'), false);
+			await checkWorkspaceSources("after adding sources");
+		} finally {
+			await host(`delete window.rhyza;
+				delete window.uiResolveSources;
+				delete window.uiRejectSources;
+				window.uiStore.setState({ sources: [] });`);
+			await settle();
 		}
 	}
 
@@ -695,6 +816,59 @@ if (!process.versions.electron) {
 			);
 			await until('!document.querySelector(".session-filter-menu")', "outside click dismissal");
 		}
+		await open();
+		await choose("Completed");
+		await choose("To explore");
+		await close();
+		assert.deepEqual(await host("window.uiStore.getState().leafStatuses"), ["complete", "todo"]);
+		await browser.reload();
+		await until(
+			'Boolean(document.querySelector(".session-filter-trigger.is-active"))',
+			"saved leaf filters after reopening the app",
+		);
+		await host(
+			'import("/src/store/index.ts").then(module => { window.uiStore = module.useAppStore; window.uiLoadWorkspaceState = module.loadWorkspaceState; })',
+		);
+		assert.deepEqual(await host("window.uiStore.getState().leafStatuses"), ["complete", "todo"]);
+		await settle();
+		assert.deepEqual(await visibleIds(), [
+			"filter-root-question",
+			"filter-done-question",
+			"filter-todo-question",
+		]);
+		await open();
+		assert.deepEqual(
+			await host(
+				'[...document.querySelectorAll(".session-filter-menu [aria-checked=true]")].map(button => button.textContent.trim())',
+			),
+			["To explore", "Completed"],
+			"the reopened menu checks the saved selections",
+		);
+		await close();
+		await host(`(() => {
+			window.uiFilterWorkspace = localStorage.getItem("rhyza-workspace-v2");
+			const other = JSON.parse(window.uiFilterWorkspace);
+			other.state.leafStatuses = ["unmarked"];
+			window.uiLoadWorkspaceState(JSON.stringify(other));
+		})()`);
+		await settle();
+		assert.deepEqual(await visibleIds(), ["empty:filter-empty"]);
+		await host("window.uiLoadWorkspaceState(window.uiFilterWorkspace)");
+		await settle();
+		assert.deepEqual(await visibleIds(), [
+			"filter-root-question",
+			"filter-done-question",
+			"filter-todo-question",
+		]);
+		await host(`(() => {
+			const legacy = JSON.parse(window.uiFilterWorkspace);
+			delete legacy.state.leafStatuses;
+			window.uiLoadWorkspaceState(JSON.stringify(legacy));
+			delete window.uiFilterWorkspace;
+			delete window.uiLoadWorkspaceState;
+		})()`);
+		await settle();
+		assert.equal((await visibleIds()).length, 4, "legacy workspaces do not inherit another filter");
 		await seedContent();
 		await setAppearance("dark", { reduceMotion: false });
 	}
@@ -1037,6 +1211,7 @@ if (!process.versions.electron) {
 				await navigate(route, heading);
 				await checkLayout(`${theme} empty ${route}`);
 				await checkContrast(`${theme} empty ${route}`);
+				if (route === "/sources") await checkWorkspaceSources(`${theme} empty workspace`);
 				await screenshot(`${theme}-empty-${route.slice(1) || "workspace"}`);
 			}
 		}
@@ -1044,17 +1219,24 @@ if (!process.versions.electron) {
 		assert.equal(
 			await host('document.querySelector(".sources-workspace-card h2").textContent.trim()'),
 			"Current workspace",
-			"workspace selection is displayed in Sources",
+			"workspace selection is displayed on the Workspace page",
 		);
 		assert.equal(
 			await host('document.querySelector(".sources-workspace-card button").textContent.trim()'),
 			"Choose workspace",
 		);
-		assert.equal(
-			await host('document.querySelectorAll(".sources-empty-state .command-button").length'),
-			1,
-			"the empty sources state has an Add sources action",
-		);
+		await checkAddSourcesAction();
+		for (const [language, labels] of [
+			["zh-CN", { workspace: "工作区", sources: "资料源", addSources: "添加资料源" }],
+			["zh-TW", { workspace: "工作區", sources: "資料來源", addSources: "新增資料來源" }],
+		]) {
+			await host(
+				`window.uiStore.getState().updateSettings({ language: ${JSON.stringify(language)} })`,
+			);
+			await settle();
+			await checkWorkspaceSources(`${language} workspace`, labels);
+		}
+		await host('window.uiStore.getState().updateSettings({ language: "en" })');
 		await seedContent();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
@@ -1065,6 +1247,7 @@ if (!process.versions.electron) {
 					await navigate(route, heading);
 					await checkLayout(`${theme} ${width} ${route}`);
 					await checkContrast(`${theme} ${width} ${route}`);
+					if (route === "/sources") await checkWorkspaceSources(`${theme} ${width} workspace`);
 					if (width === 1440 || width === 375) {
 						await screenshot(`${theme}-${width}-${route.slice(1) || "workspace"}`);
 					}
@@ -1075,6 +1258,7 @@ if (!process.versions.electron) {
 				await navigate(route, heading);
 				await checkLayout(`${theme} large text ${route}`);
 				await checkContrast(`${theme} large text ${route}`);
+				if (route === "/sources") await checkWorkspaceSources(`${theme} large text workspace`);
 			}
 			await setAppearance(theme, { fontScale: 1, highContrast: false, reduceMotion: false });
 		}

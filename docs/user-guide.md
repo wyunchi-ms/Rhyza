@@ -41,7 +41,9 @@ npm run electron:dev
 
 ### 2.1 选择 Workspace
 
-进入 **Sources → Current workspace → Choose workspace**，选择 Agent 要工作的目录；之后可在同一页更换工作区，并独立添加待索引的资料源。
+进入 **Workspace → Current workspace → Choose workspace**，先查看最近使用的工作区列表。点击历史目录即可切换，当前工作区会单独标记；点击 **Add workspace** 才打开系统目录选择器，可选择已有目录或新建文件夹。之后可通过同一页的 **Change workspace** 切换，并独立添加待索引的资料源。
+
+历史记录按最近使用顺序保存在全局设置中，重启或切换工作区不会丢失。升级时会从已有 Workspace 状态索引补回旧目录；目录被移动或删除后，切换会显示错误并保留当前工作区。
 
 Workspace 同时决定：
 
@@ -169,7 +171,7 @@ Pi package 以当前用户权限执行代码，Skill 也会影响 Agent 行为�
 
 左侧 Chats 显示会话树和 Token 用量。使用 **Node view** 可切换到图形化节点视图。节点支持重命名、删除、折叠和状态管理；运行中的节点会显示真实活动状态。
 
-Chats 顶部的筛选按钮支持按叶节点标记状态多选：**Unmarked**、**To explore**、**In progress**、**Completed** 和 **On hold**。匹配任一所选状态的叶节点及其祖先路径会保留；非叶节点自身的状态不决定是否命中。选择 **All statuses** 或清空选择即可恢复全部节点。筛选在列表和 Node view 间同步，不改变当前对话或 Total 用量统计。
+Chats 顶部的筛选按钮支持按叶节点标记状态多选：**Unmarked**、**To explore**、**In progress**、**Completed** 和 **On hold**。匹配任一所选状态的叶节点及其祖先路径会保留；非叶节点自身的状态不决定是否命中。选择 **All statuses** 或清空选择即可恢复全部节点。筛选在列表和 Node view 间同步，不改变当前对话或 Total 用量统计。每个 Workspace 独立保存筛选条件，切换回来或重新打开应用时自动恢复；新工作区默认显示所有状态，清空筛选后也会记住。
 
 **Explain** 节点显示为 `Explain: 引用内容摘要`，便于区分不同的解释问题。已有节点也会根据保存的引用补全显示，无需重新提问；自定义标题不会被覆盖。
 
@@ -204,7 +206,7 @@ Chats 顶部的筛选按钮支持按叶节点标记状态多选：**Unmarked**�
 
 ### 3.5 添加和搜索 Sources
 
-进入 **Sources → Add sources**，可选择一个或多个本地目录。Source 可以位于 Workspace 内，也可以完全独立。
+进入 **Workspace → Sources → Add sources**，可选择一个或多个本地目录。点击 Sources 子区块标题行右侧的加号图标（悬停提示为 **Add sources**），空列表和已有资料源时位置一致。Source 可以位于 Workspace 内，也可以完全独立。
 
 当前支持常见代码和文本格式：
 
@@ -216,14 +218,33 @@ Chats 顶部的筛选按钮支持按叶节点标记状态多选：**Unmarked**�
 
 扫描规则：
 
-- 忽略 `.git`、`node_modules`、`dist`、`build`、`bin`、`obj`、`.next`、`.cache`；
+- 默认排除版本控制、依赖、构建与缓存目录：`.git`、`.hg`、`.svn`、`node_modules`、`dist`、`dist-electron`、`build`、`bin`、`obj`、`target`、`.next`、`.nuxt`、`.output`、`.cache`、`.turbo`、`.gradle`、`.venv`、`venv`、`__pycache__`、`.pytest_cache`、`.mypy_cache`、`.ruff_cache`、`.tox`、`.nox`、`coverage`、`.nyc_output`；
+- 排除 Rhyza 内部数据目录 `.rhyza-debug`、`.pi-graph`，包括嵌套目录中的同名目录；
+- 遵循 Source 根目录与子目录中的 `.gitignore`，即使该资料目录不是 Git 仓库也生效；匹配的已跟踪文件同样排除。不读取 Source 之外的父级、用户级 Git ignore 或 `.git\info\exclude`；
+- 支持 Source 根目录的 `.rhyzaignore`，使用 Git ignore 语法（通配符、目录、注释及 `!` 反向规则）。它优先于 `.gitignore`，但不能解除上述默认目录排除；不忽略整个隐藏目录集合，`.github`、`.agents` 等仍可索引；
 - 跳过符号链接；
 - 单文件上限 2 MB；
 - 每个 Source 最多记录 50,000 个文本文件。
 
-`indexed` 仅表示文件清单建立完成。Pi 路径提供 `search_sources` 和 `read_source`；Claude Code 使用请求前检索到的片段。当前没有 Embedding 或向量检索。
+`indexed` 仅表示文件清单建立完成，不会解析 PDF、Word、图片等非支持格式。Pi 路径提供 `search_sources` 和 `read_source`；Claude Code 使用请求前检索到的片段。当前没有 Embedding 或向量检索。
 
-Source 可重新扫描或归档。文件内容变化后，建议 Reindex；与旧 revision 关联的知识来源可能显示为 stale。
+点击资料源行中的 **Indexing settings**，可多选 **Exclude directories**：勾选不需要索引的根级子目录，其余目录照常按默认规则扫描。默认目录及 ignore 文件已排除的目录会标记为 **Automatically excluded**，不能在此界面启用。**Additional exclusion rules** 可逐行填写路径或通配符，用于排除指定文件或更深层的目录；本界面只接受排除规则，不混入 Include 或 `!` 反向规则。
+
+点击 **Save and reindex** 后立即重建清单、更新文件数并清空旧搜索结果。设置只用于当前资料源，保存在对应 Workspace 的 Source Catalog 中，不修改资料目录的文件，也不影响其他资料源。关闭或取消不保存草稿；保存失败保留草稿并显示错误。清空自定义排除项并保存，可恢复符合默认规则的文件。
+
+例如，在资料目录根部添加 `.rhyzaignore`，可以排除该目录的临时资料：
+
+```gitignore
+scratch/
+exports/
+*.generated.json
+```
+
+修改 ignore 规则后点击该资料源的重新索引按钮。已有索引首次加载时也会按当前规则剔除忽略项并更新文件数，搜索与 Agent 读取使用同一过滤后的清单；解除忽略后需重新索引才能重新加入文件。Ignore 规则文件需为不超过 2 MB 的普通文件；读取失败、符号链接、非普通文件或超限会明确报错。
+
+文件内容变化后，建议重新索引；与旧 revision 关联的知识来源可能显示为 stale。
+
+点击资料源行中的 **Delete source** 会先弹出确认窗口，明确说明：只从当前 Workspace 移除资料源，**不会删除磁盘上的目录或文件**，已有对话和知识也会保留。确认后删除该资料源的注册、索引清单和排除配置，并停止将其用于资料源搜索和读取；其他 Workspace 的注册不受影响。取消不会改动任何数据，删除失败会显示错误并保留列表项。之后可重新添加同一目录，但会创建新的注册，原来的索引设置不会自动恢复。
 
 ### 3.6 查看代码和知识变更
 
@@ -273,6 +294,7 @@ Windows 中的 `~` 表示当前用户目录，例如 `C:\Users\<username>`。
 
 | 路径                                                   | 内容                                                   |
 | ------------------------------------------------------ | ------------------------------------------------------ |
+| `~\.pi-graph\settings.json`                            | 当前 Workspace Path 和最近使用的工作区历史             |
 | `~\.pi-graph\workspaces.json`                          | Workspace Path 到状态文件的映射                        |
 | `~\.pi-graph\workspaces\<hash>.json`                   | Session、Turn、Knowledge、设置和布局                   |
 | `~\.pi-graph\sources\<hash>.json`                      | Source Catalog 和文件清单                              |
@@ -334,7 +356,7 @@ Rhyza 复用的是同一 Windows 用户下的 **Codex 登录状态**，不是普
 
 ### 重启后找不到会话
 
-确认 **Sources → Current workspace** 指向原来的绝对路径。不同 Workspace 使用独立状态文件，映射位于 `~/.pi-graph/workspaces.json`。
+确认 **Workspace → Current workspace** 指向原来的绝对路径。不同 Workspace 使用独立状态文件，映射位于 `~/.pi-graph/workspaces.json`。
 
 ### 输入、粘贴或流式输出时卡顿
 

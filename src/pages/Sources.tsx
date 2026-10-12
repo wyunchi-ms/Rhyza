@@ -1,8 +1,11 @@
 import clsx from "clsx";
-import { Archive, FileCode, FolderGit2, Plus, RefreshCw, Search, X } from "lucide-react";
+import { FileCode, FolderGit2, Plus, RefreshCw, Search, Settings2, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
-import type { SourceSearchHit } from "../shared/ipc";
+import type { SourceInfo, SourceSearchHit, WorkspaceInfo } from "../shared/ipc";
+import { WorkspacePicker } from "../components/WorkspacePicker";
+import { SourceIndexSettings } from "../components/SourceIndexSettings";
+import { SourceRemovalDialog } from "../components/SourceRemovalDialog";
 import { loadWorkspaceState, setWorkspacePersistencePath, useAppStore } from "../store";
 import { errorToMessage } from "../shared/value";
 import { useTranslation } from "../i18n";
@@ -18,8 +21,16 @@ const sourceStatusLabels: Record<string, string> = {
 
 const Sources = () => {
 	const { t } = useTranslation();
-	const { sources, entities, relations, diagrams, upsertSources, setSourceStatus, archiveSource } =
-		useAppStore();
+	const {
+		sources,
+		entities,
+		relations,
+		diagrams,
+		upsertSources,
+		syncSources,
+		setSourceStatus,
+		removeSource,
+	} = useAppStore();
 	const [busy, setBusy] = useState(false);
 	const [query, setQuery] = useState("");
 	const [hits, setHits] = useState<SourceSearchHit[]>([]);
@@ -28,14 +39,13 @@ const Sources = () => {
 	const [searching, setSearching] = useState(false);
 	const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
 	const [searchError, setSearchError] = useState<string | null>(null);
-	const [archivingIds, setArchivingIds] = useState<string[]>([]);
+	const [removingSource, setRemovingSource] = useState<SourceInfo | null>(null);
 	const [workspacePath, setWorkspacePath] = useState<string | null>(null);
-	const [workspaceBusy, setWorkspaceBusy] = useState(false);
+	const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
 	const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+	const [configuringSource, setConfiguringSource] = useState<SourceInfo | null>(null);
 	const searchRequest = useRef(0);
 	const activeSources = sources.filter((source) => source.status !== "archived");
-	const indexedCount = activeSources.filter((source) => source.status === "indexed").length;
-	const scanningCount = activeSources.filter((source) => source.status === "scanning").length;
 	const sourceRefs = [
 		...entities.flatMap((entity) => entity.sourceRefs),
 		...relations.flatMap((relation) => relation.sourceRefs),
@@ -53,7 +63,7 @@ const Sources = () => {
 		void bridge
 			.sourceList()
 			.then((items) => {
-				if (!cancelled) upsertSources(items);
+				if (!cancelled) syncSources(items);
 			})
 			.catch((reason) => {
 				if (!cancelled) setError(String(reason));
@@ -64,7 +74,7 @@ const Sources = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [upsertSources, workspacePath]);
+	}, [syncSources, workspacePath]);
 
 	useEffect(() => {
 		const bridge = getRhyzaBridge();
@@ -83,24 +93,16 @@ const Sources = () => {
 		};
 	}, []);
 
-	const selectWorkspace = async () => {
+	const changeWorkspace = (workspace: WorkspaceInfo) => {
 		const bridge = getRhyzaBridge();
-		if (!bridge?.isElectron) {
-			setWorkspaceError(t("Selecting a workspace requires the Electron desktop app."));
-			return;
-		}
-		setWorkspaceBusy(true);
+		if (!bridge || !workspace.path) throw new Error("The Electron workspace is unavailable.");
+		const serialized = bridge.appStateLoad();
+		setWorkspacePersistencePath(workspace.path);
+		loadWorkspaceState(serialized);
+		setWorkspacePath(workspace.path);
 		setWorkspaceError(null);
-		try {
-			const workspace = await bridge.selectWorkspace();
-			setWorkspacePath(workspace.path);
-			setWorkspacePersistencePath(workspace.path);
-			loadWorkspaceState(bridge.appStateLoad());
-		} catch (reason) {
-			setWorkspaceError(errorToMessage(reason));
-		} finally {
-			setWorkspaceBusy(false);
-		}
+		setError(null);
+		updateQuery("");
 	};
 
 	const addSources = async () => {
@@ -131,24 +133,6 @@ const Sources = () => {
 			upsertSources([await bridge.sourceRefresh({ id })]);
 		} catch (reason) {
 			setSourceStatus(id, { status: "error", error: String(reason) });
-		}
-	};
-
-	const archive = async (id: string) => {
-		const bridge = getRhyzaBridge();
-		if (!bridge) {
-			setError("The Electron runtime is required to archive sources.");
-			return;
-		}
-		setError(null);
-		setArchivingIds((ids) => [...ids, id]);
-		try {
-			await bridge.sourceArchive({ id });
-			archiveSource(id);
-		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
-		} finally {
-			setArchivingIds((ids) => ids.filter((item) => item !== id));
 		}
 	};
 
@@ -191,31 +175,16 @@ const Sources = () => {
 		<div className="page-shell library-page sources-page">
 			<header className="page-header library-page-header">
 				<div>
-					<h1 className="page-title">{t("Sources")}</h1>
-					<p className="page-subtitle">
-						{t("Indexed repositories and documentation directories.")}
-					</p>
+					<h1 className="page-title">{t("Workspace")}</h1>
+					<p className="page-subtitle">{t("Manage the working directory and indexed sources.")}</p>
 				</div>
-				{activeSources.length > 0 && (
-					<button
-						type="button"
-						onClick={() => void addSources()}
-						disabled={busy}
-						className="command-button"
-					>
-						{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
-						{busy ? t("Adding sources…") : t("Add sources")}
-					</button>
-				)}
 			</header>
 			<section className="sources-workspace-card" aria-labelledby="sources-workspace-heading">
 				<div className="sources-workspace-copy">
 					<h2 id="sources-workspace-heading">{t("Current workspace")}</h2>
-					<p>{t("The working directory for chats. Add and index sources separately.")}</p>
 					<p className="sources-workspace-path" title={workspacePath ?? undefined}>
 						{workspacePath ?? t("No workspace selected.")}
 					</p>
-					<p>{t("Run writable sessions in separate Git worktrees.")}</p>
 					{workspaceError && (
 						<p className="sources-workspace-error" role="alert">
 							{workspaceError}
@@ -225,16 +194,40 @@ const Sources = () => {
 				<button
 					type="button"
 					className="secondary-button"
-					disabled={!getRhyzaBridge()?.isElectron || workspaceBusy}
-					onClick={() => void selectWorkspace()}
+					disabled={!getRhyzaBridge()?.isElectron}
+					onClick={() => setWorkspacePickerOpen(true)}
 				>
-					{workspaceBusy
-						? t("Choosing workspace…")
-						: workspacePath
-							? t("Change workspace")
-							: t("Choose workspace")}
+					{workspacePath ? t("Change workspace") : t("Choose workspace")}
 				</button>
 			</section>
+			{workspacePickerOpen && (
+				<WorkspacePicker
+					currentPath={workspacePath}
+					onSelect={changeWorkspace}
+					onClose={() => setWorkspacePickerOpen(false)}
+				/>
+			)}
+			{configuringSource && (
+				<SourceIndexSettings
+					source={configuringSource}
+					onSaved={(source) => {
+						upsertSources([source]);
+						updateQuery("");
+					}}
+					onClose={() => setConfiguringSource(null)}
+				/>
+			)}
+			{removingSource && (
+				<SourceRemovalDialog
+					source={removingSource}
+					onRemoved={(id) => {
+						removeSource(id);
+						updateQuery("");
+						setError(null);
+					}}
+					onClose={() => setRemovingSource(null)}
+				/>
+			)}
 			<form
 				className="sources-search"
 				role="search"
@@ -329,14 +322,23 @@ const Sources = () => {
 				>
 					<div className="library-section-heading">
 						<h2 id="sources-catalog-title">
-							{t("Workspace sources")} <span className="library-count">{activeSources.length}</span>
+							{t("Sources")} <span className="library-count">{activeSources.length}</span>
 						</h2>
-						{activeSources.length > 0 && (
-							<span>
-								{indexedCount} {t("indexed")}
-								{scanningCount > 0 ? ` · ${scanningCount} ${t("scanning")}` : ""}
-							</span>
-						)}
+						<button
+							type="button"
+							onClick={() => void addSources()}
+							disabled={busy || loading}
+							className="command-button sources-add-button"
+							aria-label={busy ? t("Adding sources…") : t("Add sources")}
+							title={busy ? t("Adding sources…") : t("Add sources")}
+							aria-busy={busy}
+						>
+							{busy ? (
+								<RefreshCw size={17} className="animate-spin" aria-hidden="true" />
+							) : (
+								<Plus size={17} aria-hidden="true" />
+							)}
+						</button>
 					</div>
 					<div className="sources-list">
 						{activeSources.map((source) => {
@@ -384,9 +386,23 @@ const Sources = () => {
 									<div className="source-actions">
 										<button
 											type="button"
+											title={t("Indexing settings")}
+											aria-label={`${t("Indexing settings")}: ${source.name}`}
+											disabled={
+												!getRhyzaBridge()?.isElectron ||
+												source.status === "scanning" ||
+												removingSource?.id === source.id
+											}
+											onClick={() => setConfiguringSource(source)}
+											className="icon-button source-index-settings-open"
+										>
+											<Settings2 size={17} />
+										</button>
+										<button
+											type="button"
 											title="重新索引"
 											aria-label={`重新索引：${source.name}`}
-											disabled={source.status === "scanning" || archivingIds.includes(source.id)}
+											disabled={source.status === "scanning" || removingSource?.id === source.id}
 											onClick={() => void refresh(source.id)}
 											className="icon-button"
 										>
@@ -397,13 +413,18 @@ const Sources = () => {
 										</button>
 										<button
 											type="button"
-											title="归档资料来源"
-											aria-label={`归档资料来源：${source.name}`}
-											disabled={archivingIds.includes(source.id)}
-											onClick={() => void archive(source.id)}
-											className="icon-button"
+											title={t("Delete source")}
+											aria-label={`${t("Delete source")}: ${source.name}`}
+											disabled={
+												!getRhyzaBridge()?.isElectron ||
+												loading ||
+												busy ||
+												source.status === "scanning"
+											}
+											onClick={() => setRemovingSource(source)}
+											className="icon-button source-remove-button"
 										>
-											<Archive size={17} />
+											<Trash2 size={17} />
 										</button>
 									</div>
 								</article>
@@ -421,17 +442,6 @@ const Sources = () => {
 									? t("Reading the workspace index.")
 									: t("Add a repository or documentation folder to build the workspace index.")}
 							</p>
-							{!loading && (
-								<button
-									type="button"
-									className="command-button"
-									onClick={() => void addSources()}
-									disabled={busy}
-								>
-									{busy ? <RefreshCw size={17} className="animate-spin" /> : <Plus size={17} />}
-									{busy ? t("Adding sources…") : t("Add sources")}
-								</button>
-							)}
 						</div>
 					)}
 				</section>

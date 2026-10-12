@@ -22,7 +22,6 @@ import { SessionTree } from "./SessionTree";
 import { SessionGraph } from "./SessionGraph";
 import { IconSwitch } from "./IconSwitch";
 import { SessionStatusFilter } from "./SessionStatusFilter";
-import type { LeafStatusFilter } from "../utils/conversationFilter";
 import { useTranslation } from "../i18n";
 import { PathSummaryProvider, PathSummaryToolbar } from "./PathSummarySelection";
 import { errorToMessage } from "../shared/value";
@@ -37,13 +36,14 @@ const LayoutContent: React.FC = () => {
 	const { t } = useTranslation();
 	const sidebarOpen = useAppStore((state) => state.sidebarOpen);
 	const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+	const leafStatuses = useAppStore((state) => state.leafStatuses);
+	const setLeafStatuses = useAppStore((state) => state.setLeafStatuses);
 	const viewportWidth = useViewportWidth();
 	const isCompactViewport = viewportWidth <= 900;
 	const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
 	const sidebarMax = Math.min(420, Math.max(260, viewportWidth * 0.35));
 	const sidebarSize = usePanelSize("rhyza-layout-sidebar-width", 260, 200);
 	const [graphMode, setGraphModeState] = useState(false);
-	const [leafStatuses, setLeafStatuses] = useState<LeafStatusFilter[]>([]);
 	const [graphVisited, setGraphVisited] = useState(false);
 	const setGraphMode = (enabled: boolean) => {
 		if (enabled) setGraphVisited(true);
@@ -206,7 +206,7 @@ const LayoutContent: React.FC = () => {
 					<nav className="app-sidebar-footer" aria-label={t("Workspace navigation")}>
 						<SidebarNavIcon to="/" icon={<MessageSquare size={14} />} label={t("Chats")} />
 						<SidebarNavIcon to="/knowledge" icon={<Library size={14} />} label={t("Knowledge")} />
-						<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Sources")} />
+						<SidebarNavIcon to="/sources" icon={<FolderOpen size={14} />} label={t("Workspace")} />
 						<SidebarNavIcon to="/changes" icon={<History size={14} />} label={t("Changes")} />
 						<SidebarNavIcon to="/settings" icon={<Settings size={14} />} label={t("Settings")} />
 					</nav>

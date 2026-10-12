@@ -106,7 +106,15 @@ Pi 1.0 的 Provider 收到规范化的 `TranscriptContext`；系统提示词与�
 
 `SourceService` 按 Workspace 保存 Catalog。索引是受限文本文件清单，不是向量数据库。搜索读取磁盘中的当前内容，并用共享 ranking 逻辑排序；`read_source` 只允许清单内相对路径和有限行范围。
 
+`SourceFilePolicy` 是扫描和旧 Catalog 加载共用的路径排除入口。使用固定版本的 `ignore` 解析 Git ignore 语法；Source 内的 `.gitignore` 按目录作用域叠加，根级 `.rhyzaignore` 最后覆盖 Git 规则，固定内部/生成目录排除始终有效。忽略的父目录不遍历，因此子目录规则不能救回被剪枝的目录。旧 Catalog 加载时过滤并保存文件清单与计数；修改规则后通过 Refresh 重新扫描，不在每次文本搜索中遍历目录。
+
+资料源的 `indexing` 配置存放在对应 Catalog 项中，包含 `excludedDirectories`（根级目录名）与 `excludePatterns`（排除模式）。两者只增加排除，不解除默认或 ignore 文件的规则。`sourceIndexingGet` 列出根级目录和自动排除状态；`sourceIndexingSave` 先验证输入并扫描，成功写入 Catalog 后再更新缓存，失败不提交新配置。Renderer 不写 Source 文件，也不单独维护一套检索过滤逻辑。
+
+`sourceRemove` 删除当前 Workspace Catalog 中的完整资料源注册（含索引清单与排除配置），成功持久化后才修改服务缓存，不操作资料目录。Renderer 只移除对应 Source，保留对话、知识和历史引用；页面加载通过 `syncSources` 完整替换资料源列表，防止旧状态恢复已删除注册。新增与重新索引用 `upsertSources` 做增量更新。再次添加目录会分配新 ID，旧索引配置不自动恢复；`archived` 状态仅保留兼容已有 Catalog。
+
 ### 状态持久化
+
+`SettingsStore` 将当前目录和最近使用的工作区历史写入 `~\.pi-graph\settings.json`，不随 Workspace 切换。首次读取旧设置时从 `workspaces.json` 补回历史；新选择先做 realpath 和目录校验，Windows 按大小写不敏感路径去重，再将目录移到列表首位。设置操作串行执行，并通过临时文件替换，避免快速切换丢失记录。
 
 `AppStateStore` 将 Zustand envelope 写入 `~\.pi-graph\workspaces\<hash>.json`：
 
@@ -174,6 +182,8 @@ Rhyza 是工具型桌面应用，采用 redesign-preserve 模式：保留工作�
 | `npm run test:chat-performance`          | 隐藏 Electron 窗口中的输入、消息更新和保存去重回归 |
 | `npm run test:answer-outline`            | 聚焦回答目录、章节折叠、查找展开和窄窗口阅读回归 |
 | `npm run test:ui`                        | 五个页面的深浅主题、窄窗口、文字对比度和导航回归 |
+| `npm run test:workspace-history`         | 历史迁移、持久化、目录校验和真实 preload 的桌面切换回归 |
+| `npm run test:source-indexing`           | 排除规则、旧清单迁移、每源配置持久化及真实 preload 的配置界面回归 |
 | `npm run test:formatter`                 | 在临时目录验证格式化与 hook 路径处理               |
 | `npm run smoke:ipc`                      | IPC payload 和边界 smoke                           |
 | `npm run smoke:branch-usage`             | 分支 usage 聚合 smoke                              |

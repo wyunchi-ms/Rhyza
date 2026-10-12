@@ -20,6 +20,6 @@
 
 **请求路径**：Renderer 经 `window.rhyza` 调用 preload 暴露的方法；Main 验证 payload 与 sender 后，由 AgentService/PiService 或其他服务执行，再通过事件和结果更新 Store。Provider 认证材料不进入 Renderer。
 
-**持久化路径**：Store 经 preload 请求 Main 的 AppStateStore；按规范化 Workspace 路径隔离状态。Source Catalog、Worktree 和诊断文件使用独立的本地存储路径。读 Source 必须满足清单、相对路径及范围约束。
+**持久化路径**：Store 经 preload 请求 Main 的 AppStateStore；按规范化 Workspace 路径隔离状态。当前目录与工作区历史由 SettingsStore 全局保存到 `~\.pi-graph\settings.json`，不放进某个 Workspace 的 state。Source Catalog、Worktree 和诊断文件使用独立的本地存储路径。读 Source 必须满足清单、相对路径及范围约束。
 
 修改 IPC 时按[开发指南详解的核对清单](development-guide.md#preload-与-ipc)同步共享契约、preload、Main、调用方和测试；修改页面只改变 Renderer，不得绕过 bridge。

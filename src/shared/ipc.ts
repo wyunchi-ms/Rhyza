@@ -15,11 +15,15 @@ export const ipcChannels = {
 	pluginSelectLocal: "rhyza:plugin-select-local",
 	pluginRemove: "rhyza:plugin-remove",
 	getWorkspace: "rhyza:get-workspace",
+	workspaceHistory: "rhyza:workspace-history",
+	switchWorkspace: "rhyza:switch-workspace",
 	selectWorkspace: "rhyza:select-workspace",
 	sourceList: "rhyza:source-list",
 	sourceAdd: "rhyza:source-add",
 	sourceRefresh: "rhyza:source-refresh",
-	sourceArchive: "rhyza:source-archive",
+	sourceIndexingGet: "rhyza:source-indexing-get",
+	sourceIndexingSave: "rhyza:source-indexing-save",
+	sourceRemove: "rhyza:source-remove",
 	sourceSearch: "rhyza:source-search",
 	workspaceDiff: "rhyza:workspace-diff",
 	workspaceExportPatch: "rhyza:workspace-export-patch",
@@ -202,6 +206,28 @@ export interface WorkspaceInfo {
 	path: string | null;
 }
 
+export interface WorkspaceHistoryEntry {
+	path: string;
+	lastUsedAt: string | null;
+}
+
+export interface WorkspaceSwitchRequest {
+	path: string;
+}
+
+export function validateWorkspaceSwitchRequest(value: unknown): WorkspaceSwitchRequest {
+	if (
+		!isRecord(value) ||
+		typeof value.path !== "string" ||
+		!value.path.trim() ||
+		value.path.length > 4096 ||
+		/[\u0000-\u001f\u007f]/.test(value.path)
+	) {
+		throw new Error("Invalid workspace path.");
+	}
+	return { path: value.path };
+}
+
 export interface SourceInfo {
 	id: string;
 	name: string;
@@ -217,9 +243,60 @@ export interface SourceInfo {
 export interface SourceRefreshRequest {
 	id: string;
 }
-export interface SourceArchiveRequest {
+export interface SourceRemoveRequest {
 	id: string;
 }
+export interface SourceIndexingOptions {
+	excludedDirectories: string[];
+	excludePatterns: string[];
+}
+export interface SourceIndexingConfig extends SourceIndexingOptions {
+	id: string;
+	directories: Array<{ name: string; automaticallyExcluded: boolean }>;
+}
+export interface SourceIndexingSaveRequest extends SourceIndexingOptions {
+	id: string;
+}
+
+export function validateSourceIndexingOptions(value: unknown): SourceIndexingOptions {
+	if (
+		!isRecord(value) ||
+		!Array.isArray(value.excludedDirectories) ||
+		value.excludedDirectories.length > 500 ||
+		!value.excludedDirectories.every(
+			(directory: unknown) =>
+				typeof directory === "string" &&
+				directory.length > 0 &&
+				directory.length <= 255 &&
+				directory !== "." &&
+				directory !== ".." &&
+				!/[\\/\u0000-\u001f\u007f]/.test(directory),
+		) ||
+		!Array.isArray(value.excludePatterns) ||
+		value.excludePatterns.length > 500 ||
+		!value.excludePatterns.every(
+			(pattern: unknown) =>
+				typeof pattern === "string" &&
+				pattern.trim().length > 0 &&
+				pattern.length <= 1024 &&
+				!pattern.trimStart().startsWith("!") &&
+				!/[\u0000-\u001f\u007f]/.test(pattern),
+		)
+	) {
+		throw new Error(
+			"Invalid source exclusion settings. Use directory names and exclusion patterns only.",
+		);
+	}
+	return {
+		excludedDirectories: [...new Set(value.excludedDirectories)],
+		excludePatterns: [...new Set(value.excludePatterns)],
+	};
+}
+
+export function validateSourceIndexingSaveRequest(value: unknown): SourceIndexingSaveRequest {
+	return { ...validateIdRequest(value), ...validateSourceIndexingOptions(value) };
+}
+
 export interface SourceSearchRequest {
 	query: string;
 	sourceId?: string;
@@ -568,11 +645,15 @@ export interface RhyzaBridge {
 	pluginSelectLocal(): Promise<{ source: string | null }>;
 	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;
 	getWorkspace(): Promise<WorkspaceInfo>;
+	workspaceHistory(): Promise<WorkspaceHistoryEntry[]>;
+	switchWorkspace(request: WorkspaceSwitchRequest): Promise<WorkspaceInfo>;
 	selectWorkspace(): Promise<WorkspaceInfo>;
 	sourceList(): Promise<SourceInfo[]>;
 	sourceAdd(): Promise<SourceInfo[]>;
 	sourceRefresh(request: SourceRefreshRequest): Promise<SourceInfo>;
-	sourceArchive(request: SourceArchiveRequest): Promise<SourceInfo>;
+	sourceIndexingGet(request: SourceRefreshRequest): Promise<SourceIndexingConfig>;
+	sourceIndexingSave(request: SourceIndexingSaveRequest): Promise<SourceInfo>;
+	sourceRemove(request: SourceRemoveRequest): Promise<{ ok: true }>;
 	sourceSearch(request: SourceSearchRequest): Promise<SourceSearchHit[]>;
 	workspaceDiff(request: WorkspaceDiffRequest): Promise<WorkspaceDiffResponse>;
 	workspaceExportPatch(request: WorkspaceDiffRequest): Promise<WorkspaceExportPatchResponse>;

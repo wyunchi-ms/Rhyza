@@ -23,3 +23,7 @@ npm run electron:dev
 4. 根据影响选择最小验证：`npm run typecheck`、`npm test`、`npm run test:ui`、`npm run smoke:ipc`；完整构建用 `npm run build`。
 
 各命令的作用、测试环境和安全边界详见[开发指南详解](development-guide.md#5-开发命令)。功能状态变化时更新[功能矩阵](features.md)与[使用指南](user-guide.md)。
+
+工作区历史回归使用 `npm run test:workspace-history`，覆盖历史迁移、持久化、目录校验，以及隔离临时数据目录中的桌面选择列表、preload IPC 和状态切换。
+
+资料源索引回归使用 `npm run test:source-indexing`，覆盖默认/ignore 规则、旧清单过滤、每源排除配置、保存并重新索引，以及确认删除、失败保留、Workspace 隔离与历史数据保留的桌面流程。

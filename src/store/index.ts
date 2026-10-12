@@ -38,6 +38,7 @@ import {
 } from "../utils/knowledgeExtraction";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
 import { distinctStorage } from "../utils/distinctStorage";
+import { normalizeLeafStatuses, type LeafStatusFilter } from "../utils/conversationFilter";
 import {
 	defaultLanguage,
 	normalizeLanguage,
@@ -57,6 +58,7 @@ interface AppState {
 	changesets: ChangeSet[];
 	settings: Settings;
 	sidebarOpen: boolean;
+	leafStatuses: LeafStatusFilter[];
 	rightPaneOpen: boolean;
 	rightPaneView: RightPaneView;
 	inspectedTurnId: string | null;
@@ -68,6 +70,7 @@ interface AppState {
 	setSelectedEntity: (id: string | null) => void;
 	setSelectedDiagram: (id: string | null) => void;
 	toggleSidebar: () => void;
+	setLeafStatuses: (statuses: LeafStatusFilter[]) => void;
 	toggleRightPane: () => void;
 	openTurnInspector: (turnId: string, view: Exclude<RightPaneView, "todo">) => void;
 	closeRightPane: () => void;
@@ -108,8 +111,9 @@ interface AppState {
 		sourceRefs?: SourceRef[],
 	) => void;
 	upsertSources: (sources: Source[]) => void;
+	syncSources: (sources: Source[]) => void;
 	setSourceStatus: (id: string, patch: Partial<Source>) => void;
-	archiveSource: (id: string) => void;
+	removeSource: (id: string) => void;
 	saveEntity: (entity: Entity) => void;
 	softDeleteEntity: (id: string) => void;
 	saveRelation: (relation: Relation) => void;
@@ -273,6 +277,7 @@ export const useAppStore = create<AppState>()(
 			changesets: [],
 			settings: defaultSettings,
 			sidebarOpen: true,
+			leafStatuses: [],
 			rightPaneOpen: false,
 			rightPaneView: "todo",
 			inspectedTurnId: null,
@@ -284,6 +289,7 @@ export const useAppStore = create<AppState>()(
 			setSelectedEntity: (id) => set({ selectedEntityId: id, selectedDiagramId: null }),
 			setSelectedDiagram: (id) => set({ selectedDiagramId: id, selectedEntityId: null }),
 			toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+			setLeafStatuses: (statuses) => set({ leafStatuses: normalizeLeafStatuses(statuses) }),
 			toggleRightPane: () =>
 				set((state) =>
 					state.rightPaneOpen && state.rightPaneView === "todo"
@@ -756,61 +762,17 @@ export const useAppStore = create<AppState>()(
 				});
 			},
 
-			upsertSources: (sources) =>
-				set((state) => {
-					const changedRevisions = new Map(
-						sources.flatMap((source) => {
-							const previous = state.sources.find((item) => item.id === source.id);
-							return previous?.revision && source.revision && previous.revision !== source.revision
-								? [[source.id, source.revision] as const]
-								: [];
-						}),
-					);
-					const markRefs = (refs: SourceRef[] = []) =>
-						refs.map((ref) =>
-							changedRevisions.has(ref.sourceId ?? "") &&
-							ref.revision !== changedRevisions.get(ref.sourceId ?? "")
-								? { ...ref, stale: true }
-								: ref,
-						);
-					const updates = new Map(sources.map((source) => [source.id, source]));
-					const existingIds = new Set(state.sources.map((source) => source.id));
-					return {
-						sources: [
-							...state.sources.map((source) => updates.get(source.id) ?? source),
-							...sources.filter((source) => !existingIds.has(source.id)),
-						],
-						entities: changedRevisions.size
-							? state.entities.map((entity) => ({
-									...entity,
-									sourceRefs: markRefs(entity.sourceRefs),
-								}))
-							: state.entities,
-						relations: changedRevisions.size
-							? state.relations.map((relation) => ({
-									...relation,
-									sourceRefs: markRefs(relation.sourceRefs),
-								}))
-							: state.relations,
-						diagrams: changedRevisions.size
-							? state.diagrams.map((diagram) => ({
-									...diagram,
-									sourceRefs: markRefs(diagram.sourceRefs),
-								}))
-							: state.diagrams,
-					};
-				}),
+			upsertSources: (sources) => set((state) => sourceStateUpdates(state, sources, false)),
+			syncSources: (sources) => set((state) => sourceStateUpdates(state, sources, true)),
 			setSourceStatus: (id, patch) =>
 				set((state) => ({
 					sources: state.sources.map((source) =>
 						source.id === id ? { ...source, ...patch } : source,
 					),
 				})),
-			archiveSource: (id) =>
+			removeSource: (id) =>
 				set((state) => ({
-					sources: state.sources.map((source) =>
-						source.id === id ? { ...source, status: "archived" } : source,
-					),
+					sources: state.sources.filter((source) => source.id !== id),
 				})),
 
 			saveEntity: (entity) => {
@@ -1223,6 +1185,7 @@ export const useAppStore = create<AppState>()(
 					settings: normalizeSettings(saved.settings),
 					relations: saved.relations ?? [],
 					diagrams: migrateMermaidDiagrams(saved.diagrams ?? []),
+					leafStatuses: normalizeLeafStatuses(saved.leafStatuses),
 				};
 			},
 			partialize: (state) => ({
@@ -1235,10 +1198,51 @@ export const useAppStore = create<AppState>()(
 				sources: state.sources,
 				changesets: state.changesets,
 				settings: state.settings,
+				leafStatuses: state.leafStatuses,
 			}),
 		},
 	),
 );
+
+function sourceStateUpdates(state: AppState, sources: Source[], replace: boolean) {
+	const changedRevisions = new Map(
+		sources.flatMap((source) => {
+			const previous = state.sources.find((item) => item.id === source.id);
+			return previous?.revision && source.revision && previous.revision !== source.revision
+				? [[source.id, source.revision] as const]
+				: [];
+		}),
+	);
+	const markRefs = (refs: SourceRef[] = []) =>
+		refs.map((ref) =>
+			changedRevisions.has(ref.sourceId ?? "") &&
+			ref.revision !== changedRevisions.get(ref.sourceId ?? "")
+				? { ...ref, stale: true }
+				: ref,
+		);
+	const updates = new Map(sources.map((source) => [source.id, source]));
+	const existingIds = new Set(state.sources.map((source) => source.id));
+	return {
+		sources: replace
+			? sources
+			: [
+					...state.sources.map((source) => updates.get(source.id) ?? source),
+					...sources.filter((source) => !existingIds.has(source.id)),
+				],
+		entities: changedRevisions.size
+			? state.entities.map((entity) => ({ ...entity, sourceRefs: markRefs(entity.sourceRefs) }))
+			: state.entities,
+		relations: changedRevisions.size
+			? state.relations.map((relation) => ({
+					...relation,
+					sourceRefs: markRefs(relation.sourceRefs),
+				}))
+			: state.relations,
+		diagrams: changedRevisions.size
+			? state.diagrams.map((diagram) => ({ ...diagram, sourceRefs: markRefs(diagram.sourceRefs) }))
+			: state.diagrams,
+	};
+}
 
 export function loadWorkspaceState(serialized: string | null): void {
 	let saved: Partial<AppState> = {};
@@ -1283,6 +1287,7 @@ export function loadWorkspaceState(serialized: string | null): void {
 		sources: saved.sources ?? [],
 		changesets: saved.changesets ?? [],
 		settings: normalizeSettings(saved.settings),
+		leafStatuses: normalizeLeafStatuses(saved.leafStatuses),
 	});
 }
 
