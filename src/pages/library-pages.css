@@ -389,8 +389,8 @@ html[data-theme] .knowledge-page .knowledge-resource-list button:hover {
 
 html[data-theme] .knowledge-page .knowledge-resource-list button.is-selected {
 	border-color: var(--ui-brand-border);
-	background: var(--color-surface);
-	box-shadow: inset 2px 0 0 var(--ui-brand-accent);
+	background: var(--ui-brand-soft-strong);
+	box-shadow: none;
 }
 
 html[data-theme] .knowledge-page .knowledge-resource-list small {

@@ -156,6 +156,84 @@ if (!process.versions.electron) {
 		assert.ok(result.mainWidth > 200, `${label}: unusably narrow main content`);
 	}
 
+	async function checkFilledSelection(selector, label) {
+		const states = await host(`(() => [...document.querySelectorAll(${JSON.stringify(selector)})]
+			.map(element => {
+				const style = getComputedStyle(element);
+				return {
+					background: style.backgroundColor,
+					shadow: style.boxShadow,
+					borders: ["Top", "Right", "Bottom", "Left"].map(side => ({
+						color: style["border" + side + "Color"],
+						style: style["border" + side + "Style"],
+						width: style["border" + side + "Width"]
+					}))
+				};
+			}))()`);
+		assert.ok(states.length > 0, `${label}: selected item exists`);
+		for (const state of states) {
+			assert.notEqual(state.background, "rgba(0, 0, 0, 0)", `${label}: filled selection`);
+			assert.equal(state.shadow, "none", `${label}: no single-side selection shadow`);
+			for (const border of state.borders) {
+				assert.equal(border.style, "solid", `${label}: full selection border`);
+				assert.equal(border.width, "1px", `${label}: subtle selection border`);
+				assert.notEqual(border.color, "rgba(0, 0, 0, 0)", `${label}: visible selection border`);
+				assert.equal(border.color, state.borders[0].color, `${label}: uniform selection border`);
+			}
+		}
+	}
+
+	async function checkSettingsNavigation(label) {
+		const styles = await host(`(() => {
+			const active = document.querySelector(".settings-navigation nav button.is-active");
+			const inactive = document.querySelector(".settings-navigation nav button:not(.is-active)");
+			const heading = document.querySelector(".settings-navigation-group-heading");
+			const activeStyle = getComputedStyle(active);
+			const inactiveStyle = getComputedStyle(inactive);
+			const headingStyle = getComputedStyle(heading);
+			const groupStyle = getComputedStyle(
+				document.querySelector(".settings-navigation-group + .settings-navigation-group")
+			);
+			return {
+				current: active.getAttribute("aria-current"),
+				activeBackground: activeStyle.backgroundColor,
+				inactiveBackground: inactiveStyle.backgroundColor,
+				shadow: activeStyle.boxShadow,
+				borders: ["Top", "Right", "Bottom", "Left"].map(side => ({
+					color: activeStyle["border" + side + "Color"],
+					style: activeStyle["border" + side + "Style"],
+					width: activeStyle["border" + side + "Width"]
+				})),
+				headingSize: parseFloat(headingStyle.fontSize),
+				tabSize: parseFloat(inactiveStyle.fontSize),
+				headingWeight: Number(headingStyle.fontWeight),
+				tabWeight: Number(inactiveStyle.fontWeight),
+				activeWeight: Number(activeStyle.fontWeight),
+				groupSeparator: groupStyle.borderTopStyle
+			};
+		})()`);
+		assert.equal(styles.current, "location", `${label}: selected section is accessible`);
+		assert.notEqual(
+			styles.activeBackground,
+			styles.inactiveBackground,
+			`${label}: selected tab has a filled background`,
+		);
+		assert.equal(styles.shadow, "none", `${label}: no bracket or underline selection decoration`);
+		for (const border of styles.borders) {
+			assert.equal(border.style, "solid", `${label}: full selection border`);
+			assert.equal(border.width, "1px", `${label}: subtle selection border`);
+			assert.notEqual(border.color, "rgba(0, 0, 0, 0)", `${label}: visible selection border`);
+			assert.equal(border.color, styles.borders[0].color, `${label}: uniform selection border`);
+		}
+		assert.ok(styles.headingSize < styles.tabSize, `${label}: group titles are smaller than tabs`);
+		assert.ok(
+			styles.headingWeight > styles.tabWeight,
+			`${label}: group titles have distinct typographic weight`,
+		);
+		assert.ok(styles.activeWeight > styles.tabWeight, `${label}: selected label is emphasized`);
+		assert.equal(styles.groupSeparator, "solid", `${label}: settings groups have a separator`);
+	}
+
 	async function checkContrast(label) {
 		await sleep(180);
 		const contrasts = await host(`(() => {
@@ -167,6 +245,8 @@ if (!process.versions.electron) {
 			return [...document.querySelectorAll(
 				".page-title, .page-subtitle, .chat-topbar h1, .chat-empty p, .chat-empty-hint, " +
 				".settings-section:not([hidden]) .settings-section-header h1, .command-button:not(:disabled), " +
+				".settings-navigation-group-heading, .settings-navigation nav button, " +
+				".markdown-body details > summary, " +
 				".session-filter-label, .session-filter-hint, .session-filter-count, " +
 				".text-selection-actions button[type=submit]:not(:disabled), .analyze-context-button"
 			)].filter(element => element.getBoundingClientRect().width > 0).map(element => {
@@ -1123,6 +1203,199 @@ if (!process.versions.electron) {
 		assert.equal(await host('document.querySelector(".app-sidebar").inert'), true);
 	}
 
+	async function checkMarkdownHtml() {
+		browser.setContentSize(1440, 960);
+		const content = [
+			"Grouped results.",
+			"",
+			"<details>",
+			"<summary><b>Region A (2 items)</b></summary>",
+			"",
+			"- `resource-one`",
+			"- **resource-two**",
+			"",
+			"<details>",
+			"<summary>Nested group</summary>",
+			"",
+			"needle-native-disclosure",
+			"",
+			"## Nested heading",
+			"",
+			"Nested prose.",
+			"",
+			"</details>",
+			"",
+			"</details>",
+			"",
+			"<details open><summary>Initially open</summary>",
+			"",
+			"Visible content.",
+			"",
+			"</details>",
+			"",
+			"<script>window.unsafeHtmlExecuted = true</script>",
+		].join("\n");
+		const original = await host(`({
+			answer: window.uiStore.getState().turns.find(turn => turn.id === "ui-answer").content,
+			entity: window.uiStore.getState().entities.find(entity => entity.id === "ui-entity").content
+		})`);
+		for (const theme of ["light", "dark"]) {
+			await setAppearance(theme, { highContrast: false, reduceMotion: true, fontScale: 1 });
+			await host(`window.uiStore.getState().updateTurn("ui-answer", {
+				content: ${JSON.stringify(content)}
+			})`);
+			await navigate("/", ".chat-topbar h1");
+			await until(
+				'document.querySelectorAll("#turn-ui-answer .markdown-body details").length === 3',
+				"native Markdown disclosure groups",
+			);
+			assert.deepEqual(
+				await host(`(() => {
+					const group = document.querySelector("#turn-ui-answer .markdown-body details");
+					return {
+						open: group.open,
+						label: group.querySelector("summary b").textContent,
+						items: group.querySelectorAll("li").length,
+						itemVisible: group.querySelector("li").checkVisibility(),
+						initiallyOpen: document.querySelector("#turn-ui-answer details[open]").open,
+						script: Boolean(document.querySelector("#turn-ui-answer .markdown-body script")),
+						executed: window.unsafeHtmlExecuted === true
+					};
+				})()`),
+				{
+					open: false,
+					label: "Region A (2 items)",
+					items: 2,
+					itemVisible: false,
+					initiallyOpen: true,
+					script: false,
+					executed: false,
+				},
+				`${theme}: formatted summaries fold Markdown lists without executing HTML`,
+			);
+			const typography = await host(`(() => {
+				const body = document.querySelector("#turn-ui-answer .assistant-body");
+				const group = body.querySelector(".markdown-body details");
+				const summary = group.querySelector("summary");
+				const summaryStyle = getComputedStyle(summary);
+				const bodyStyle = getComputedStyle(body);
+				return {
+					font: getComputedStyle(body.querySelector(".markdown-body")).fontFamily,
+					bodyPaddingX: parseFloat(bodyStyle.paddingLeft),
+					bodyPaddingY: parseFloat(bodyStyle.paddingTop),
+					summaryPaddingX: parseFloat(summaryStyle.paddingLeft),
+					summaryPaddingY: parseFloat(summaryStyle.paddingTop),
+					summaryWeight: Number(summaryStyle.fontWeight),
+					nestedBoldWeight: Number(getComputedStyle(summary.querySelector("b")).fontWeight),
+					emphasisWeight: Number(getComputedStyle(group.querySelector("li strong")).fontWeight),
+					closedHeight: group.getBoundingClientRect().height
+				};
+			})()`);
+			assert.ok(typography.font.includes("Segoe UI"), `${theme}: shared sans-serif reading font`);
+			assert.ok(
+				typography.font.includes("Microsoft YaHei"),
+				`${theme}: explicit Chinese sans-serif fallback`,
+			);
+			assert.ok(typography.bodyPaddingX >= 20, `${theme}: answer has a horizontal gutter`);
+			assert.ok(typography.bodyPaddingY >= 16, `${theme}: answer has vertical breathing room`);
+			assert.ok(typography.summaryPaddingX >= 16, `${theme}: disclosure title has a gutter`);
+			assert.ok(typography.summaryPaddingY >= 14, `${theme}: disclosure title has breathing room`);
+			assert.equal(typography.summaryWeight, 500, `${theme}: medium-weight disclosure title`);
+			assert.equal(
+				typography.nestedBoldWeight,
+				typography.summaryWeight,
+				`${theme}: nested bold does not compound the title weight`,
+			);
+			assert.equal(typography.emphasisWeight, 600, `${theme}: restrained prose emphasis`);
+			assert.ok(typography.closedHeight >= 50, `${theme}: comfortable disclosure hit area`);
+			await checkContrast(`${theme} disclosure titles`);
+			await screenshot(`${theme}-disclosures-closed`);
+			await host(`window.uiDetailsNode = document.querySelector("#turn-ui-answer .markdown-body details");
+				window.uiDetailsNode.querySelector("summary").click();`);
+			await screenshot(`${theme}-disclosures-open`);
+			await host(`window.uiStore.getState().updateTurn("ui-answer", {
+				content: ${JSON.stringify(`${content}\n\nAppended text.`)}
+			})`);
+			await settle();
+			assert.equal(
+				await host(
+					'window.uiDetailsNode === document.querySelector("#turn-ui-answer .markdown-body details") && window.uiDetailsNode.open',
+				),
+				true,
+				`${theme}: answer updates preserve the disclosure DOM and open state`,
+			);
+			await host('window.uiDetailsNode.querySelector("summary").click()');
+			await host(
+				'import("/src/store/conversationFocus.ts").then(module => module.useConversationFocus.getState().setFocus("ui-session", "ui-answer"))',
+			);
+			await until('Boolean(document.querySelector(".answer-outline-list button"))', "HTML outline");
+			await host('document.querySelector(".answer-outline-list button").click()');
+			await settle();
+			assert.equal(
+				await host(
+					'window.uiDetailsNode.open && window.uiDetailsNode.querySelector("details").open',
+				),
+				true,
+				`${theme}: outline navigation opens enclosing native disclosure groups`,
+			);
+			await host(`window.uiDetailsNode.querySelector("summary").click();
+				window.uiDetailsNode.querySelector("details").open = false;
+				window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));`);
+			await until('Boolean(document.querySelector(".conversation-find input"))', "HTML search");
+			await setInput(".conversation-find input", "needle-native-disclosure");
+			await until(
+				'window.uiDetailsNode.open && window.uiDetailsNode.querySelector("details").open',
+				"search opens native disclosure groups without a Markdown section ancestor",
+			);
+			await host(
+				'document.querySelector(".conversation-find input").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))',
+			);
+			await host(`window.uiStore.setState(state => ({
+				entities: state.entities.map(entity => entity.id === "ui-entity"
+					? { ...entity, content: ${JSON.stringify(content)} } : entity)
+			}))`);
+			await navigate("/knowledge", ".knowledge-page-header h1");
+			assert.equal(
+				await host('document.querySelectorAll(".entity-markdown-preview-body details").length'),
+				3,
+				`${theme}: knowledge notes use the same safe HTML renderer`,
+			);
+			await host('document.querySelector(".entity-markdown-preview-body details summary").click()');
+			assert.equal(
+				await host('document.querySelector(".entity-markdown-preview-body details").open'),
+				true,
+				`${theme}: knowledge disclosures are interactive`,
+			);
+			await navigate("/", ".chat-topbar h1");
+			browser.setContentSize(375, 812);
+			await settle();
+			assert.equal(
+				await host(`(() => {
+					const body = document.querySelector("#turn-ui-answer .assistant-body");
+					const style = getComputedStyle(body);
+					return parseFloat(style.paddingLeft) >= 16 && parseFloat(style.paddingTop) >= 12
+						&& [...body.querySelectorAll(".markdown-body details")].every(group => {
+							const bounds = group.getBoundingClientRect();
+							return bounds.left >= 0 && bounds.right <= innerWidth;
+						});
+				})()`),
+				true,
+				`${theme}: compact answers retain padding without overflowing disclosure cards`,
+			);
+			await screenshot(`${theme}-disclosures-compact`);
+			browser.setContentSize(1440, 960);
+			await settle();
+		}
+		await host(`window.uiStore.getState().updateTurn("ui-answer", {
+			content: ${JSON.stringify(original.answer)}
+		});
+			window.uiStore.setState(state => ({
+				entities: state.entities.map(entity => entity.id === "ui-entity"
+					? { ...entity, content: ${JSON.stringify(original.entity)} } : entity)
+			}));
+			delete window.uiDetailsNode;`);
+	}
+
 	async function checkChatActionContrast() {
 		browser.setContentSize(1440, 960);
 		await navigate("/", ".chat-topbar h1");
@@ -1135,6 +1408,21 @@ if (!process.versions.electron) {
 		})`);
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme, { highContrast: false, reduceMotion: false, fontScale: 1 });
+			await host(
+				'import("/src/store/conversationFocus.ts").then(module => module.useConversationFocus.getState().setFocus("ui-session", "ui-answer"))',
+			);
+			await settle();
+			assert.equal(
+				await host(`(() => {
+					const body = document.querySelector("#turn-ui-answer.is-focused .turn-body");
+					const style = getComputedStyle(body);
+					return style.outlineStyle === "solid" && style.outlineWidth === "1px"
+						&& style.backgroundColor !== "rgba(0, 0, 0, 0)"
+						&& getComputedStyle(body, "::after").content === "none";
+				})()`),
+				true,
+				`${theme}: located answer uses a complete highlight instead of a left rail`,
+			);
 			await host(`(() => {
 				const paragraph = document.querySelector(".assistant-body .markdown-body p");
 				const range = document.createRange();
@@ -1169,6 +1457,9 @@ if (!process.versions.electron) {
 			await host('document.querySelector(".analyze-context-button").click()');
 			await until('Boolean(document.querySelector(".rot-score"))', "context analysis results");
 			await host("document.querySelector('[aria-label=\"Close panel\"]').click()");
+			await host(
+				'import("/src/store/conversationFocus.ts").then(module => module.useConversationFocus.getState().setFocus("ui-session", null))',
+			);
 		}
 	}
 
@@ -1240,6 +1531,13 @@ if (!process.versions.electron) {
 		await seedContent();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
+			await navigate("/", ".chat-topbar h1");
+			const nodeViewSwitch =
+				'.sidebar-view-content:not([hidden]) [aria-label="Node view"][aria-checked="true"]';
+			if (await host(`Boolean(document.querySelector(${JSON.stringify(nodeViewSwitch)}))`)) {
+				await host(`document.querySelector(${JSON.stringify(nodeViewSwitch)}).click()`);
+				await settle();
+			}
 			for (const width of [1440, 1024, 768, 375]) {
 				browser.setContentSize(width, 960);
 				await settle();
@@ -1247,6 +1545,24 @@ if (!process.versions.electron) {
 					await navigate(route, heading);
 					await checkLayout(`${theme} ${width} ${route}`);
 					await checkContrast(`${theme} ${width} ${route}`);
+					if (route === "/") {
+						await checkFilledSelection(
+							".session-node-button.is-current",
+							`${theme} ${width} conversation list`,
+						);
+						assert.equal(
+							await host('document.querySelector(".session-viewport-rail")'),
+							null,
+							"reading position no longer adds a left rail",
+						);
+					}
+					if (route === "/knowledge") {
+						await checkFilledSelection(
+							".knowledge-resource-list button.is-selected",
+							`${theme} ${width} knowledge list`,
+						);
+					}
+					if (route === "/settings") await checkSettingsNavigation(`${theme} ${width} settings`);
 					if (route === "/sources") await checkWorkspaceSources(`${theme} ${width} workspace`);
 					if (width === 1440 || width === 375) {
 						await screenshot(`${theme}-${width}-${route.slice(1) || "workspace"}`);
@@ -1258,6 +1574,7 @@ if (!process.versions.electron) {
 				await navigate(route, heading);
 				await checkLayout(`${theme} large text ${route}`);
 				await checkContrast(`${theme} large text ${route}`);
+				if (route === "/settings") await checkSettingsNavigation(`${theme} large text settings`);
 				if (route === "/sources") await checkWorkspaceSources(`${theme} large text workspace`);
 			}
 			await setAppearance(theme, { fontScale: 1, highContrast: false, reduceMotion: false });
@@ -1265,6 +1582,7 @@ if (!process.versions.electron) {
 		await checkInteractions();
 		await checkSidebarFilter();
 		await checkPageControls();
+		await checkMarkdownHtml();
 		await checkChatActionContrast();
 		browser.setContentSize(1440, 960);
 		await navigate("/", ".chat-topbar h1");

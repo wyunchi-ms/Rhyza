@@ -31,7 +31,6 @@ import React, {
 	useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import rehypeKatex from "rehype-katex";
 import { createPortal, flushSync } from "react-dom";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -44,11 +43,13 @@ import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTi
 import { formatDuration } from "../../utils/common";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../../utils/markdown";
+import { markdownRehypePlugins } from "../../utils/markdownHtml";
 import {
 	markdownHeadingSelector,
 	rehypeMarkdownSections,
 	remarkMarkdownSections,
 	revealMarkdownHeadingEvent,
+	revealMarkdownDetails,
 } from "../../utils/markdownSections";
 import { MermaidDiagram } from "../MermaidDiagram";
 import { isTurnActive } from "../../utils/sessionRuntime";
@@ -852,6 +853,7 @@ const MarkdownContent = memo(function MarkdownContent({
 				const id = element.dataset.markdownSectionId;
 				if (id) ancestors.add(id);
 			}
+			revealMarkdownDetails(target);
 			// Native outline events must reveal the entire path before the caller's next frame.
 			flushSync(() => {
 				setCollapsedIds((previous) => {
@@ -893,7 +895,10 @@ const MarkdownContent = memo(function MarkdownContent({
 	);
 	const rehypePlugins = useMemo<
 		NonNullable<React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>
-	>(() => [rehypeKatex, ...(sectionsEnabled ? [rehypeMarkdownSections] : [])], [sectionsEnabled]);
+	>(
+		() => [...markdownRehypePlugins, ...(sectionsEnabled ? [rehypeMarkdownSections] : [])],
+		[sectionsEnabled],
+	);
 	const renderContext = useMemo<MarkdownRenderContextValue>(
 		() => ({
 			compact,

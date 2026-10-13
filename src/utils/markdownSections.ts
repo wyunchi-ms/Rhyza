@@ -4,6 +4,12 @@ import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 export const markdownHeadingSelector = "[data-markdown-heading-id]";
 export const revealMarkdownHeadingEvent = "rhyza:reveal-markdown-heading";
 
+export function revealMarkdownDetails(target: HTMLElement): void {
+	for (let element: HTMLElement | null = target; element; element = element.parentElement) {
+		if (element instanceof HTMLDetailsElement) element.open = true;
+	}
+}
+
 function headingText(node: MarkdownNode): string {
 	if (node.type === "html") return "";
 	if (node.type === "break") return " ";
