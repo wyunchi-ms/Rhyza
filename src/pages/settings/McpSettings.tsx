@@ -1,5 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, RefreshCw, Server, ShieldAlert, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+	BookOpen,
+	ExternalLink,
+	FileInput,
+	Files,
+	List,
+	LogIn,
+	LogOut,
+	Pencil,
+	Plus,
+	Power,
+	RefreshCw,
+	Save,
+	Server,
+	ShieldAlert,
+	ShieldCheck,
+	ShieldOff,
+	Trash2,
+	TriangleAlert,
+	Wrench,
+	X,
+} from "lucide-react";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
 import { useTranslation } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -30,6 +51,11 @@ const stateLabels = {
 	"needs-auth": "Sign-in required",
 	failed: "Failed",
 } as const;
+const exposureLabels = {
+	deferred: "Discover on demand",
+	direct: "Always available",
+	hidden: "Hidden",
+} as const;
 
 export function McpSettings() {
 	const { t } = useTranslation();
@@ -49,6 +75,11 @@ export function McpSettings() {
 	const busyRef = useRef("");
 	const workspaceRef = useRef<string | null>(null);
 	const loginTarget = useRef<McpTarget | undefined>(undefined);
+	const dialogTrigger = useRef<HTMLElement | null>(null);
+	const rememberDialogTrigger = () => {
+		dialogTrigger.current =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
+	};
 
 	const load = useCallback(async () => {
 		const bridge = getRhyzaBridge();
@@ -129,12 +160,14 @@ export function McpSettings() {
 			throw new Error("Manage extension servers through their Pi package.");
 		return { name: server.name, scope: server.scope };
 	};
-	const edit = (server: McpServerInfo) =>
+	const edit = (server: McpServerInfo) => {
+		rememberDialogTrigger();
 		void operate("edit", async () => {
 			const draft = await getRhyzaBridge()!.mcpEdit(target(server));
 			setDetail(undefined);
 			setEditor({ draft, existing: true });
 		});
+	};
 	const toggle = (server: McpServerInfo) =>
 		void operate("toggle", async () => {
 			const draft = await getRhyzaBridge()!.mcpEdit(target(server));
@@ -169,7 +202,7 @@ export function McpSettings() {
 					{t("Choose a Pi-based provider to use MCP in chat.")}
 				</p>
 			)}
-			{error && (
+			{error && !editor && !detail && !confirmation && (
 				<p className="mcp-error" role="alert">
 					{error}
 				</p>
@@ -201,13 +234,19 @@ export function McpSettings() {
 						</div>
 						<button
 							type="button"
-							className="secondary-button"
+							className="secondary-button mcp-icon-action"
 							disabled={Boolean(busy)}
+							aria-label={overview.projectTrusted ? t("Revoke trust") : t("Trust project")}
+							title={overview.projectTrusted ? t("Revoke trust") : t("Trust project")}
 							onClick={() =>
 								setConfirmation({ kind: overview.projectTrusted ? "revoke" : "trust" })
 							}
 						>
-							{overview.projectTrusted ? t("Revoke trust") : t("Trust project")}
+							{overview.projectTrusted ? (
+								<ShieldOff size={17} aria-hidden="true" />
+							) : (
+								<ShieldCheck size={17} aria-hidden="true" />
+							)}
 						</button>
 					</div>
 					<div className="mcp-toolbar">
@@ -215,27 +254,30 @@ export function McpSettings() {
 						<div className="mcp-actions">
 							<button
 								type="button"
-								className="secondary-button"
+								className="secondary-button mcp-icon-action"
+								aria-label={t("Refresh")}
+								title={t("Refresh")}
 								onClick={() => {
 									setError("");
 									void load();
 								}}
 								disabled={Boolean(busy)}
 							>
-								<RefreshCw size={14} aria-hidden="true" />
-								{t("Refresh")}
+								<RefreshCw size={17} aria-hidden="true" />
 							</button>
 							<button
 								type="button"
-								className="command-button"
+								className="command-button mcp-icon-action"
+								aria-label={t("Add server")}
+								title={t("Add server")}
 								disabled={Boolean(busy)}
 								onClick={() => {
+									rememberDialogTrigger();
 									setDetail(undefined);
 									setEditor({ draft: structuredClone(defaultServer), existing: false });
 								}}
 							>
-								<Plus size={14} aria-hidden="true" />
-								{t("Add server")}
+								<Plus size={18} aria-hidden="true" />
 							</button>
 						</div>
 					</div>
@@ -246,97 +288,20 @@ export function McpSettings() {
 					)}
 					<div className="mcp-server-list">
 						{overview.servers.map((server) => (
-							<div className="settings-panel mcp-server" key={`${server.scope}:${server.name}`}>
-								<div className="mcp-server-heading">
-									<Server size={17} aria-hidden="true" />
-									<div>
-										<strong>{server.name}</strong>
-										<span className="settings-help">
-											{server.scope === "user" ? t("User") : t("Project")} /{" "}
-											{server.transport === "stdio" ? "stdio" : "Streamable HTTP"}
-										</span>
-									</div>
-									<span className={`mcp-state is-${server.state}`} role="status">
-										{t(stateLabels[server.state])}
-									</span>
-								</div>
-								{server.error && (
-									<p className="mcp-error" role="alert">
-										{server.error}
-									</p>
-								)}
-								<p className="settings-help">
-									{server.tools.length} {t("tools")} / {server.connections}{" "}
-									{t("active connections")} / {server.exposure}
-								</p>
-								<div className="mcp-actions">
-									<button
-										type="button"
-										className="secondary-button"
-										disabled={Boolean(busy)}
-										onClick={() => {
-											setEditor(undefined);
-											setDetail(server);
-										}}
-									>
-										{t("Tools & resources")}
-									</button>
-									<button
-										type="button"
-										className="secondary-button"
-										disabled={Boolean(busy) || !server.enabled}
-										onClick={() => action(server, "reconnect")}
-									>
-										{t("Reconnect")}
-									</button>
-									{server.oauth && (
-										<button
-											type="button"
-											className="secondary-button"
-											disabled={Boolean(busy) || !server.enabled}
-											onClick={() => action(server, "login")}
-										>
-											{t("Sign in")}
-										</button>
-									)}
-									{server.oauth && (
-										<button
-											type="button"
-											className="secondary-button"
-											disabled={Boolean(busy) || !server.enabled}
-											onClick={() => action(server, "logout")}
-										>
-											{t("Sign out")}
-										</button>
-									)}
-									<button
-										type="button"
-										className="secondary-button"
-										disabled={Boolean(busy)}
-										onClick={() => toggle(server)}
-									>
-										{server.enabled ? t("Disable") : t("Enable")}
-									</button>
-									<button
-										type="button"
-										className="icon-button"
-										disabled={Boolean(busy)}
-										aria-label={`${t("Edit")} ${server.name}`}
-										onClick={() => edit(server)}
-									>
-										<Pencil size={15} aria-hidden="true" />
-									</button>
-									<button
-										type="button"
-										className="icon-button"
-										disabled={Boolean(busy)}
-										aria-label={`${t("Delete")} ${server.name}`}
-										onClick={() => setConfirmation({ kind: "remove", target: target(server) })}
-									>
-										<Trash2 size={15} aria-hidden="true" />
-									</button>
-								</div>
-							</div>
+							<McpServerCard
+								key={`${server.scope}:${server.name}`}
+								server={server}
+								busy={Boolean(busy)}
+								onDetails={() => {
+									rememberDialogTrigger();
+									setEditor(undefined);
+									setDetail(server);
+								}}
+								onAction={(command) => action(server, command)}
+								onToggle={() => toggle(server)}
+								onEdit={() => edit(server)}
+								onRemove={() => setConfirmation({ kind: "remove", target: target(server) })}
+							/>
 						))}
 					</div>
 				</>
@@ -344,32 +309,38 @@ export function McpSettings() {
 			{busy === "login" && (
 				<div className="mcp-notice" role="status">
 					<p>{t("Waiting for browser sign-in…")}</p>
-					{authUrl && (
+					<div className="mcp-actions">
+						{authUrl && (
+							<button
+								type="button"
+								className="secondary-button mcp-icon-action"
+								aria-label={t("Open sign-in page")}
+								title={t("Open sign-in page")}
+								onClick={() =>
+									void getRhyzaBridge()!
+										.openExternal({ url: authUrl })
+										.catch((reason) => setError(errorToMessage(reason)))
+								}
+							>
+								<ExternalLink size={17} aria-hidden="true" />
+							</button>
+						)}
 						<button
 							type="button"
-							className="secondary-button"
-							onClick={() =>
-								void getRhyzaBridge()!
-									.openExternal({ url: authUrl })
-									.catch((reason) => setError(errorToMessage(reason)))
-							}
+							className="secondary-button mcp-icon-action"
+							aria-label={t("Cancel sign-in")}
+							title={t("Cancel sign-in")}
+							onClick={() => {
+								const server = loginTarget.current;
+								if (server)
+									void getRhyzaBridge()!
+										.mcpAction({ ...server, action: "cancel-login" })
+										.catch((reason) => setError(errorToMessage(reason)));
+							}}
 						>
-							{t("Open sign-in page")}
+							<X size={17} aria-hidden="true" />
 						</button>
-					)}
-					<button
-						type="button"
-						className="secondary-button"
-						onClick={() => {
-							const server = loginTarget.current;
-							if (server)
-								void getRhyzaBridge()!
-									.mcpAction({ ...server, action: "cancel-login" })
-									.catch((reason) => setError(errorToMessage(reason)));
-						}}
-					>
-						{t("Cancel sign-in")}
-					</button>
+					</div>
 				</div>
 			)}
 			{editor && (
@@ -379,6 +350,8 @@ export function McpSettings() {
 					existing={editor.existing}
 					projectTrusted={overview?.projectTrusted === true}
 					busy={Boolean(busy)}
+					operationError={error}
+					returnFocus={dialogTrigger.current}
 					onClose={() => setEditor(undefined)}
 					onSave={async (draft) => {
 						const saved = await operate("save", () => getRhyzaBridge()!.mcpSave(draft));
@@ -391,6 +364,8 @@ export function McpSettings() {
 					key={`${detail.scope}:${detail.name}`}
 					server={detail}
 					busy={Boolean(busy)}
+					operationError={error}
+					returnFocus={dialogTrigger.current}
 					onClose={() => setDetail(undefined)}
 					onSave={(draft) => operate("permissions", () => getRhyzaBridge()!.mcpSave(draft))}
 				/>
@@ -409,11 +384,203 @@ export function McpSettings() {
 	);
 }
 
+function McpServerCard({
+	server,
+	busy,
+	onDetails,
+	onAction,
+	onToggle,
+	onEdit,
+	onRemove,
+}: {
+	server: McpServerInfo;
+	busy: boolean;
+	onDetails: () => void;
+	onAction: (command: McpActionRequest["action"]) => void;
+	onToggle: () => void;
+	onEdit: () => void;
+	onRemove: () => void;
+}) {
+	const { t } = useTranslation();
+	const needsAuth = server.enabled && server.state === "needs-auth";
+	const signedIn = server.authenticated && !needsAuth;
+	const connected = server.enabled && server.state === "connected";
+	const connecting = server.state === "connecting";
+	const authLabel = signedIn ? t("Sign out") : t("Sign in");
+	const AuthIcon = signedIn ? LogOut : LogIn;
+	return (
+		<article
+			className={`settings-panel mcp-server${needsAuth ? " needs-auth" : ""}`}
+			aria-label={server.name}
+		>
+			<header className="mcp-server-heading">
+				<span className="mcp-server-icon">
+					<Server size={19} aria-hidden="true" />
+				</span>
+				<div className="mcp-server-identity">
+					<h3>{server.name}</h3>
+					<div className="mcp-server-meta">
+						<span>{server.scope === "user" ? t("User configuration") : t("Project")}</span>
+						<span>{server.transport === "stdio" ? "stdio" : "Streamable HTTP"}</span>
+					</div>
+				</div>
+				<span className={`mcp-state is-${server.state}`} role="status">
+					{t(stateLabels[server.state])}
+				</span>
+			</header>
+			{needsAuth && (
+				<div className="mcp-sign-in-hint" role="status">
+					<TriangleAlert size={17} aria-hidden="true" />
+					<div>
+						<strong>{t("Sign in to discover tools")}</strong>
+						<p>{t("Complete authentication in your browser to connect this server.")}</p>
+					</div>
+				</div>
+			)}
+			{server.error &&
+				(server.state === "needs-auth" ? (
+					<details className="mcp-diagnostics">
+						<summary>{t("Connection details")}</summary>
+						<pre>{server.error}</pre>
+					</details>
+				) : (
+					<p className="mcp-error" role="alert">
+						{server.error}
+					</p>
+				))}
+			<footer className="mcp-server-footer">
+				<div className="mcp-server-metrics">
+					<span>
+						{server.tools.length} {t("tools")}
+					</span>
+					<span>
+						{server.connections} {t("active connections")}
+					</span>
+					<span>{t(exposureLabels[server.exposure])}</span>
+				</div>
+				<div className="mcp-server-actions" role="group" aria-label={server.name}>
+					{server.oauth && (
+						<button
+							type="button"
+							className={`secondary-button mcp-icon-action mcp-auth-action${needsAuth ? " needs-auth" : ""}`}
+							aria-label={`${authLabel} ${server.name}`}
+							title={authLabel}
+							disabled={busy || !server.enabled || connecting}
+							onClick={() => onAction(signedIn ? "logout" : "login")}
+						>
+							<AuthIcon size={17} aria-hidden="true" />
+						</button>
+					)}
+					<button
+						type="button"
+						className="secondary-button mcp-icon-action mcp-tools-action"
+						disabled={busy || !connected}
+						aria-label={`${t("Tools & resources")} ${server.name}`}
+						title={
+							connected
+								? t("Tools & resources")
+								: needsAuth
+									? t("Sign in to view tools and resources.")
+									: t("Connect to view tools and resources.")
+						}
+						onClick={onDetails}
+					>
+						<Wrench size={17} aria-hidden="true" />
+					</button>
+					<button
+						type="button"
+						className="secondary-button mcp-icon-action mcp-reconnect-action"
+						aria-label={`${t("Reconnect")} ${server.name}`}
+						title={t("Reconnect")}
+						disabled={busy || !server.enabled || connecting || needsAuth}
+						onClick={() => onAction("reconnect")}
+					>
+						<RefreshCw size={17} aria-hidden="true" />
+					</button>
+					<button
+						type="button"
+						className="secondary-button mcp-icon-action mcp-power-action"
+						role="switch"
+						aria-checked={server.enabled}
+						aria-label={`${t("Server enabled")} ${server.name}`}
+						title={server.enabled ? t("Disable") : t("Enable")}
+						disabled={busy}
+						onClick={onToggle}
+					>
+						<Power size={17} aria-hidden="true" />
+					</button>
+					<button
+						type="button"
+						className="secondary-button mcp-icon-action"
+						disabled={busy}
+						aria-label={`${t("Edit")} ${server.name}`}
+						title={t("Edit")}
+						onClick={onEdit}
+					>
+						<Pencil size={17} aria-hidden="true" />
+					</button>
+					<button
+						type="button"
+						className="secondary-button mcp-icon-action mcp-delete-action"
+						disabled={busy}
+						aria-label={`${t("Delete")} ${server.name}`}
+						title={t("Delete")}
+						onClick={onRemove}
+					>
+						<Trash2 size={17} aria-hidden="true" />
+					</button>
+				</div>
+			</footer>
+		</article>
+	);
+}
+
+function McpDialog({
+	labelledBy,
+	busy,
+	onClose,
+	children,
+	returnFocus,
+}: {
+	labelledBy: string;
+	busy: boolean;
+	onClose: () => void;
+	children: ReactNode;
+	returnFocus: HTMLElement | null;
+}) {
+	const ref = useRef<HTMLDialogElement>(null);
+	useEffect(() => {
+		const previous = returnFocus;
+		const dialog = ref.current;
+		dialog?.showModal();
+		return () => {
+			dialog?.close();
+			previous?.focus({ preventScroll: true });
+		};
+	}, []);
+	return (
+		<dialog
+			ref={ref}
+			className="mcp-dialog"
+			aria-labelledby={labelledBy}
+			aria-busy={busy}
+			onCancel={(event) => {
+				event.preventDefault();
+				if (!busy) onClose();
+			}}
+		>
+			{children}
+		</dialog>
+	);
+}
+
 function McpEditor({
 	initial,
 	existing,
 	projectTrusted,
 	busy,
+	operationError,
+	returnFocus,
 	onClose,
 	onSave,
 }: {
@@ -421,6 +588,8 @@ function McpEditor({
 	existing: boolean;
 	projectTrusted: boolean;
 	busy: boolean;
+	operationError: string;
+	returnFocus: HTMLElement | null;
 	onClose: () => void;
 	onSave: (draft: McpSaveRequest) => Promise<void>;
 }) {
@@ -451,10 +620,10 @@ function McpEditor({
 	const [importText, setImportText] = useState("");
 	const [importName, setImportName] = useState("");
 	const [error, setError] = useState("");
-	const formRef = useRef<HTMLFormElement>(null);
+	const errorRef = useRef<HTMLParagraphElement>(null);
 	useEffect(() => {
-		formRef.current?.scrollIntoView({ block: "nearest" });
-	}, []);
+		if (error || operationError) errorRef.current?.scrollIntoView({ block: "nearest" });
+	}, [error, operationError]);
 
 	const importConfig = () => {
 		try {
@@ -516,249 +685,280 @@ function McpEditor({
 		}
 	};
 	return (
-		<form
-			ref={formRef}
-			className="settings-panel mcp-editor"
-			onSubmit={(event) => {
-				event.preventDefault();
-				void submit();
-			}}
+		<McpDialog
+			labelledBy="mcp-editor-heading"
+			busy={busy}
+			onClose={onClose}
+			returnFocus={returnFocus}
 		>
-			<header className="mcp-toolbar">
-				<h2>{existing ? t("Edit MCP server") : t("Add MCP server")}</h2>
-				<button
-					className="icon-button"
-					type="button"
-					aria-label={t("Close")}
-					disabled={busy}
-					onClick={onClose}
-				>
-					<X size={16} />
-				</button>
-			</header>
-			{error && (
-				<p className="mcp-error" role="alert">
-					{error}
-				</p>
-			)}
-			<fieldset disabled={busy}>
-				<div className="mcp-form-grid">
-					<label>
-						{t("Server name")}
-						<input
-							className="field"
-							value={name}
-							autoFocus
-							disabled={existing}
-							required
-							onChange={(event) => setName(event.target.value)}
-						/>
-					</label>
-					<label>
-						{t("Configuration scope")}
-						<select
-							className="field"
-							value={scope}
-							disabled={existing}
-							onChange={(event) => setScope(event.target.value === "project" ? "project" : "user")}
-						>
-							<option value="user">{t("User")}</option>
-							<option value="project" disabled={!projectTrusted}>
-								{t("Project")}
-							</option>
-						</select>
-					</label>
-					<label>
-						{t("Transport")}
-						<select
-							className="field"
-							value={transport}
-							onChange={(event) => {
-								setTransport(event.target.value);
-								setValues("{}");
-							}}
-						>
-							<option value="stdio">stdio</option>
-							<option value="http">Streamable HTTP</option>
-						</select>
-					</label>
-					<label>
-						{t("Tool exposure")}
-						<select
-							className="field"
-							value={exposure}
-							onChange={(event) =>
-								setExposure(
-									event.target.value === "direct"
-										? "direct"
-										: event.target.value === "hidden"
-											? "hidden"
-											: "deferred",
-								)
-							}
-						>
-							<option value="deferred">{t("Discover on demand")}</option>
-							<option value="direct">{t("Always available")}</option>
-							<option value="hidden">{t("Hidden")}</option>
-						</select>
-					</label>
-				</div>
-				<label>
-					{t("Description")}
-					<input
-						className="field"
-						value={description}
-						onChange={(event) => setDescription(event.target.value)}
-					/>
-				</label>
-				{transport === "stdio" ? (
-					<>
+			<form
+				className="settings-panel mcp-editor"
+				onSubmit={(event) => {
+					event.preventDefault();
+					void submit();
+				}}
+			>
+				<header className="mcp-toolbar">
+					<h2 id="mcp-editor-heading">{existing ? t("Edit MCP server") : t("Add MCP server")}</h2>
+					<button
+						className="icon-button"
+						type="button"
+						aria-label={t("Close")}
+						title={t("Close")}
+						disabled={busy}
+						onClick={onClose}
+					>
+						<X size={16} />
+					</button>
+				</header>
+				{(error || operationError) && (
+					<p ref={errorRef} className="mcp-error" role="alert">
+						{error || operationError}
+					</p>
+				)}
+				<fieldset disabled={busy}>
+					<div className="mcp-form-grid">
 						<label>
-							{t("Executable")}
+							{t("Server name")}
 							<input
 								className="field"
+								value={name}
+								autoFocus={!existing}
+								disabled={existing}
 								required
-								value={command}
-								onChange={(event) => setCommand(event.target.value)}
-							/>
-						</label>
-						<p className="settings-help">
-							{t("Use one executable, not a shell command. Arguments are a JSON array.")}
-						</p>
-						<label>
-							{t("Arguments")}
-							<textarea
-								className="field"
-								rows={3}
-								value={args}
-								onChange={(event) => setArgs(event.target.value)}
-								spellCheck={false}
+								onChange={(event) => setName(event.target.value)}
 							/>
 						</label>
 						<label>
-							{t("Working directory")}
-							<input
+							{t("Configuration scope")}
+							<select
 								className="field"
-								value={cwd}
-								onChange={(event) => setCwd(event.target.value)}
-							/>
+								value={scope}
+								disabled={existing}
+								onChange={(event) =>
+									setScope(event.target.value === "project" ? "project" : "user")
+								}
+							>
+								<option value="user">{t("User")}</option>
+								<option value="project" disabled={!projectTrusted}>
+									{t("Project")}
+								</option>
+							</select>
 						</label>
-					</>
-				) : (
+						<label>
+							{t("Transport")}
+							<select
+								className="field"
+								value={transport}
+								onChange={(event) => {
+									setTransport(event.target.value);
+									setValues("{}");
+								}}
+							>
+								<option value="stdio">stdio</option>
+								<option value="http">Streamable HTTP</option>
+							</select>
+						</label>
+						<label>
+							{t("Tool exposure")}
+							<select
+								className="field"
+								value={exposure}
+								onChange={(event) =>
+									setExposure(
+										event.target.value === "direct"
+											? "direct"
+											: event.target.value === "hidden"
+												? "hidden"
+												: "deferred",
+									)
+								}
+							>
+								<option value="deferred">{t("Discover on demand")}</option>
+								<option value="direct">{t("Always available")}</option>
+								<option value="hidden">{t("Hidden")}</option>
+							</select>
+						</label>
+					</div>
 					<label>
-						{t("Server URL")}
+						{t("Description")}
 						<input
 							className="field"
-							type="url"
-							required
-							value={url}
-							onChange={(event) => setUrl(event.target.value)}
+							value={description}
+							autoFocus={existing}
+							onChange={(event) => setDescription(event.target.value)}
 						/>
 					</label>
-				)}
-				<label>
-					{transport === "http" ? t("HTTP headers (JSON)") : t("Environment variables (JSON)")}
-					<textarea
-						className="field"
-						rows={3}
-						value={values}
-						onChange={(event) => setValues(event.target.value)}
-						spellCheck={false}
-					/>
-				</label>
-				<p className="settings-help">
-					{t(
-						"Prefer ${ENVIRONMENT_VARIABLE} references. Stored secrets are masked and preserved when unchanged.",
-					)}
-				</p>
-				{transport === "http" && (
-					<details>
-						<summary>{t("OAuth settings")}</summary>
-						<p className="settings-help">
-							{t(
-								"OAuth is automatic when no Authorization header is supplied. Configure a registered client here if required.",
-							)}
-						</p>
+					{transport === "stdio" ? (
+						<>
+							<label>
+								{t("Executable")}
+								<input
+									className="field"
+									required
+									value={command}
+									onChange={(event) => setCommand(event.target.value)}
+								/>
+							</label>
+							<p className="settings-help">
+								{t("Use one executable, not a shell command. Arguments are a JSON array.")}
+							</p>
+							<label>
+								{t("Arguments")}
+								<textarea
+									className="field"
+									rows={3}
+									value={args}
+									onChange={(event) => setArgs(event.target.value)}
+									spellCheck={false}
+								/>
+							</label>
+							<label>
+								{t("Working directory")}
+								<input
+									className="field"
+									value={cwd}
+									onChange={(event) => setCwd(event.target.value)}
+								/>
+							</label>
+						</>
+					) : (
 						<label>
-							{t("OAuth configuration (JSON)")}
-							<textarea
-								className="field"
-								rows={4}
-								value={oauth}
-								onChange={(event) => setOauth(event.target.value)}
-								spellCheck={false}
-							/>
-						</label>
-					</details>
-				)}
-				<label>
-					{t("Request timeout (seconds)")}
-					<input
-						className="field"
-						type="number"
-						min={1}
-						max={600}
-						value={timeout}
-						onChange={(event) => setTimeoutValue(Number(event.target.value))}
-					/>
-				</label>
-				{!existing && (
-					<details>
-						<summary>{t("Import MCP configuration")}</summary>
-						<label>
-							{t("Configuration JSON")}
-							<textarea
-								className="field"
-								rows={5}
-								value={importText}
-								onChange={(event) => setImportText(event.target.value)}
-								spellCheck={false}
-							/>
-						</label>
-						<label>
-							{t("Server name to import")}
+							{t("Server URL")}
 							<input
 								className="field"
-								value={importName}
-								onChange={(event) => setImportName(event.target.value)}
+								type="url"
+								required
+								value={url}
+								onChange={(event) => setUrl(event.target.value)}
 							/>
 						</label>
-						<p className="settings-help">
-							{t(
-								"Import one server at a time, review its fields, then save. Imported tools remain blocked until approved.",
-							)}
-						</p>
-						<button type="button" className="secondary-button" onClick={importConfig}>
-							{t("Load configuration")}
-						</button>
-					</details>
-				)}
-				<p className="mcp-notice">
-					{t(
-						"A local server runs with your OS account. MCP is not a sandbox. New tools are blocked until you review and approve them.",
 					)}
-				</p>
-				<div className="mcp-actions">
-					<button type="button" className="secondary-button" onClick={onClose}>
-						{t("Cancel")}
-					</button>
-					<button className="command-button" type="submit">
-						{busy ? t("Saving…") : t("Save")}
-					</button>
-				</div>
-			</fieldset>
-		</form>
+					<label>
+						{transport === "http" ? t("HTTP headers (JSON)") : t("Environment variables (JSON)")}
+						<textarea
+							className="field"
+							rows={3}
+							value={values}
+							onChange={(event) => setValues(event.target.value)}
+							spellCheck={false}
+						/>
+					</label>
+					<p className="settings-help">
+						{t(
+							"Prefer ${ENVIRONMENT_VARIABLE} references. Stored secrets are masked and preserved when unchanged.",
+						)}
+					</p>
+					{transport === "http" && (
+						<details>
+							<summary>{t("OAuth settings")}</summary>
+							<p className="settings-help">
+								{t(
+									"OAuth is automatic when no Authorization header is supplied. Configure a registered client here if required.",
+								)}
+							</p>
+							<label>
+								{t("OAuth configuration (JSON)")}
+								<textarea
+									className="field"
+									rows={4}
+									value={oauth}
+									onChange={(event) => setOauth(event.target.value)}
+									spellCheck={false}
+								/>
+							</label>
+						</details>
+					)}
+					<label>
+						{t("Request timeout (seconds)")}
+						<input
+							className="field"
+							type="number"
+							min={1}
+							max={600}
+							value={timeout}
+							onChange={(event) => setTimeoutValue(Number(event.target.value))}
+						/>
+					</label>
+					{!existing && (
+						<details>
+							<summary>{t("Import MCP configuration")}</summary>
+							<label>
+								{t("Configuration JSON")}
+								<textarea
+									className="field"
+									rows={5}
+									value={importText}
+									onChange={(event) => setImportText(event.target.value)}
+									spellCheck={false}
+								/>
+							</label>
+							<label>
+								{t("Server name to import")}
+								<input
+									className="field"
+									value={importName}
+									onChange={(event) => setImportName(event.target.value)}
+								/>
+							</label>
+							<p className="settings-help">
+								{t(
+									"Import one server at a time, review its fields, then save. Imported tools remain blocked until approved.",
+								)}
+							</p>
+							<button
+								type="button"
+								className="secondary-button mcp-icon-action"
+								aria-label={t("Load configuration")}
+								title={t("Load configuration")}
+								onClick={importConfig}
+							>
+								<FileInput size={17} aria-hidden="true" />
+							</button>
+						</details>
+					)}
+					<p className="mcp-notice">
+						{t(
+							"A local server runs with your OS account. MCP is not a sandbox. New tools are blocked until you review and approve them.",
+						)}
+					</p>
+					<div className="mcp-actions">
+						<button
+							type="button"
+							className="secondary-button mcp-icon-action"
+							aria-label={t("Cancel")}
+							title={t("Cancel")}
+							onClick={onClose}
+						>
+							<X size={17} aria-hidden="true" />
+						</button>
+						<button
+							className="command-button mcp-icon-action"
+							type="submit"
+							aria-label={busy ? t("Saving…") : t("Save")}
+							title={busy ? t("Saving…") : t("Save")}
+						>
+							<Save size={17} aria-hidden="true" />
+						</button>
+					</div>
+				</fieldset>
+			</form>
+		</McpDialog>
 	);
 }
 
 function McpDetails({
 	server,
 	busy,
+	operationError,
+	returnFocus,
 	onClose,
 	onSave,
 }: {
 	server: McpServerInfo;
 	busy: boolean;
+	operationError: string;
+	returnFocus: HTMLElement | null;
 	onClose: () => void;
 	onSave: (draft: McpSaveRequest) => Promise<boolean>;
 }) {
@@ -766,6 +966,10 @@ function McpDetails({
 	const [permissions, setPermissions] = useState<Record<string, McpPermission>>({});
 	const [exposures, setExposures] = useState<Record<string, "deferred" | "direct" | "hidden">>({});
 	const [error, setError] = useState("");
+	const errorRef = useRef<HTMLParagraphElement>(null);
+	useEffect(() => {
+		if (error || operationError) errorRef.current?.scrollIntoView({ block: "nearest" });
+	}, [error, operationError]);
 	const [resource, setResource] = useState("");
 	const [uri, setUri] = useState("");
 	const [cursor, setCursor] = useState("");
@@ -774,10 +978,6 @@ function McpDetails({
 		name: server.name,
 		scope: server.scope === "project" ? "project" : "user",
 	};
-	const ref = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		ref.current?.scrollIntoView({ block: "nearest" });
-	}, []);
 	const save = async () => {
 		try {
 			const draft = await getRhyzaBridge()!.mcpEdit(target);
@@ -809,156 +1009,174 @@ function McpDetails({
 		}
 	};
 	return (
-		<div ref={ref} className="settings-panel mcp-details">
-			<header className="mcp-toolbar">
-				<h2>
-					{server.name}: {t("Tools & resources")}
-				</h2>
-				<button
-					type="button"
-					className="icon-button"
-					disabled={busy || reading}
-					onClick={onClose}
-					aria-label={t("Close")}
-				>
-					<X size={16} />
-				</button>
-			</header>
-			{error && (
-				<p className="mcp-error" role="alert">
-					{error}
-				</p>
-			)}
-			<p className="mcp-notice">
-				{t(
-					"Server annotations are hints, not permissions. Approve only tools you have reviewed. Read access can expose local or remote data; write access requires a writable isolated chat, but remote changes are not isolated.",
+		<McpDialog
+			labelledBy="mcp-details-heading"
+			busy={busy || reading}
+			onClose={onClose}
+			returnFocus={returnFocus}
+		>
+			<div className="settings-panel mcp-details">
+				<header className="mcp-toolbar">
+					<h2 id="mcp-details-heading">
+						{server.name}: {t("Tools & resources")}
+					</h2>
+					<button
+						type="button"
+						className="icon-button"
+						disabled={busy || reading}
+						onClick={onClose}
+						aria-label={t("Close")}
+						title={t("Close")}
+					>
+						<X size={16} />
+					</button>
+				</header>
+				{(error || operationError) && (
+					<p ref={errorRef} className="mcp-error" role="alert">
+						{error || operationError}
+					</p>
 				)}
-			</p>
-			{server.tools.length === 0 && (
-				<p className="settings-help">
-					{t("No tools discovered. Connect or sign in to this server first.")}
-				</p>
-			)}
-			<div className="mcp-tools">
-				{server.tools.map((tool) => (
-					<div className="mcp-tool" key={tool.name}>
-						<div>
-							<strong>{tool.name}</strong>
-							<p className="settings-help">{tool.description}</p>
-							{tool.readOnlyHint !== undefined && (
-								<small>
-									{t("Server read-only hint")}: {String(tool.readOnlyHint)}
-								</small>
-							)}
-							{tool.destructiveHint && <small>{t("Server marks this tool as destructive.")}</small>}
-						</div>
-						<label>
-							{t("Permission")}
-							<select
-								className="field"
-								aria-label={`${tool.name} ${t("Permission")}`}
-								disabled={busy}
-								value={permissions[tool.name] ?? tool.permission}
-								onChange={(event) =>
-									setPermissions({
-										...permissions,
-										[tool.name]:
-											event.target.value === "read"
-												? "read"
-												: event.target.value === "write"
-													? "write"
-													: "blocked",
-									})
-								}
-							>
-								<option value="blocked">{t("Blocked")}</option>
-								<option value="read">{t("Approved read")}</option>
-								<option value="write">{t("Approved write")}</option>
-							</select>
-						</label>
-						<label>
-							{t("Tool exposure")}
-							<select
-								className="field"
-								aria-label={`${tool.name} ${t("Tool exposure")}`}
-								disabled={busy}
-								value={exposures[tool.name] ?? tool.exposure}
-								onChange={(event) =>
-									setExposures({
-										...exposures,
-										[tool.name]:
-											event.target.value === "direct"
-												? "direct"
-												: event.target.value === "hidden"
-													? "hidden"
-													: "deferred",
-									})
-								}
-							>
-								<option value="deferred">{t("Discover on demand")}</option>
-								<option value="direct">{t("Always available")}</option>
-								<option value="hidden">{t("Hidden")}</option>
-							</select>
-						</label>
-					</div>
-				))}
-			</div>
-			<button
-				type="button"
-				className="command-button"
-				disabled={busy || (!Object.keys(permissions).length && !Object.keys(exposures).length)}
-				onClick={() => void save()}
-			>
-				{t("Save tool settings")}
-			</button>
-			<details className="mcp-resources">
-				<summary>{t("Resources")}</summary>
-				<p className="settings-help">
+				<p className="mcp-notice">
 					{t(
-						"List resources or URI templates, then read a text preview. Paste nextCursor to continue a list.",
+						"Server annotations are hints, not permissions. Approve only tools you have reviewed. Read access can expose local or remote data; write access requires a writable isolated chat, but remote changes are not isolated.",
 					)}
 				</p>
-				<label>
-					{t("Resource cursor")}
-					<input
-						className="field"
-						value={cursor}
-						onChange={(event) => setCursor(event.target.value)}
-					/>
-				</label>
-				<div className="mcp-actions">
-					<button
-						className="secondary-button"
-						type="button"
-						disabled={busy || reading}
-						onClick={() => void read("list")}
-					>
-						{t("List resources")}
-					</button>
-					<button
-						className="secondary-button"
-						type="button"
-						disabled={busy || reading}
-						onClick={() => void read("templates")}
-					>
-						{t("List templates")}
-					</button>
+				{server.tools.length === 0 && (
+					<p className="settings-help">
+						{t("No tools discovered. Connect or sign in to this server first.")}
+					</p>
+				)}
+				<div className="mcp-tools">
+					{server.tools.map((tool) => (
+						<div className="mcp-tool" key={tool.name}>
+							<div>
+								<strong>{tool.name}</strong>
+								<p className="settings-help">{tool.description}</p>
+								{tool.readOnlyHint !== undefined && (
+									<small>
+										{t("Server read-only hint")}: {String(tool.readOnlyHint)}
+									</small>
+								)}
+								{tool.destructiveHint && (
+									<small>{t("Server marks this tool as destructive.")}</small>
+								)}
+							</div>
+							<label>
+								{t("Permission")}
+								<select
+									className="field"
+									aria-label={`${tool.name} ${t("Permission")}`}
+									disabled={busy}
+									value={permissions[tool.name] ?? tool.permission}
+									onChange={(event) =>
+										setPermissions({
+											...permissions,
+											[tool.name]:
+												event.target.value === "read"
+													? "read"
+													: event.target.value === "write"
+														? "write"
+														: "blocked",
+										})
+									}
+								>
+									<option value="blocked">{t("Blocked")}</option>
+									<option value="read">{t("Approved read")}</option>
+									<option value="write">{t("Approved write")}</option>
+								</select>
+							</label>
+							<label>
+								{t("Tool exposure")}
+								<select
+									className="field"
+									aria-label={`${tool.name} ${t("Tool exposure")}`}
+									disabled={busy}
+									value={exposures[tool.name] ?? tool.exposure}
+									onChange={(event) =>
+										setExposures({
+											...exposures,
+											[tool.name]:
+												event.target.value === "direct"
+													? "direct"
+													: event.target.value === "hidden"
+														? "hidden"
+														: "deferred",
+										})
+									}
+								>
+									<option value="deferred">{t("Discover on demand")}</option>
+									<option value="direct">{t("Always available")}</option>
+									<option value="hidden">{t("Hidden")}</option>
+								</select>
+							</label>
+						</div>
+					))}
 				</div>
-				<label>
-					{t("Resource URI")}
-					<input className="field" value={uri} onChange={(event) => setUri(event.target.value)} />
-				</label>
 				<button
-					className="secondary-button"
 					type="button"
-					disabled={busy || reading || !uri.trim()}
-					onClick={() => void read("read")}
+					className="command-button mcp-icon-action"
+					aria-label={t("Save tool settings")}
+					title={t("Save tool settings")}
+					disabled={busy || (!Object.keys(permissions).length && !Object.keys(exposures).length)}
+					onClick={() => void save()}
 				>
-					{reading ? t("Loading…") : t("Read resource")}
+					<Save size={17} aria-hidden="true" />
 				</button>
-				{resource && <pre className="mcp-resource-preview">{resource}</pre>}
-			</details>
-		</div>
+				<details className="mcp-resources">
+					<summary>{t("Resources")}</summary>
+					<p className="settings-help">
+						{t(
+							"List resources or URI templates, then read a text preview. Paste nextCursor to continue a list.",
+						)}
+					</p>
+					<label>
+						{t("Resource cursor")}
+						<input
+							className="field"
+							value={cursor}
+							onChange={(event) => setCursor(event.target.value)}
+						/>
+					</label>
+					<div className="mcp-actions">
+						<button
+							className="secondary-button mcp-icon-action"
+							type="button"
+							aria-label={t("List resources")}
+							title={t("List resources")}
+							disabled={busy || reading || server.state !== "connected"}
+							onClick={() => void read("list")}
+						>
+							<List size={17} aria-hidden="true" />
+						</button>
+						<button
+							className="secondary-button mcp-icon-action"
+							type="button"
+							aria-label={t("List templates")}
+							title={t("List templates")}
+							disabled={busy || reading || server.state !== "connected"}
+							onClick={() => void read("templates")}
+						>
+							<Files size={17} aria-hidden="true" />
+						</button>
+					</div>
+					<label>
+						{t("Resource URI")}
+						<input className="field" value={uri} onChange={(event) => setUri(event.target.value)} />
+					</label>
+					<button
+						className="secondary-button mcp-icon-action"
+						type="button"
+						aria-label={reading ? t("Loading…") : t("Read resource")}
+						title={reading ? t("Loading…") : t("Read resource")}
+						disabled={busy || reading || server.state !== "connected" || !uri.trim()}
+						onClick={() => void read("read")}
+					>
+						<BookOpen size={17} aria-hidden="true" />
+					</button>
+					{resource && <pre className="mcp-resource-preview">{resource}</pre>}
+				</details>
+			</div>
+		</McpDialog>
 	);
 }
 

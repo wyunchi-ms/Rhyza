@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { AppStateStore } from "../electron/main/app-state-store.js";
-import type { RhyzaBridge } from "../src/shared/ipc.js";
+import type {
+	AppStateSaveRequest,
+	RhyzaBridge,
+	WorkspaceStateEnvelope,
+} from "../src/shared/ipc.js";
 import {
 	getWorkspacePersistencePath,
 	loadWorkspaceState,
@@ -134,11 +138,14 @@ test("desktop workspaces independently restore filters from disk after switching
 	try {
 		await withStorage(async () => {
 			const bridge: Pick<RhyzaBridge, "appStateLoad" | "appStateSave"> = {
-				appStateLoad: () => diskStore.load(currentWorkspace),
+				appStateLoad: async () => diskStore.load(currentWorkspace),
 				appStateSave: (request) => {
 					assert.equal(request.workspacePath, currentWorkspace);
 					const pending = diskStore
-						.save(currentWorkspace, request.value)
+						.save(
+							currentWorkspace,
+							typeof request.value === "string" ? request.value : JSON.stringify(request.value),
+						)
 						.then<{ ok: true }>(() => ({ ok: true }));
 					pendingSaves.push(pending);
 					return pending;
@@ -152,7 +159,7 @@ test("desktop workspaces independently restore filters from disk after switching
 				await flush();
 				currentWorkspace = workspacePath;
 				setWorkspacePersistencePath(workspacePath);
-				loadWorkspaceState(bridge.appStateLoad());
+				loadWorkspaceState(await bridge.appStateLoad());
 				await flush();
 			};
 
@@ -190,4 +197,91 @@ test("desktop workspaces independently restore filters from disk after switching
 		await Promise.all(pendingSaves);
 		await rm(dataRoot, { recursive: true, force: true, maxRetries: 5 });
 	}
+});
+
+test("desktop persistence and parsed workspace loading do not serialize or parse JSON in the renderer", async () => {
+	await withStorage(async () => {
+		const saved: AppStateSaveRequest[] = [];
+		const bridge: Pick<RhyzaBridge, "appStateLoad" | "appStateSave"> = {
+			appStateLoad: async () => null,
+			appStateSave: async (request) => {
+				saved.push(request);
+				return { ok: true };
+			},
+		};
+		Object.defineProperty(window, "rhyza", { configurable: true, value: bridge });
+		setWorkspacePersistencePath("workspace-a");
+		await useAppStore.persist.rehydrate();
+		const stringify = JSON.stringify;
+		const parse = JSON.parse;
+		try {
+			JSON.stringify = () => {
+				throw new Error("Renderer JSON serialization is forbidden.");
+			};
+			JSON.parse = () => {
+				throw new Error("Renderer JSON parsing is forbidden.");
+			};
+			loadWorkspaceState({ version: 2, state: { leafStatuses: ["todo"] } });
+			useAppStore.getState().setLeafStatuses(["complete"]);
+		} finally {
+			JSON.stringify = stringify;
+			JSON.parse = parse;
+		}
+		assert.ok(saved.length >= 2);
+		const latest = saved.at(-1)!;
+		assert.equal(latest.workspacePath, "workspace-a");
+		assert.notEqual(typeof latest.value, "string");
+		assert.ok(typeof latest.value !== "string");
+		assert.equal(latest.value.workspacePath, "workspace-a");
+		assert.deepEqual(latest.value.state.leafStatuses, ["complete"]);
+	});
+});
+
+test("delayed hydration and its pending save cannot cross a workspace switch", async () => {
+	await withStorage(async () => {
+		const loads: Array<(value: WorkspaceStateEnvelope | null) => void> = [];
+		const saves: AppStateSaveRequest[] = [];
+		const warnings: unknown[][] = [];
+		const reportError = console.error;
+		const bridge: Pick<RhyzaBridge, "appStateLoad" | "appStateSave"> = {
+			appStateLoad: () => new Promise((resolve) => loads.push(resolve)),
+			appStateSave: async (request) => {
+				saves.push(request);
+				return { ok: true };
+			},
+		};
+		Object.defineProperty(window, "rhyza", { configurable: true, value: bridge });
+		console.error = (...args) => warnings.push(args);
+		try {
+			setWorkspacePersistencePath(null);
+			loadWorkspaceState(null);
+			setWorkspacePersistencePath("workspace-a");
+			const hydration = useAppStore.persist.rehydrate();
+			useAppStore.getState().setLeafStatuses(["parked"]);
+			assert.equal(loads.length, 2);
+			setWorkspacePersistencePath("workspace-b");
+			const oldState: WorkspaceStateEnvelope = {
+				version: 2,
+				state: { leafStatuses: ["complete"], turns: [{ id: "workspace-a-turn" }] },
+			};
+			loads[0](oldState);
+			loads[1](oldState);
+			await hydration;
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			assert.equal(saves.length, 0, "stale hydration must not save to either workspace");
+			assert.equal(useAppStore.getState().turns.length, 0);
+			assert.ok(
+				warnings.some((args) =>
+					args.some((arg) => arg instanceof Error && arg.message.includes("Workspace changed")),
+				),
+			);
+			const freshHydration = useAppStore.persist.rehydrate();
+			loads[2]({ version: 2, state: { leafStatuses: ["todo"] } });
+			await freshHydration;
+			assert.deepEqual(useAppStore.getState().leafStatuses, ["todo"]);
+			assert.equal(useAppStore.persist.hasHydrated(), true);
+		} finally {
+			console.error = reportError;
+		}
+	});
 });

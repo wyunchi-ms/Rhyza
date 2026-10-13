@@ -19,6 +19,7 @@ export interface McpServerInfo {
 	state: "disabled" | "connecting" | "connected" | "disconnected" | "needs-auth" | "failed";
 	error?: string;
 	oauth: boolean;
+	authenticated: boolean;
 	connections: number;
 	tools: {
 		name: string;

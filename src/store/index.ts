@@ -1,9 +1,15 @@
 import { create } from "zustand";
-import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import {
+	createJSONStorage,
+	persist,
+	type PersistStorage,
+	type StorageValue,
+} from "zustand/middleware";
 import type {
 	KnowledgeCandidate,
 	KnowledgeDiagramCandidate,
 	KnowledgeRelationCandidate,
+	WorkspaceStateEnvelope,
 } from "../shared/ipc";
 import type {
 	ChangeOperation,
@@ -30,13 +36,17 @@ import { cloneSessionNode, forkSessionAtTurn, forkSessionNode } from "../utils/s
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
-import { errorToMessage } from "../shared/value";
+import { errorToMessage, isRecord } from "../shared/value";
 import { normalizeProviderSettings, updateProviderSettings } from "../shared/providers";
 import {
 	prioritizeKnowledgeSourceRefs,
 	sourceRefsForKnowledgeScope,
 } from "../utils/knowledgeExtraction";
-import { recordPerformanceTiming } from "../utils/performanceMarks";
+import {
+	measurePerformance,
+	measurePerformanceWithFrame,
+	recordPerformanceTiming,
+} from "../utils/performanceMarks";
 import { distinctStorage } from "../utils/distinctStorage";
 import { normalizeLeafStatuses, type LeafStatusFilter } from "../utils/conversationFilter";
 import {
@@ -179,88 +189,116 @@ export function getWorkspacePersistencePath(): string | null {
 	return persistenceWorkspacePath;
 }
 
-const workspaceStorage: StateStorage = {
+type PersistedAppState = Pick<
+	AppState,
+	| "sessions"
+	| "activeSessionId"
+	| "turns"
+	| "entities"
+	| "relations"
+	| "diagrams"
+	| "sources"
+	| "changesets"
+	| "settings"
+	| "leafStatuses"
+>;
+
+const localWorkspaceStorage = createJSONStorage<PersistedAppState>(() => ({
 	getItem: (name) => {
-		const bridge = window.rhyza;
-		if (bridge) return bridge.appStateLoad();
 		const current = window.localStorage.getItem(name);
 		if (current || name !== workspaceStorageKey) return current;
 		const legacy = window.localStorage.getItem(legacyWorkspaceStorageKey);
 		if (legacy) window.localStorage.setItem(workspaceStorageKey, legacy);
 		return legacy;
 	},
+	setItem: (name, value) => window.localStorage.setItem(name, value),
+	removeItem: (name) => window.localStorage.removeItem(name),
+}))!;
+
+function workspaceEnvelope(
+	value: string | WorkspaceStateEnvelope | null,
+): WorkspaceStateEnvelope | null {
+	if (value === null) return null;
+	const envelope: unknown = typeof value === "string" ? JSON.parse(value) : value;
+	if (!isRecord(envelope) || !isRecord(envelope.state))
+		throw new Error("Invalid saved workspace state.");
+	return {
+		state: envelope.state,
+		version: typeof envelope.version === "number" ? envelope.version : undefined,
+		workspacePath: typeof envelope.workspacePath === "string" ? envelope.workspacePath : undefined,
+	};
+}
+
+const workspaceStorage: PersistStorage<PersistedAppState> = {
+	getItem: (name) => {
+		const bridge = window.rhyza;
+		if (!bridge) return localWorkspaceStorage.getItem(name);
+		const workspacePath = persistenceWorkspacePath;
+		return bridge.appStateLoad().then((value) => {
+			if (workspacePath !== persistenceWorkspacePath)
+				throw new Error("Workspace changed before saved state finished loading.");
+			const envelope = workspaceEnvelope(value);
+			if (!envelope) return null;
+			return { state: envelope.state as PersistedAppState, version: envelope.version };
+		});
+	},
 	setItem: (name, value) => {
 		// UI updates can run while Zustand is still hydrating the workspace. Persisting
 		// that transient default state would replace the data hydration is about to load.
 		// During Vite HMR, however, a richer in-memory state must still be allowed through.
 		const bridge = window.rhyza;
-		if (!bridge) {
-			window.localStorage.setItem(name, value);
-			return undefined;
-		}
+		if (!bridge) return localWorkspaceStorage.setItem(name, value);
 		if (!persistenceWorkspacePath) return undefined;
+		const workspacePath = persistenceWorkspacePath;
 		const prepareStartedAt = performance.now();
-		const stampedValue = stampWorkspaceState(value, persistenceWorkspacePath);
-		recordPerformanceTiming(
-			"state-persist-prepare",
-			performance.now() - prepareStartedAt,
-			stampedValue.length,
-		);
-		if (!useAppStore.persist.hasHydrated()) {
-			const currentValue = bridge.appStateLoad();
-			if (persistedStateScore(stampedValue) <= persistedStateScore(currentValue)) return undefined;
-		}
-		const saveStartedAt = performance.now();
-		return bridge
-			.appStateSave({ value: stampedValue, workspacePath: persistenceWorkspacePath })
-			.then(
+		const stampedValue: WorkspaceStateEnvelope = { ...value, workspacePath };
+		recordPerformanceTiming("state-persist-prepare", performance.now() - prepareStartedAt);
+		const save = () => {
+			const saveStartedAt = performance.now();
+			return bridge.appStateSave({ value: stampedValue, workspacePath }).then(
 				() => {
-					recordPerformanceTiming(
-						"state-persist-roundtrip",
-						performance.now() - saveStartedAt,
-						stampedValue.length,
-					);
+					recordPerformanceTiming("state-persist-roundtrip", performance.now() - saveStartedAt);
 				},
 				(error: unknown) => {
 					recordPerformanceTiming(
 						"state-persist-roundtrip-error",
 						performance.now() - saveStartedAt,
-						stampedValue.length,
 					);
 					console.error("Failed to persist workspace state.", error);
 					throw error;
 				},
 			);
+		};
+		if (!useAppStore.persist.hasHydrated()) {
+			return Promise.resolve(bridge.appStateLoad()).then((currentValue) => {
+				if (persistenceWorkspacePath !== workspacePath) return;
+				if (
+					persistedStateScore(stampedValue) <= persistedStateScore(workspaceEnvelope(currentValue))
+				)
+					return;
+				return save();
+			});
+		}
+		return save();
 	},
 	removeItem: (name) => {
-		if (!window.rhyza) window.localStorage.removeItem(name);
+		if (!window.rhyza) return localWorkspaceStorage.removeItem(name);
 	},
 };
 
-function stampWorkspaceState(value: string, workspacePath: string): string {
-	if (!value.startsWith("{")) throw new Error("Persisted workspace state must be a JSON object.");
-	// createJSONStorage already serialized the complete store. Prefix the safety
-	// stamp without parsing and serializing the ~1 MB payload a second time.
-	return `{"workspacePath":${JSON.stringify(workspacePath)},${value.slice(1)}`;
-}
-
-function persistedStateScore(serialized: string | null): number {
-	if (!serialized) return -1;
-	try {
-		const parsed = JSON.parse(serialized) as { state?: Partial<AppState> };
-		const state = parsed.state;
-		if (!state) return -1;
-		return (
-			(state.turns?.length ?? 0) * 100 +
-			(state.entities?.length ?? 0) * 20 +
-			(state.diagrams?.length ?? 0) * 20 +
-			(state.changesets?.length ?? 0) * 5 +
-			(state.sources?.length ?? 0) * 2 +
-			(state.sessions?.length ?? 0)
-		);
-	} catch {
-		return -1;
-	}
+function persistedStateScore(
+	value: WorkspaceStateEnvelope | StorageValue<PersistedAppState> | null,
+): number {
+	if (!value) return -1;
+	const state = value.state;
+	return (
+		(Array.isArray(state.turns) ? state.turns.length : 0) * 100 +
+		(Array.isArray(state.entities) ? state.entities.length : 0) * 20 +
+		(Array.isArray(state.diagrams) ? state.diagrams.length : 0) * 20 +
+		(Array.isArray(state.changesets) ? state.changesets.length : 0) * 5 +
+		(Array.isArray(state.sources) ? state.sources.length : 0) * 2 +
+		(Array.isArray(state.sessions) ? state.sessions.length : 0)
+	);
 }
 
 export const useAppStore = create<AppState>()(
@@ -300,22 +338,23 @@ export const useAppStore = create<AppState>()(
 				set({ inspectedTurnId: turnId, rightPaneView: view, rightPaneOpen: true }),
 			closeRightPane: () => set({ rightPaneOpen: false }),
 
-			createRootSession: () => {
-				const id = createId("session");
-				const newSession: SessionNode = {
-					id,
-					parentId: null,
-					title: "New session",
-					isRoot: true,
-					status: "idle",
-				};
-				set((state) => ({
-					sessions: [...state.sessions, newSession],
-					activeSessionId: id,
-					visibleSessionId: id,
-				}));
-				return id;
-			},
+			createRootSession: () =>
+				measurePerformanceWithFrame("node-create", () => {
+					const id = createId("session");
+					const newSession: SessionNode = {
+						id,
+						parentId: null,
+						title: "New session",
+						isRoot: true,
+						status: "idle",
+					};
+					set((state) => ({
+						sessions: [...state.sessions, newSession],
+						activeSessionId: id,
+						visibleSessionId: id,
+					}));
+					return id;
+				}),
 
 			createSummarySession: (content, snapshot, usage, prompt) => {
 				if (!snapshot.sources.length) throw new Error("A summary needs sources.");
@@ -398,24 +437,30 @@ export const useAppStore = create<AppState>()(
 
 			forkSession: (turnId, options) => {
 				const state = get();
-				const result = forkSessionAtTurn(state, turnId, createId);
+				const result = measurePerformance("node-fork-plan", () =>
+					forkSessionAtTurn(state, turnId, createId),
+				);
 				if (!result) return null;
-				const debugSnapshot = createForkDebugSnapshot(state, turnId, result);
+				const debugSnapshot = measurePerformance("node-fork-debug-snapshot", () =>
+					createForkDebugSnapshot(state, turnId, result),
+				);
 				// Splitting the displayed path moves its tail into the original continuation.
 				const retainedSessionId = (id: string | null) =>
 					id === result.branchPointSessionId ? result.originalSessionId : id;
-				set({
-					sessions: result.sessions,
-					turns: result.turns,
-					activeSessionId:
-						options?.activate === false
-							? retainedSessionId(state.activeSessionId)
-							: result.forkSessionId,
-					visibleSessionId:
-						options?.activate === false
-							? retainedSessionId(state.visibleSessionId)
-							: result.forkSessionId,
-				});
+				measurePerformance("node-fork-state", () =>
+					set({
+						sessions: result.sessions,
+						turns: result.turns,
+						activeSessionId:
+							options?.activate === false
+								? retainedSessionId(state.activeSessionId)
+								: result.forkSessionId,
+						visibleSessionId:
+							options?.activate === false
+								? retainedSessionId(state.visibleSessionId)
+								: result.forkSessionId,
+					}),
+				);
 				const dumpWriter = typeof window !== "undefined" ? window.rhyza?.forkDebugDump : undefined;
 				if (typeof dumpWriter === "function") {
 					void dumpWriter({
@@ -445,25 +490,33 @@ export const useAppStore = create<AppState>()(
 			},
 
 			forkNode: (sessionId, turnId) => {
-				const result = forkSessionNode(get(), sessionId, createId, turnId);
+				const result = measurePerformance("node-fork-plan", () =>
+					forkSessionNode(get(), sessionId, createId, turnId),
+				);
 				if (!result) return null;
-				set({
-					sessions: result.sessions,
-					turns: result.turns,
-					activeSessionId: result.forkSessionId,
-					visibleSessionId: result.forkSessionId,
-				});
+				measurePerformance("node-fork-state", () =>
+					set({
+						sessions: result.sessions,
+						turns: result.turns,
+						activeSessionId: result.forkSessionId,
+						visibleSessionId: result.forkSessionId,
+					}),
+				);
 				return result.forkSessionId;
 			},
 			cloneNode: (sessionId, turnId) => {
-				const result = cloneSessionNode(get(), sessionId, createId, turnId);
+				const result = measurePerformance("node-clone-plan", () =>
+					cloneSessionNode(get(), sessionId, createId, turnId),
+				);
 				if (!result) return null;
-				set({
-					sessions: result.sessions,
-					turns: result.turns,
-					activeSessionId: result.cloneSessionId,
-					visibleSessionId: result.cloneSessionId,
-				});
+				measurePerformance("node-clone-state", () =>
+					set({
+						sessions: result.sessions,
+						turns: result.turns,
+						activeSessionId: result.cloneSessionId,
+						visibleSessionId: result.cloneSessionId,
+					}),
+				);
 				return result.cloneSessionId;
 			},
 
@@ -1166,14 +1219,14 @@ export const useAppStore = create<AppState>()(
 		}),
 		{
 			name: workspaceStorageKey,
+			onRehydrateStorage: () => (_state, error) => {
+				if (error) console.error("Failed to load workspace state.", error);
+			},
 			skipHydration: true,
-			storage: distinctStorage(
-				createJSONStorage(() => workspaceStorage)!,
-				() => {
-					if (!useAppStore.persist.hasHydrated()) return undefined;
-					return window.rhyza ? (persistenceWorkspacePath ?? undefined) : "localStorage";
-				},
-			),
+			storage: distinctStorage(workspaceStorage, () => {
+				if (!useAppStore.persist.hasHydrated()) return undefined;
+				return window.rhyza ? (persistenceWorkspacePath ?? undefined) : "localStorage";
+			}),
 			version: 2,
 			merge: (persisted, current) => {
 				const saved = (persisted ?? {}) as Partial<AppState>;
@@ -1244,12 +1297,12 @@ function sourceStateUpdates(state: AppState, sources: Source[], replace: boolean
 	};
 }
 
-export function loadWorkspaceState(serialized: string | null): void {
+export function loadWorkspaceState(serialized: string | WorkspaceStateEnvelope | null): void {
 	let saved: Partial<AppState> = {};
 	if (serialized) {
 		try {
-			const envelope = JSON.parse(serialized) as { state?: Partial<AppState> };
-			saved = envelope.state ?? {};
+			const envelope = workspaceEnvelope(serialized);
+			saved = (envelope?.state ?? {}) as Partial<AppState>;
 		} catch {
 			saved = {};
 		}

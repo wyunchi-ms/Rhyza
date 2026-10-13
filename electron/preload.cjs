@@ -110,7 +110,7 @@ contextBridge.exposeInMainWorld("rhyza", {
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
-	appStateLoad: () => ipcRenderer.sendSync(ipcChannels.appStateLoad),
+	appStateLoad: () => ipcRenderer.invoke(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
 

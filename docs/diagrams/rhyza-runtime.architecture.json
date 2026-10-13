@@ -32,11 +32,19 @@
 			"size": [170, 72]
 		},
 		{
+			"id": "worker",
+			"type": "backend",
+			"label": "Backend Worker",
+			"sublabel": "独立 Node 线程",
+			"pos": [790, 240],
+			"size": [174, 72]
+		},
+		{
 			"id": "agents",
 			"type": "backend",
 			"label": "AgentService",
 			"sublabel": "Pi · Codex · Claude",
-			"pos": [790, 90],
+			"pos": [1035, 90],
 			"size": [174, 72]
 		},
 		{
@@ -44,7 +52,7 @@
 			"type": "external",
 			"label": "AI Providers",
 			"sublabel": "模型服务",
-			"pos": [1035, 90],
+			"pos": [1280, 90],
 			"size": [160, 72]
 		},
 		{
@@ -52,7 +60,7 @@
 			"type": "database",
 			"label": "AppStateStore",
 			"sublabel": "Workspace 状态",
-			"pos": [790, 240],
+			"pos": [1035, 240],
 			"size": [174, 72]
 		},
 		{
@@ -60,16 +68,17 @@
 			"type": "backend",
 			"label": "SourceService",
 			"sublabel": "受限文本读取",
-			"pos": [790, 390],
+			"pos": [1035, 390],
 			"size": [174, 72]
 		}
 	],
 	"connections": [
 		{ "from": "renderer", "to": "preload", "label": "window.rhyza" },
 		{ "from": "preload", "to": "main", "label": "校验 IPC" },
-		{ "from": "main", "to": "agents" },
+		{ "from": "main", "to": "worker", "label": "异步 RPC" },
+		{ "from": "worker", "to": "agents" },
 		{ "from": "agents", "to": "providers" },
-		{ "from": "main", "to": "workspace" },
-		{ "from": "main", "to": "sources" }
+		{ "from": "worker", "to": "workspace" },
+		{ "from": "worker", "to": "sources" }
 	]
 }

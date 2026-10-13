@@ -460,6 +460,13 @@ if (!process.versions.electron) {
 				throw new Error("Explicit forks must still activate the new branch");
 			}
 		})()`);
+		await frame();
+		await host("chatTest.drain(); chatTest.store.getState().createRootSession()");
+		await frame();
+		const creation = await host("chatTest.drain()");
+		assert.equal(creation["node-create-state"]?.count, 1);
+		assert.equal(creation["node-create-after-frame"]?.count, 1);
+		assert.equal(await host('document.querySelectorAll(".chat-turn").length'), 0);
 		console.log(
 			JSON.stringify({
 				typingEvents: 28,

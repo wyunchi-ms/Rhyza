@@ -1,5 +1,6 @@
 import dagre from "dagre";
 import type { SessionNode } from "../types";
+import { recordPerformanceTiming } from "./performanceMarks";
 
 export type SessionGraphOrientation = "horizontal" | "vertical";
 
@@ -43,6 +44,7 @@ export function layoutSessionGraph(
 	orientation: SessionGraphOrientation,
 	sourceGroups: readonly SummarySourceGroup[] = [],
 ): PositionedSessionNode[] {
+	const startedAt = performance.now();
 	const graph = new dagre.graphlib.Graph();
 	graph.setDefaultEdgeLabel(() => ({}));
 	graph.setGraph({
@@ -73,6 +75,7 @@ export function layoutSessionGraph(
 		}
 	}
 	dagre.layout(graph);
+	recordPerformanceTiming("conversation-graph-layout", performance.now() - startedAt);
 
 	return [
 		...sessions.map((session) => ({ id: session.id, size: sessionGraphNodeSize })),

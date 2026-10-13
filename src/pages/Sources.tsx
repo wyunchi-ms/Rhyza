@@ -93,10 +93,10 @@ const Sources = () => {
 		};
 	}, []);
 
-	const changeWorkspace = (workspace: WorkspaceInfo) => {
+	const changeWorkspace = async (workspace: WorkspaceInfo) => {
 		const bridge = getRhyzaBridge();
 		if (!bridge || !workspace.path) throw new Error("The Electron workspace is unavailable.");
-		const serialized = bridge.appStateLoad();
+		const serialized = await bridge.appStateLoad();
 		setWorkspacePersistencePath(workspace.path);
 		loadWorkspaceState(serialized);
 		setWorkspacePath(workspace.path);

@@ -486,8 +486,8 @@ export class AgentService extends PiService {
 		return { context: sections.join("\n\n"), sourceRefs };
 	}
 
-	override dispose(): void {
+	override dispose(): Promise<void> {
 		for (const controller of this.controllers) controller.abort(new Error("Rhyza is closing."));
-		super.dispose();
+		return super.dispose();
 	}
 }

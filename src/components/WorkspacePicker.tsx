@@ -11,7 +11,7 @@ export function WorkspacePicker({
 	onClose,
 }: {
 	currentPath: string | null;
-	onSelect: (workspace: WorkspaceInfo) => void;
+	onSelect: (workspace: WorkspaceInfo) => void | Promise<void>;
 	onClose: () => void;
 }) {
 	const { t } = useTranslation();
@@ -78,7 +78,7 @@ export function WorkspacePicker({
 				? await bridge.switchWorkspace({ path: workspacePath })
 				: await bridge.selectWorkspace();
 			if (!workspace.path || workspace.path === currentPath) return;
-			onSelect(workspace);
+			await onSelect(workspace);
 			onClose();
 		} catch (reason) {
 			setError(errorToMessage(reason));

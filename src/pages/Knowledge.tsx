@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHistory";
@@ -24,6 +23,7 @@ import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { providerModelSelection } from "../shared/providers";
 import { isMermaidCodeBlock } from "../utils/mermaidSource";
 import { normalizeMarkdownMathDelimiters } from "../utils/markdown";
+import { markdownRehypePlugins } from "../utils/markdownHtml";
 import { useAppStore } from "../store";
 import type { Diagram, Entity, Relation, SourceRef } from "../types";
 import { withTimeout } from "../utils/common";
@@ -423,7 +423,7 @@ function MarkdownPreview({ content }: { content: string }) {
 			{content ? (
 				<ReactMarkdown
 					remarkPlugins={[remarkGfm, remarkMath]}
-					rehypePlugins={[rehypeKatex]}
+					rehypePlugins={markdownRehypePlugins}
 					components={{
 						code: ({ className, children, ...props }) => {
 							const source = String(children).replace(/\n$/, "");

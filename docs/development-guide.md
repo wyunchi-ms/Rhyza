@@ -39,6 +39,11 @@ Electron preload
           │ validated IPC payloads
           ▼
 Electron Main
+  ├─ BrowserWindow / dialog / shell / sender validation
+  └─ BackendService      异步、双向、关联请求 ID 的 RPC
+          │
+          ▼
+Node Backend Worker      worker_threads，独立事件循环
   ├─ AgentService        Provider 路由、Claude Code CLI 请求和分支输入
   ├─ PiService           Pi Session、Provider、模型、Session lineage
   ├─ CodexAppServer      官方 App Server 进程、共享认证与 Codex 流式响应
@@ -46,6 +51,7 @@ Electron Main
   ├─ McpService          SDK MCP 连接、OAuth、权限与资源预览
   ├─ SourceService       本地文本扫描、搜索与受限读取
   ├─ AppStateStore       按 Workspace 持久化 Zustand state
+  ├─ SettingsStore       工作区选择与全局历史
   ├─ WorktreeService     Session Worktree、status、diff
   └─ HtmlPreviewService  HTML artifact 校验与快照
           │
@@ -64,7 +70,9 @@ Electron Main
 - `/changes`：Knowledge/Code 变更；
 - `/settings`：Provider、Plugin、MCP servers、Knowledge policy 和无障碍设置。
 
-Zustand Store 管理 Session、Turn、Knowledge、Settings 和布局。持久化适配器通过 preload 调用 Main，不应直接从 Renderer 使用 Node 文件系统。
+Zustand Store 管理 Session、Turn、Knowledge、Settings 和布局。桌面持久化适配器通过 preload 和 Main 传递结构化 state envelope，在 Backend Worker 序列化/解析 JSON 及读写文件；`appStateLoad()` 是异步调用。浏览器模式仍用 localStorage。Renderer 不应直接使用 Node 文件系统。
+
+Pi 资源扫描、插件导入/初始化、MCP、模型目录、技能发现、Source 索引/搜索、Settings 和旧会话状态恢复都由 Backend Worker 持有。不要仅用 Promise/timer 包装同步工作，也不要把 SDK runtime import 带回 Main。后台故障显式拒绝请求；关闭应用先清理会话、transport 及保存，再终止 Worker。
 
 ### Preload 与 IPC
 

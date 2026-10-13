@@ -18,9 +18,21 @@ Renderer 只通过 `window.rhyza` 访问桌面能力。类型、channel 与参�
 
 新增 bridge 方法的完整顺序和安全约束见[开发指南详解](development-guide.md#preload-与-ipc)；功能对用户的承诺以[功能矩阵](features.md)为准。
 
+### 工作区状态与后台执行
+
+`appStateLoad()` 必须 `await`；桌面返回已在 Backend Worker 解析的 `WorkspaceStateEnvelope | null`，不使用 `sendSync`。共享类型保留 JSON 字符串兼容旧测试/适配器，正常桌面加载不在 Renderer 解析 JSON。`appStateSave({ workspacePath, value })` 传递 `{ state, version?, workspacePath }` 的结构化 envelope，由 Worker 序列化后执行原有路径 stamp、大小及防空覆盖校验；字符串仅作为兼容输入。
+
+Store 在异步 hydration 期间保留 richer-state 保护，等待过程中若 persistence scope 改变，拒绝旧 hydration 并跳过其待保存数据，不能覆盖新 Workspace。加载或保存错误明确记录；工作区选择等待状态加载成功后才关闭，失败保留选择窗口。
+
+Main 只持有 `BackendService` facade；不要在 Main 导入 SDK 或直接构造 Agent/MCP/Source/Settings/AppState 服务。Worker RPC 使用有限 handler 表、请求 ID、明确错误与事件转发；浏览器授权回调由 Main 再校验 URL 并执行 `shell.openExternal`。Path summary 的进度按 `requestId` 路由，不跨线程传函数。
+
 ### MCP 配置与操作
 
 `McpSettings` 只在选中 `mcp-heading` 时挂载，通过 `mcpList()` 读取当前 Workspace 的连接状态和配置错误；不在访问其他设置分区时启动 MCP。`mcpEdit({ scope, name })` 返回编辑草稿，env、Header 和 OAuth client secret 的字面量用 `${RHYZA_STORED_SECRET}` 替代；原始凭据及 OAuth token 不进入 Renderer。保存失败保留草稿，背景状态刷新不清除操作错误。
+
+服务器卡片的图标操作直接显示在同一行并右对齐，保留至少 8px 间距。登录／退出登录共用一个按钮；`authenticated` 只报告 SDK AuthProvider 实际供给 OAuth token 的布尔状态，不能从 connected 推断，也不把 token 传给 Renderer。needs-auth 清除该可用认证状态，使用共享 warning 色和本地化说明，保留可展开的原始诊断；其他错误继续通过 alert 明确显示。未连接时工具资源入口不可用，needs-auth 时重连不可用，但编辑和删除仍可操作。
+
+编辑表单和工具资源检查器使用原生模态 dialog，保留草稿及弹窗内错误；滚动时标题和关闭按钮保持可见，错误滚动到标题下方。Escape 关闭并恢复原按钮焦点，保存／读取期间禁止关闭。常规操作使用图标，必须同时提供本地化 title 和 aria-label；服务器操作的 aria-label 包含目标名称。高风险确认弹窗保留文字按钮，不通过图标直接确认。
 
 `mcpSave({ scope, name, config, policy })` 的 config 由 `src/shared/mcp.ts` 校验，接受 stdio / HTTP、direct / deferred / hidden exposure 和逐工具覆盖；`policy.tools` 只接受原始工具名称及 blocked / read / write。Main 将隐藏占位符绑定到原字段及原目的地，服务器身份变更会撤销原授权。`mcpRemove({ scope, name })` 只删除配置与当前 Workspace 的授权，不删除聊天。`mcpTrust({ trusted })` 作用于当前 Workspace；信任、撤销和删除使用原生模态 dialog，提交期间禁止重复确认和关闭，失败保留窗口。
 

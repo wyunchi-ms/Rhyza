@@ -37,6 +37,40 @@ export function measurePerformance<T>(name: string, action: () => T): T {
 	}
 }
 
+const pendingFrameSamples = new Set<() => void>();
+
+/** rAF followed by a task approximates a paint opportunity, not precise paint time. */
+export function measurePerformanceWithFrame<T>(name: string, action: () => T): T {
+	const startedAt = performance.now();
+	const result = measurePerformance(`${name}-state`, action);
+	if (typeof document === "undefined" || document.visibilityState !== "visible") return result;
+	if (pendingFrameSamples.size >= 32) {
+		recordPerformanceTiming(`${name}-frame-sample-dropped`, 0);
+		return result;
+	}
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const cleanup = () => {
+		cancelAnimationFrame(frame);
+		clearTimeout(timer);
+		document.removeEventListener("visibilitychange", onVisibilityChange);
+		pendingFrameSamples.delete(cleanup);
+	};
+	const onVisibilityChange = () => {
+		if (document.visibilityState !== "visible") cleanup();
+	};
+	const frame = requestAnimationFrame(() => {
+		timer = setTimeout(() => {
+			if (document.visibilityState === "visible") {
+				recordPerformanceTiming(`${name}-after-frame`, performance.now() - startedAt);
+			}
+			cleanup();
+		}, 0);
+	});
+	pendingFrameSamples.add(cleanup);
+	document.addEventListener("visibilitychange", onVisibilityChange);
+	return result;
+}
+
 export function drainPerformanceTimings(): Record<string, PerformanceTimingAggregate> {
 	const snapshot = Object.fromEntries(
 		[...timings].map(([name, timing]) => [

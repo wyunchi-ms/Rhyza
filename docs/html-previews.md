@@ -1,5 +1,13 @@
 # HTML preview protocol
 
+## HTML in Markdown
+
+Chat answers, reasoning, node previews, and knowledge notes render sanitized inline HTML, including native `<details>` / `<summary>` disclosure groups and formatting such as `<b>`. Put blank lines around Markdown content inside HTML blocks so lists, headings, and code fences are parsed as Markdown. Disclosure groups start closed unless `open` is present; their open state survives unrelated answer updates. Search and answer-outline navigation open enclosing disclosure groups before scrolling to hidden matches or headings.
+
+The shared Markdown pipeline parses HTML and applies the GitHub-style sanitization allowlist before rendering math or host-owned foldable sections. Scripts, event handlers, embedded frames, and unsafe URL protocols are not enabled. IDs retain the sanitizer's anti-clobbering prefix, with heading metadata and local fragment links adjusted to match. Interactive HTML applications must still use the sandboxed `html-preview` protocol below.
+
+## Sandboxed documents
+
 The application embeds self-contained HTML files produced by any tool or extension. It has no renderer registry and does not interpret diagram specifications.
 
 Return this explicit fenced declaration in an assistant answer:
