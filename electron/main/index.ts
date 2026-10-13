@@ -7,17 +7,18 @@ import {
 	shell,
 	type IpcMainInvokeEvent,
 } from "electron";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { setDefaultResultOrder } from "node:dns";
-import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { AgentService } from "./agent-service.js";
-import { PiPluginService } from "./pi-plugin-service.js";
-import { listComposerSkills } from "./composer-skills.js";
-import { SettingsStore } from "./settings-store.js";
-import { SourceService } from "./source-service.js";
+import { BackendService } from "./backend-service.js";
+import {
+	validateMcpAction,
+	validateMcpResource,
+	validateMcpSave,
+	validateMcpTarget,
+} from "../../src/shared/mcp.js";
 import {
 	ipcChannels,
 	validateAzureOpenAIConfig,
@@ -44,7 +45,6 @@ import {
 	validateForkDebugDumpRequest,
 	type DiagnosticReport,
 } from "../../src/shared/ipc.js";
-import { AppStateStore } from "./app-state-store.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const applicationId = "com.rhyza.desktop";
@@ -62,7 +62,6 @@ setDefaultResultOrder("ipv4first");
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5175";
 const smokeTimeoutMs = 15_000;
-const legacyProductSlug = ["know", "branch"].join("");
 const legacyUserDataPath = app.getPath("userData");
 const dataRootPath = path.join(app.getPath("home"), ".pi-graph");
 const smokeUserDataPath = isSmoke
@@ -97,11 +96,12 @@ interface ElectronSmokeEvidence {
 }
 
 let mainWindow: BrowserWindow | undefined;
-let settingsStore: SettingsStore;
-let piService: AgentService;
-let piPluginService: PiPluginService;
-let sourceService: SourceService;
-let appStateStore: AppStateStore;
+let backend: BackendService;
+let settingsStore: BackendService["settings"];
+let piService: BackendService["agent"];
+let piPluginService: BackendService["plugins"];
+let sourceService: BackendService["sources"];
+let appStateStore: BackendService["state"];
 let smokeTimeout: NodeJS.Timeout | undefined;
 let allowedRendererUrls = new Set<string>();
 const diagnosticsDirectory = path.join(dataRootPath, "diagnostics");
@@ -202,27 +202,23 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
-	ipcMain.on(ipcChannels.appStateLoad, (event) => {
-		// This synchronous read can arrive before Electron has attached senderFrame.
-		// The preload is scoped to our BrowserWindow, so validate its webContents instead.
-		if (!mainWindow || event.sender.id !== mainWindow.webContents.id) {
-			event.returnValue = null;
-			return;
-		}
-		const workspacePath = settingsStore.getWorkspacePathSync();
-		const value = appStateStore.load(workspacePath);
-		if (process.env.RHYZA_STATE_DEBUG === "1") {
-			console.log("APP_STATE_LOAD", { workspacePath, bytes: value?.length ?? 0 });
-		}
-		event.returnValue = value;
-	});
+	ipcMain.handle(ipcChannels.appStateLoad, (event) =>
+		withValidSender(event, async () => {
+			const workspacePath = await settingsStore.getWorkspacePath();
+			const value = await appStateStore.load(workspacePath);
+			if (process.env.RHYZA_STATE_DEBUG === "1") {
+				console.log("APP_STATE_LOAD", { workspacePath, present: value !== null });
+			}
+			return value;
+		}),
+	);
 	ipcMain.handle(ipcChannels.appStateSave, async (event, payload) =>
 		withValidSender(event, async () => {
 			const request = validateAppStateSaveRequest(payload);
 			if (process.env.RHYZA_STATE_DEBUG === "1") {
 				console.log("APP_STATE_SAVE", {
 					workspacePath: request.workspacePath,
-					bytes: request.value.length,
+					encoding: typeof request.value === "string" ? "json" : "structured",
 				});
 			}
 			await appStateStore.save(request.workspacePath, request.value);
@@ -244,16 +240,7 @@ function registerIpcHandlers(): void {
 		}),
 	);
 	ipcMain.handle(ipcChannels.forkDebugDump, async (event, payload) =>
-		withValidSender(event, async () => {
-			const request = validateForkDebugDumpRequest(payload);
-			const workspacePath = await settingsStore.requireWorkspacePath();
-			const dumpDirectory = path.join(workspacePath, ".rhyza-debug", "fork-dumps");
-			const fileName = `${safeDebugFilePart(request.timestamp)}-${request.kind}-${safeDebugFilePart(request.selectedTurnId)}.json`;
-			const filePath = path.join(dumpDirectory, fileName);
-			await mkdir(dumpDirectory, { recursive: true });
-			await writeFile(filePath, `${JSON.stringify(request.snapshot, null, 2)}\n`, "utf8");
-			return { ok: true as const, path: filePath };
-		}),
+		withValidSender(event, () => backend.forkDebugDump(validateForkDebugDumpRequest(payload))),
 	);
 	ipcMain.handle(ipcChannels.azureOpenAIConfigGet, async (event) =>
 		withValidSender(event, () => piService.getAzureOpenAIConfig()),
@@ -284,27 +271,70 @@ function registerIpcHandlers(): void {
 	ipcMain.handle(ipcChannels.pluginList, async (event) =>
 		withValidSender(event, () => piPluginService.list()),
 	);
-	ipcMain.handle(ipcChannels.composerSkills, async (event, payload) =>
+	ipcMain.handle(ipcChannels.mcpList, async (event) =>
+		withValidSender(event, async () =>
+			piService.mcp.overview(await settingsStore.getWorkspacePath()),
+		),
+	);
+	ipcMain.handle(ipcChannels.mcpEdit, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.mcp.edit(await settingsStore.requireWorkspacePath(), validateMcpTarget(payload)),
+		),
+	);
+	ipcMain.handle(ipcChannels.mcpSave, async (event, payload) =>
 		withValidSender(event, async () => {
-			const { providerId } = validateProviderStatusRequest(payload);
-			const plugins = providerId !== "claude-code" ? await piPluginService.list() : [];
-			return listComposerSkills({
-				providerId,
-				home: app.getPath("home"),
-				workspace: await settingsStore.getWorkspacePath(),
-				agentDir: getAgentDir(),
-				pluginPaths: plugins.flatMap((plugin) =>
-					plugin.installedPath ? [plugin.installedPath] : [],
-				),
-			});
+			await piService.mcp.save(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpSave(payload),
+			);
+			return { ok: true as const };
 		}),
+	);
+	ipcMain.handle(ipcChannels.mcpRemove, async (event, payload) =>
+		withValidSender(event, async () => {
+			await piService.mcp.remove(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpTarget(payload),
+			);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpTrust, async (event, payload) =>
+		withValidSender(event, async () => {
+			if (!payload || typeof payload !== "object" || typeof payload.trusted !== "boolean")
+				throw new Error("Invalid MCP project trust.");
+			await piService.mcp.trust(await settingsStore.requireWorkspacePath(), payload.trusted);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpAction, async (event, payload) =>
+		withValidSender(event, async () => {
+			await piService.mcp.action(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpAction(payload),
+			);
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.mcpResources, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.mcp.resources(
+				await settingsStore.requireWorkspacePath(),
+				validateMcpResource(payload),
+			),
+		),
+	);
+	ipcMain.handle(ipcChannels.composerSkills, async (event, payload) =>
+		withValidSender(event, () =>
+			backend.composerSkills(validateProviderStatusRequest(payload).providerId),
+		),
 	);
 	ipcMain.handle(ipcChannels.pluginInstall, async (event, payload) =>
 		withValidSender(event, async () => {
 			const { source } = validatePiPluginSource(payload);
 			const plugins = await piPluginService.install(source);
 
-			piService.reloadInstalledPlugins();
+			await piService.reloadInstalledPlugins();
 			return { ok: true as const, plugins };
 		}),
 	);
@@ -325,7 +355,7 @@ function registerIpcHandlers(): void {
 			const { source } = validatePiPluginRemoveRequest(payload);
 			const plugins = await piPluginService.remove(source);
 
-			piService.reloadInstalledPlugins();
+			await piService.reloadInstalledPlugins();
 			return { ok: true as const, plugins };
 		}),
 	);
@@ -505,77 +535,89 @@ function isAllowedRendererUrl(url: string): boolean {
 	);
 }
 
-function safeDebugFilePart(value: string): string {
-	return (
-		value
-			.replace(/[^a-zA-Z0-9_-]/g, "-")
-			.replace(/-+/g, "-")
-			.slice(0, 100) || "unknown"
-	);
-}
+app
+	.whenReady()
+	.then(async () => {
+		if (!ownsSingleInstanceLock) return;
+		if (isSmoke) {
+			smokeTimeout = setTimeout(() => {
+				console.error("ELECTRON_SMOKE timeout waiting for renderer load");
+				app.exit(1);
+			}, smokeTimeoutMs).unref();
+		}
+		backend = new BackendService(
+			{ dataRoot: dataRootPath, legacyUserDataPath, home: app.getPath("home") },
+			{
+				openUrl: async (url) => {
+					const parsed = new URL(url);
+					if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password)
+						throw new Error("Invalid MCP authorization URL.");
+					return shell.openExternal(url);
+				},
+			},
+			(event) => {
+				if (event.type === "diagnostic") {
+					void writeDiagnostic(event.kind, {
+						...event.value,
+						thread: "backend",
+						threadId: event.threadId,
+					});
+					return;
+				}
+				if (!mainWindow || mainWindow.isDestroyed()) return;
+				if (event.type === "auth") mainWindow.webContents.send(ipcChannels.authEvent, event.value);
+				else if (event.type === "agent")
+					mainWindow.webContents.send(ipcChannels.agentEvent, event.value);
+				else if (event.type === "mcp")
+					mainWindow.webContents.send(ipcChannels.mcpEvent, event.value);
+			},
+		);
+		settingsStore = backend.settings;
+		piService = backend.agent;
+		piPluginService = backend.plugins;
+		sourceService = backend.sources;
+		appStateStore = backend.state;
+		let backendStopped = false;
+		app.on("before-quit", (event) => {
+			if (backendStopped) return;
+			event.preventDefault();
+			void backend
+				.dispose()
+				.catch((error: unknown) => {
+					console.error("BACKGROUND_SHUTDOWN_FAILED", error);
+				})
+				.finally(() => {
+					backendStopped = true;
+					app.quit();
+				});
+		});
+		await backend.ready;
+		registerIpcHandlers();
+		mainLoopDelay.enable();
+		setInterval(() => {
+			void writeDiagnostic("main-sample", mainProcessSnapshot());
+			mainLoopDelay.reset();
+		}, 15_000).unref();
+		await createWindow();
 
-app.whenReady().then(async () => {
-	if (!ownsSingleInstanceLock) return;
-	if (isSmoke) {
-		smokeTimeout = setTimeout(() => {
-			console.error("ELECTRON_SMOKE timeout waiting for renderer load");
-			app.exit(1);
-		}, smokeTimeoutMs).unref();
-	}
-	settingsStore = new SettingsStore(dataRootPath, legacyUserDataPath);
-	const sessionDirectory = path.join(getAgentDir(), "rhyza-sessions");
-	await migrateLegacyDirectory(
-		path.join(getAgentDir(), `${legacyProductSlug}-sessions`),
-		sessionDirectory,
-	);
-	appStateStore = new AppStateStore(dataRootPath, sessionDirectory);
-	await appStateStore.migrateLegacyState(
-		await settingsStore.getWorkspacePath(),
-		path.join(legacyUserDataPath, `${legacyProductSlug}-workspace-state.json`),
-	);
-	sourceService = new SourceService(dataRootPath, () => settingsStore.requireWorkspacePath());
-	piPluginService = new PiPluginService(getAgentDir(), () => settingsStore.getWorkspacePath());
-	piService = new AgentService(
-		dataRootPath,
-		(event) => mainWindow?.webContents.send(ipcChannels.authEvent, event),
-		(event) => mainWindow?.webContents.send(ipcChannels.agentEvent, event),
-		undefined,
-		sourceService,
-	);
-	app.once("before-quit", () => {
-		void piService.dispose();
-	});
-
-	async function migrateLegacyDirectory(source: string, destination: string): Promise<void> {
-		try {
-			await rename(source, destination);
-		} catch (error) {
-			if (
-				typeof error === "object" &&
-				error !== null &&
-				"code" in error &&
-				((error as NodeJS.ErrnoException).code === "ENOENT" ||
-					(error as NodeJS.ErrnoException).code === "EEXIST")
-			) {
-				return;
+		app.on("activate", async () => {
+			if (BrowserWindow.getAllWindows().length === 0) {
+				await createWindow();
 			}
-			throw error;
+		});
+	})
+	.catch((error: unknown) => {
+		console.error("BACKGROUND_STARTUP_FAILED", error);
+		if (isSmoke) {
+			app.exit(1);
+			return;
 		}
-	}
-	registerIpcHandlers();
-	mainLoopDelay.enable();
-	setInterval(() => {
-		void writeDiagnostic("main-sample", mainProcessSnapshot());
-		mainLoopDelay.reset();
-	}, 15_000).unref();
-	await createWindow();
-
-	app.on("activate", async () => {
-		if (BrowserWindow.getAllWindows().length === 0) {
-			await createWindow();
-		}
+		dialog.showErrorBox(
+			"Rhyza could not start",
+			error instanceof Error ? error.message : String(error),
+		);
+		app.quit();
 	});
-});
 
 function validateDiagnosticReport(value: unknown): DiagnosticReport {
 	if (!value || typeof value !== "object") throw new Error("Invalid diagnostic report.");
@@ -605,7 +647,11 @@ function writeDiagnostic(kind: string, payload: object): Promise<void> {
 	diagnosticsWriteQueue = diagnosticsWriteQueue
 		.then(async () => {
 			await mkdir(diagnosticsDirectory, { recursive: true });
-			await appendFile(filePath, `${JSON.stringify({ kind, ...payload })}\n`, "utf8");
+			await appendFile(
+				filePath,
+				`${JSON.stringify({ kind, processId: process.pid, ...payload })}\n`,
+				"utf8",
+			);
 		})
 		.catch((error: unknown) => console.error("DIAGNOSTIC_WRITE_FAILED", error));
 	return diagnosticsWriteQueue;
@@ -675,9 +721,9 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 				let evidence;
 				while (Date.now() < deadline) {
 					await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-					const serializedState = window.rhyza?.appStateLoad?.() ?? null;
+					const serializedState = await window.rhyza?.appStateLoad?.() ?? null;
 					let parsedState = {};
-					try { parsedState = serializedState ? (JSON.parse(serializedState).state ?? {}) : {}; } catch {}
+					parsedState = serializedState ? ((typeof serializedState === 'string' ? JSON.parse(serializedState) : serializedState).state ?? {}) : {};
 					const chat = document.querySelector('.chat-scroll');
 					const activeChatTurnCount = chat?.querySelectorAll('[data-turn-id]').length ?? 0;
 					evidence = {

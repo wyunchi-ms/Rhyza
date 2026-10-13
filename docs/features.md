@@ -49,6 +49,8 @@
 | Settings     | Light/Dark              | Available | App 与 HTML/Diagram 预览同步主题                                              |
 | Settings     | 无障碍设置              | Available | 减少动画、高对比度、字体缩放                                                  |
 | Extension    | Pi package 管理         | Available | 支持 npm、Git 和本地来源；界面面向 GitHub Copilot，Claude Code 不加载 Pi 插件 |
+| Extension    | 通用 MCP 接入           | Available | 用户/受信任项目配置、stdio / Streamable HTTP、OAuth、连接操作和资源预览；默认拒绝新工具，write 要求可写且隔离 |
+| Extension    | 工具按需发现            | Available | Tool Search、direct / deferred / hidden exposure；加载状态随会话及选定父回答恢复，不启用 Codemode |
 | Distribution | Windows 安装包/签名     | Planned   | 当前只支持源码开发运行                                                        |
 | Distribution | macOS/Linux 验证        | Planned   | 尚未完成平台验证                                                              |
 
@@ -120,6 +122,12 @@ Mermaid 是持久化 Diagram 的基础格式。可选 Pi package 可以通过通
 
 Archify 是独立的可选 Pi extension，不是前端依赖或宿主内置渲染器。安装、工具和交付契约见 [Archify extension](../extensions/pi-archify/README.md)，通用宿主协议见 [HTML Preview 协议](html-previews.md)。
 
+通用 MCP 通过 **Settings → MCP servers** 管理，适用于 Pi-based Provider 聊天，不改变 Claude Code、标题、知识提取或路径汇总的工具边界。项目必须显式信任，服务器工具按原始名称审核，annotations 不自动授权。配置变更、禁用或撤销信任会关闭旧连接；服务器身份变化清空原授权。资源支持列表、templates、cursor 分页和至多 128 KiB 文本预览。
+
+deferred 工具由 `tool_search` 按需加载，direct 适合常用的小工具集，hidden 不可调用。加载状态按前端 Assistant turn 保存，会话恢复和历史分支只继承对应快照。OAuth token 不进入 Renderer，隐藏的配置凭据不能直接带到新目的地；使用步骤和存储路径见[用户指南](user-guide.md#mcp-servers)。
+
+MCP 不是沙箱；用户审核为 read 的工具仍需信任其实现，Worktree 不隔离远程副作用。不支持 SSE、command-valued secrets、Codemode 或未经文件配置审核的 extension-only MCP 服务器。
+
 ## 5. Workspace、Worktree 与 Changes
 
 Workspace Path 是所有本地状态的隔离键。Git Workspace 中，可写 Session 首次运行时会尝试基于当前 `HEAD` 创建 detached Worktree。若 Git 命令失败，会明确回退到原 Workspace；这保证聊天仍可运行，但不再具备修改隔离。
@@ -135,7 +143,7 @@ Changes 页提供：
 
 ## 6. 非目标与近期限制
 
-Pi SDK 已升级到 1.0.0，但升级不等于启用新版全部能力。通用 MCP、工具按需发现、自动模型路由、统一图片生成、细粒度上下文管理、Prompt cache 保活、原生 PowerShell 工具和分类模型均为 **Planned**；具体接入范围见 [Pi SDK 待办](TODO-pi-sdk.md)。当前缓存状态展示和自动上下文压缩继续保留，主动缓存保活明确关闭。
+Pi SDK 已升级到 1.0.0；通用 MCP 和工具按需发现已接入，其他新版能力不会自动启用。自动模型路由、统一图片生成、细粒度上下文管理、Prompt cache 保活、原生 PowerShell 工具和分类模型仍为 **Planned**；具体范围见 [Pi SDK 待办](TODO-pi-sdk.md)。当前缓存状态展示和自动上下文压缩继续保留，主动缓存保活明确关闭。
 
 当前 MVP 不承诺：
 

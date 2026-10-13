@@ -1,5 +1,6 @@
 import type { SessionNode, Turn } from "../types";
 import { conversationTurnTitle } from "./conversationTitle";
+import { recordPerformanceTiming } from "./performanceMarks";
 
 export interface ConversationRound {
 	id: string;
@@ -12,7 +13,10 @@ export interface ConversationRound {
 
 /** User messages own a round. Copied fork history references the same round. */
 export function projectConversationGraph(sessions: SessionNode[], turns: Turn[]) {
+	const startedAt = performance.now();
+	const historyStartedAt = performance.now();
 	turns = resolveGraphHistory(sessions, turns);
+	recordPerformanceTiming("conversation-history-resolve", performance.now() - historyStartedAt);
 	const byTurn = new Map(turns.map((turn) => [turn.id, turn]));
 	const canonical = (turn: Turn): string => {
 		const seen = new Set<string>();
@@ -80,7 +84,9 @@ export function projectConversationGraph(sessions: SessionNode[], turns: Turn[])
 		paths.set(session.id, path);
 		targets.set(session.id, target);
 	}
-	return { rounds: [...rounds.values()], paths, targets, roundByTurnId };
+	const projection = { rounds: [...rounds.values()], paths, targets, roundByTurnId };
+	recordPerformanceTiming("conversation-graph-project", performance.now() - startedAt);
+	return projection;
 }
 
 /** Older forks copied history without sourceTurnId. Match only the verified

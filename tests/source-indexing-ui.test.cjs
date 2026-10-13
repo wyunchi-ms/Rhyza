@@ -183,12 +183,13 @@ if (!process.versions.electron) {
 			await service.remove(id);
 			return { ok: true };
 		});
-		ipcMain.on(ipcChannels.appStateLoad, (event) => {
-			event.returnValue = states.load(source);
-		});
+		ipcMain.handle(ipcChannels.appStateLoad, () => states.load(source));
 		ipcMain.handle(ipcChannels.appStateSave, async (_event, payload) => {
 			const request = validateAppStateSaveRequest(payload);
-			await states.save(request.workspacePath, request.value);
+			await states.save(
+				request.workspacePath,
+				typeof request.value === "string" ? request.value : JSON.stringify(request.value),
+			);
 			return { ok: true };
 		});
 		ipcMain.handle(ipcChannels.providerStatus, (_event, request) => ({

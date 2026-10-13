@@ -1,6 +1,7 @@
 import type { SessionNode, Turn } from "../types";
 import { projectConversationGraph, type ConversationRound } from "./conversationGraph";
 import { addUsage, allocateBranchUsage, emptyUsage } from "./branchUsage";
+import { recordPerformanceTiming } from "./performanceMarks";
 
 export interface ConversationTreeNode {
 	id: string;
@@ -13,6 +14,7 @@ export interface ConversationTreeNode {
 /** Compact the graph's single-child runs, preserving every fork. Session
  * boundaries stay selectable so node actions retain an unambiguous owner. */
 export function projectConversationTree(sessions: SessionNode[], turns: Turn[]) {
+	const startedAt = performance.now();
 	const graph = projectConversationGraph(sessions, turns);
 	const roundsById = new Map(graph.rounds.map((round) => [round.id, round]));
 	const children = new Map<string, ConversationRound[]>();
@@ -64,6 +66,7 @@ export function projectConversationTree(sessions: SessionNode[], turns: Turn[]) 
 			childrenById.set(node.parentId, siblings);
 		} else roots.push(node);
 	}
+	recordPerformanceTiming("conversation-tree-project", performance.now() - startedAt);
 	return { graph, nodes, byId, roots, childrenById, nodeByRoundId };
 }
 

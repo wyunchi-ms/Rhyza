@@ -156,12 +156,15 @@ if (!process.versions.electron) {
 				await settings.setWorkspacePath(selection.filePaths[0]);
 			return { path: await settings.getWorkspacePath() };
 		});
-		ipcMain.on(ipcChannels.appStateLoad, (event) => {
-			event.returnValue = states.load(settings.getWorkspacePathSync());
-		});
+		ipcMain.handle(ipcChannels.appStateLoad, async () =>
+			states.load(await settings.getWorkspacePath()),
+		);
 		ipcMain.handle(ipcChannels.appStateSave, async (_event, payload) => {
 			const request = validateAppStateSaveRequest(payload);
-			await states.save(request.workspacePath, request.value);
+			await states.save(
+				request.workspacePath,
+				typeof request.value === "string" ? request.value : JSON.stringify(request.value),
+			);
 			return { ok: true };
 		});
 		ipcMain.handle(ipcChannels.sourceList, () => []);

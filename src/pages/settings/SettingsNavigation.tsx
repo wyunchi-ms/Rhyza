@@ -17,6 +17,12 @@ export const settingsCategories = [
 		terms: ["plugin", "package", "插件", "软件包"],
 	},
 	{
+		id: "mcp-heading",
+		group: "ai",
+		label: "MCP servers",
+		terms: ["mcp", "server", "tools", "integration", "服务器", "工具", "伺服器"],
+	},
+	{
 		id: "knowledge-heading",
 		group: "ai",
 		label: "Knowledge policy",

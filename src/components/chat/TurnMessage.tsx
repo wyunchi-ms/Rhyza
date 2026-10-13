@@ -41,6 +41,7 @@ import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types"
 import { usageTokens } from "../../utils/branchUsage";
 import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTimestamp";
 import { formatDuration } from "../../utils/common";
+import { toolLabel } from "../../utils/toolLabel";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
 import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../../utils/markdown";
 import { markdownRehypePlugins } from "../../utils/markdownHtml";
@@ -452,7 +453,7 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 						<div className="turn-tool-list">
 							{tools.map((tool) => (
 								<div key={tool.name}>
-									<strong>{tool.name}</strong>
+									<strong title={tool.name}>{toolLabel(tool.name)}</strong>
 									<span>
 										{tool.count} call{tool.count === 1 ? "" : "s"}
 										{tool.errors ? ` · ${tool.errors} failed` : ""} ·{" "}
@@ -553,7 +554,7 @@ function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 									)}
 								</span>
 								<span className="min-w-0 flex-1">
-									<strong>{tool.name}</strong>
+									<strong title={tool.name}>{toolLabel(tool.name)}</strong>
 									{tool.target && <span>{tool.target}</span>}
 								</span>
 								<small className="tool-card-status">

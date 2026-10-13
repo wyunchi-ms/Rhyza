@@ -1,4 +1,12 @@
 import { isRecord } from "./value.js";
+import type {
+	McpActionRequest,
+	McpEvent,
+	McpOverview,
+	McpResourceRequest,
+	McpSaveRequest,
+	McpTarget,
+} from "./mcp.js";
 
 export const RHYZA_BRIDGE_NAME = "rhyza" as const;
 
@@ -14,6 +22,14 @@ export const ipcChannels = {
 	pluginInstall: "rhyza:plugin-install",
 	pluginSelectLocal: "rhyza:plugin-select-local",
 	pluginRemove: "rhyza:plugin-remove",
+	mcpList: "rhyza:mcp-list",
+	mcpEdit: "rhyza:mcp-edit",
+	mcpSave: "rhyza:mcp-save",
+	mcpRemove: "rhyza:mcp-remove",
+	mcpTrust: "rhyza:mcp-trust",
+	mcpAction: "rhyza:mcp-action",
+	mcpResources: "rhyza:mcp-resources",
+	mcpEvent: "rhyza:mcp-event",
 	getWorkspace: "rhyza:get-workspace",
 	workspaceHistory: "rhyza:workspace-history",
 	switchWorkspace: "rhyza:switch-workspace",
@@ -495,8 +511,13 @@ export interface AuxiliaryRequestCancelRequest {
 export interface OpenExternalRequest {
 	url: string;
 }
+export interface WorkspaceStateEnvelope {
+	state: Record<string, unknown>;
+	version?: number;
+	workspacePath?: string;
+}
 export interface AppStateSaveRequest {
-	value: string;
+	value: string | WorkspaceStateEnvelope;
 	workspacePath: string;
 }
 export interface DiagnosticReport {
@@ -644,6 +665,14 @@ export interface RhyzaBridge {
 	pluginInstall(request: PiPluginInstallRequest): Promise<PiPluginMutationResponse>;
 	pluginSelectLocal(): Promise<{ source: string | null }>;
 	pluginRemove(request: PiPluginRemoveRequest): Promise<PiPluginMutationResponse>;
+	mcpList(): Promise<McpOverview>;
+	mcpEdit(request: McpTarget): Promise<McpSaveRequest>;
+	mcpSave(request: McpSaveRequest): Promise<{ ok: true }>;
+	mcpRemove(request: McpTarget): Promise<{ ok: true }>;
+	mcpTrust(request: { trusted: boolean }): Promise<{ ok: true }>;
+	mcpAction(request: McpActionRequest): Promise<{ ok: true }>;
+	mcpResources(request: McpResourceRequest): Promise<string>;
+	onMcpEvent(listener: (event: McpEvent) => void): () => void;
 	getWorkspace(): Promise<WorkspaceInfo>;
 	workspaceHistory(): Promise<WorkspaceHistoryEntry[]>;
 	switchWorkspace(request: WorkspaceSwitchRequest): Promise<WorkspaceInfo>;
@@ -668,7 +697,7 @@ export interface RhyzaBridge {
 
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	showApplicationMenu(): Promise<{ ok: true }>;
-	appStateLoad(): string | null;
+	appStateLoad(): Promise<string | WorkspaceStateEnvelope | null>;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;
 
@@ -816,13 +845,30 @@ export function validateWorkspaceTodosRequest(value: unknown): WorkspaceTodosReq
 export function validateAppStateSaveRequest(value: unknown): AppStateSaveRequest {
 	if (
 		!isRecord(value) ||
-		typeof value.value !== "string" ||
+		!(typeof value.value === "string" || (isRecord(value.value) && isRecord(value.value.state))) ||
 		typeof value.workspacePath !== "string" ||
 		!value.workspacePath.trim()
 	) {
 		throw new Error("Invalid app state payload.");
 	}
-	return { value: value.value, workspacePath: value.workspacePath };
+	if (typeof value.value === "string")
+		return { value: value.value, workspacePath: value.workspacePath };
+	const envelope = value.value;
+	if (!isRecord(envelope) || !isRecord(envelope.state))
+		throw new Error("Invalid app state payload.");
+	if (
+		(envelope.version !== undefined && typeof envelope.version !== "number") ||
+		(envelope.workspacePath !== undefined && typeof envelope.workspacePath !== "string")
+	)
+		throw new Error("Invalid app state envelope.");
+	return {
+		value: {
+			state: envelope.state,
+			...(envelope.version !== undefined ? { version: envelope.version } : {}),
+			...(envelope.workspacePath !== undefined ? { workspacePath: envelope.workspacePath } : {}),
+		},
+		workspacePath: value.workspacePath,
+	};
 }
 
 export function validateKnowledgeExtractionRequest(value: unknown): KnowledgeExtractionRequest {

@@ -200,7 +200,7 @@ if (!process.versions.electron) {
 				isElectron: true,
 				onAgentEvent: () => () => {},
 				modelCatalog: () => Promise.resolve({ models: [] }),
-				appStateLoad: () => localStorage.getItem("rhyza-workspace-v2"),
+				appStateLoad: async () => localStorage.getItem("rhyza-workspace-v2"),
 				onPathSummaryEvent: listener => { window.summaryListeners.add(listener); return () => window.summaryListeners.delete(listener); },
 				generatePathSummary: request => {
 					window.summaryRequests.push(request);
