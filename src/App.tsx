@@ -25,6 +25,13 @@ const App: React.FC = () => {
 	useEffect(() => {
 		return startPerformanceDiagnostics();
 	}, []);
+	useEffect(() => {
+		const bridge = window.rhyza;
+		if (bridge?.platform !== "win32") return;
+		void bridge.windowThemeSet(appearance.theme).catch((error: unknown) => {
+			console.error("Failed to update the Windows title bar theme.", error);
+		});
+	}, [appearance.theme]);
 	return (
 		<HashRouter>
 			<ConfirmationHost />

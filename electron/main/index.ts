@@ -79,6 +79,7 @@ interface ElectronSmokeEvidence {
 	bodyText: string;
 	isElectron: boolean;
 	titlebarVisible: boolean;
+	windowThemeSetSucceeded: boolean;
 	applicationMenuAvailable: boolean;
 	footerDestinations: number;
 	bridgeKeys: string[];
@@ -131,7 +132,7 @@ async function createWindow(): Promise<void> {
 		...(process.platform === "win32"
 			? {
 					titleBarStyle: "hidden" as const,
-					titleBarOverlay: { color: "#242527", symbolColor: "#d7dce2", height: 32 },
+					titleBarOverlay: { color: "#f0f3f4", symbolColor: "#30383c", height: 32 },
 				}
 			: {}),
 		webPreferences: {
@@ -236,6 +237,21 @@ function registerIpcHandlers(): void {
 			const menu = Menu.getApplicationMenu();
 			if (!menu || !mainWindow) throw new Error("The application menu is unavailable.");
 			menu.popup({ window: mainWindow, x: 34, y: 32 });
+			return { ok: true as const };
+		}),
+	);
+	ipcMain.handle(ipcChannels.windowThemeSet, async (event, theme) =>
+		withValidSender(event, () => {
+			if (theme !== "light" && theme !== "dark") {
+				throw new Error("Invalid window theme.");
+			}
+			if (process.platform === "win32" && mainWindow && !mainWindow.isDestroyed()) {
+				mainWindow.setTitleBarOverlay(
+					theme === "dark"
+						? { color: "#222a2d", symbolColor: "#dce2e5", height: 32 }
+						: { color: "#f0f3f4", symbolColor: "#30383c", height: 32 },
+				);
+			}
 			return { ok: true as const };
 		}),
 	);
@@ -731,6 +747,7 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 						bodyText: document.body?.innerText?.slice(0, 200) ?? '',
 						isElectron: window.rhyza?.isElectron === true,
 						titlebarVisible: document.querySelector('.app-titlebar')?.getBoundingClientRect().height === 32,
+						windowThemeSetSucceeded: false,
 						applicationMenuAvailable: typeof window.rhyza?.showApplicationMenu === 'function',
 						footerDestinations: document.querySelectorAll('.app-sidebar-footer .sidebar-nav-icon').length,
 						bridgeKeys: Object.keys(window.rhyza ?? {}).sort(),
@@ -745,6 +762,8 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 						entityPreviewClosed: false,
 					};
 					if (evidence.bodyText.trim() && evidence.isElectron) {
+						const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+						evidence.windowThemeSetSucceeded = (await window.rhyza?.windowThemeSet?.(theme))?.ok === true;
 						window.dispatchEvent(new Event('rhyza:branch-switch-start'));
 						await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 						evidence.branchLoadingVisible = document.querySelector('.branch-switch-loading') !== null;
@@ -782,6 +801,7 @@ async function runSmokeCheck(window: BrowserWindow): Promise<void> {
 		if (
 			process.platform === "win32" &&
 			(!evidence.titlebarVisible ||
+				!evidence.windowThemeSetSucceeded ||
 				!evidence.applicationMenuAvailable ||
 				evidence.footerDestinations !== 3 ||
 				!Menu.getApplicationMenu())

@@ -46,6 +46,7 @@ const ipcChannels = {
 
 	openExternal: "rhyza:open-external",
 	showApplicationMenu: "rhyza:show-application-menu",
+	windowThemeSet: "rhyza:window-theme-set",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -110,6 +111,7 @@ contextBridge.exposeInMainWorld("rhyza", {
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
+	windowThemeSet: (theme) => ipcRenderer.invoke(ipcChannels.windowThemeSet, theme),
 	appStateLoad: () => ipcRenderer.invoke(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),
