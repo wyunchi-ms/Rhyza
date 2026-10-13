@@ -177,6 +177,62 @@ if (!process.versions.electron) {
 			"Deletion executes only after confirmation.",
 		);
 		await seedContent();
+		await host(`(() => {
+			const state = window.uiStore.getState();
+			const related = {
+				...state.entities[0],
+				id: "ui-related-entity",
+				name: "Shared context",
+				type: "concept"
+			};
+			window.uiStore.setState({
+				entities: [...state.entities, related],
+				relations: [{
+					id: "ui-relation",
+					sourceEntityId: "ui-entity",
+					targetEntityId: related.id,
+					type: "related_to",
+					description: "A related entity for theme verification.",
+					confidence: "confirmed",
+					sourceRefs: [],
+					version: 1
+				}]
+			});
+		})()`);
+		await navigate("/knowledge", ".knowledge-page-header h1");
+		const themeColors = {};
+		for (const theme of ["light", "dark"]) {
+			await setAppearance(theme);
+			themeColors[theme] = await host(`(() => {
+				const styles = selectors => selectors.map(selector => {
+					const element = document.querySelector(selector);
+					const style = getComputedStyle(element);
+					return [style.backgroundColor, style.color, style.borderColor];
+				});
+				return {
+					badges: styles([".entity-preview-heading .status-progress", ".entity-preview-heading .status-success"]),
+					relation: styles([".entity-relation-heading small", ".entity-relation-item"]),
+					surfaces: styles([".knowledge-resource-pane", ".knowledge-primary-detail"])
+				};
+			})()`);
+			await screenshot(`knowledge-theme-${theme}`);
+		}
+		assert.notDeepEqual(
+			themeColors.light.badges,
+			themeColors.dark.badges,
+			"Entity type and confidence badges use distinct light and dark semantic colors.",
+		);
+		assert.notDeepEqual(
+			themeColors.light.relation,
+			themeColors.dark.relation,
+			"Relation tags and cards use distinct light and dark semantic colors.",
+		);
+		assert.notDeepEqual(
+			themeColors.light.surfaces,
+			themeColors.dark.surfaces,
+			"Knowledge surfaces adapt to the active theme.",
+		);
+		await seedContent();
 	}
 
 	async function screenshot(name) {
@@ -518,6 +574,7 @@ if (!process.versions.electron) {
 						updatedAt: timestamp,
 					},
 				],
+				relations: [],
 				sources: [
 					{
 						id: "ui-source",

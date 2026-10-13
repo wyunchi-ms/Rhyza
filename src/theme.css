@@ -21,6 +21,10 @@
 	--ui-brand-soft-strong: #d7e9e3;
 	--ui-brand-soft: #e9f2ee;
 	--ui-brand-wash: #f5f9f7;
+	--ui-status-neutral-surface: #eef1f2;
+	--ui-status-neutral-ink: #4c5a60;
+	--ui-status-positive-surface: #e4f1e8;
+	--ui-status-positive-ink: #286140;
 	--ui-brand-rgb: 40 111 99;
 	--ui-border: #dce2e4;
 	--ui-hover: #e9eeef;
@@ -56,6 +60,10 @@
 	--ui-brand-soft-strong: #2c4840;
 	--ui-brand-soft: #243a33;
 	--ui-brand-wash: #1e2d28;
+	--ui-status-neutral-surface: #293236;
+	--ui-status-neutral-ink: #c0cbd0;
+	--ui-status-positive-surface: #20392b;
+	--ui-status-positive-ink: #9fd8b2;
 	--ui-brand-rgb: 142 197 180;
 	--ui-border: #354045;
 	--ui-hover: #2a3438;
