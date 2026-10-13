@@ -100,6 +100,141 @@ if (!process.versions.electron) {
 		await settle();
 	}
 
+	async function checkOverlayControls() {
+		browser.setContentSize(1024, 800);
+		await navigate("/settings", ".settings-section:not([hidden]) .settings-section-header h1");
+		await host('document.querySelector("[data-section=language-heading]").click()');
+		await settle();
+		await host('document.querySelector("#language-select").click()');
+		await until('Boolean(document.querySelector(".ui-select-popup"))', "styled language dropdown");
+		assert.equal(await host('document.activeElement?.getAttribute("role")'), "listbox");
+		assert(
+			await host('document.querySelector(".ui-select-popup [aria-selected=true] svg") !== null'),
+			"Selected option has a leading icon.",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "End" });
+		await settle();
+		assert(
+			await host(`(() => {
+			const popup = document.querySelector(".ui-select-popup");
+			return popup.getAttribute("aria-activedescendant") === popup.lastElementChild.id;
+		})()`),
+			"End navigates to the last enabled option.",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Home" });
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
+		await until('!document.querySelector(".ui-select-popup")', "keyboard selects language");
+		assert.equal(
+			await host("document.activeElement?.id"),
+			"language-select",
+			"Selection restores focus.",
+		);
+		await host('window.uiStore.getState().updateSettings({ language: "en" })');
+		await navigate("/", ".chat-topbar h1");
+		const deletion = '.session-node-actions button[title="删除对话"]';
+		await host(`window.confirm = () => { throw new Error("Native confirmation must not be used."); };
+			document.querySelector(${JSON.stringify(deletion)}).focus();
+			document.querySelector(${JSON.stringify(deletion)}).click();`);
+		await until(
+			'document.querySelector(".confirmation-dialog")?.open',
+			"in-app delete confirmation",
+		);
+		assert(
+			await host('document.querySelector(".confirmation-dialog").matches(":modal")'),
+			"Confirmation traps focus in a native modal.",
+		);
+		assert.equal(
+			await host("document.activeElement?.textContent"),
+			"Cancel",
+			"Destructive confirmation starts on cancel.",
+		);
+		await checkContrast("delete confirmation");
+		await screenshot("confirmation-delete");
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until('!document.querySelector(".confirmation-dialog")', "Escape cancels deletion");
+		assert(
+			await host('window.uiStore.getState().sessions.some(item => item.id === "ui-session")'),
+			"Cancelling preserves the session.",
+		);
+		assert.equal(
+			await host("document.activeElement?.title"),
+			"删除对话",
+			"Cancellation restores the delete trigger.",
+		);
+		await host(`document.querySelector(${JSON.stringify(deletion)}).click()`);
+		await until(
+			'document.querySelector(".confirmation-dialog")?.open',
+			"delete confirmation reopens",
+		);
+		await host('document.querySelector(".confirmation-submit").click()');
+		await until(
+			'!document.querySelector(".confirmation-dialog")',
+			"confirmed deletion closes dialog",
+		);
+		assert.equal(
+			await host('window.uiStore.getState().sessions.some(item => item.id === "ui-session")'),
+			false,
+			"Deletion executes only after confirmation.",
+		);
+		await seedContent();
+		await host(`(() => {
+			const state = window.uiStore.getState();
+			const related = {
+				...state.entities[0],
+				id: "ui-related-entity",
+				name: "Shared context",
+				type: "concept"
+			};
+			window.uiStore.setState({
+				entities: [...state.entities, related],
+				relations: [{
+					id: "ui-relation",
+					sourceEntityId: "ui-entity",
+					targetEntityId: related.id,
+					type: "related_to",
+					description: "A related entity for theme verification.",
+					confidence: "confirmed",
+					sourceRefs: [],
+					version: 1
+				}]
+			});
+		})()`);
+		await navigate("/knowledge", ".knowledge-page-header h1");
+		const themeColors = {};
+		for (const theme of ["light", "dark"]) {
+			await setAppearance(theme);
+			themeColors[theme] = await host(`(() => {
+				const styles = selectors => selectors.map(selector => {
+					const element = document.querySelector(selector);
+					const style = getComputedStyle(element);
+					return [style.backgroundColor, style.color, style.borderColor];
+				});
+				return {
+					badges: styles([".entity-preview-heading .status-progress", ".entity-preview-heading .status-success"]),
+					relation: styles([".entity-relation-heading small", ".entity-relation-item"]),
+					surfaces: styles([".knowledge-resource-pane", ".knowledge-primary-detail"])
+				};
+			})()`);
+			await screenshot(`knowledge-theme-${theme}`);
+		}
+		assert.notDeepEqual(
+			themeColors.light.badges,
+			themeColors.dark.badges,
+			"Entity type and confidence badges use distinct light and dark semantic colors.",
+		);
+		assert.notDeepEqual(
+			themeColors.light.relation,
+			themeColors.dark.relation,
+			"Relation tags and cards use distinct light and dark semantic colors.",
+		);
+		assert.notDeepEqual(
+			themeColors.light.surfaces,
+			themeColors.dark.surfaces,
+			"Knowledge surfaces adapt to the active theme.",
+		);
+		await seedContent();
+	}
+
 	async function screenshot(name) {
 		if (!process.env.RHYZA_UI_SCREENSHOT_DIR) return;
 		await sleep(180);
@@ -439,6 +574,7 @@ if (!process.versions.electron) {
 						updatedAt: timestamp,
 					},
 				],
+				relations: [],
 				sources: [
 					{
 						id: "ui-source",
@@ -1530,6 +1666,7 @@ if (!process.versions.electron) {
 		}
 		await host('window.uiStore.getState().updateSettings({ language: "en" })');
 		await seedContent();
+		await checkOverlayControls();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
 			await navigate("/", ".chat-topbar h1");

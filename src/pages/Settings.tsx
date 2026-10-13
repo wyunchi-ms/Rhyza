@@ -1,6 +1,7 @@
 import type { PiPluginInfo } from "../shared/ipc";
 import { McpSettings } from "./settings/McpSettings";
 import { AzureOpenAISettings } from "../components/AzureOpenAISettings";
+import { Select } from "../components/Select";
 import clsx from "clsx";
 import {
 	Accessibility,
@@ -92,7 +93,7 @@ const Settings: React.FC = () => {
 									<label htmlFor="language-select" className="settings-label">
 										{t("Language")}
 									</label>
-									<select
+									<Select
 										id="language-select"
 										className="field settings-input"
 										value={settings.language}
@@ -106,7 +107,7 @@ const Settings: React.FC = () => {
 												{option.label}
 											</option>
 										))}
-									</select>
+									</Select>
 								</div>
 							</div>
 						</section>
@@ -206,7 +207,7 @@ const Settings: React.FC = () => {
 											resets the model to its default.
 										</p>
 									</div>
-									<select
+									<Select
 										id="provider-select"
 										value={provider.id}
 										onChange={(event) =>
@@ -220,7 +221,7 @@ const Settings: React.FC = () => {
 												{item.label}
 											</option>
 										))}
-									</select>
+									</Select>
 								</div>
 								<div
 									className="settings-row settings-provider-connection"
@@ -323,7 +324,7 @@ const Settings: React.FC = () => {
 												{t("Use the provider default or choose an available model.")}
 											</p>
 										</div>
-										<select
+										<Select
 											id="model-select"
 											value={selectedModel}
 											onChange={(e) => updateSettings({ defaultModel: e.target.value })}
@@ -339,7 +340,7 @@ const Settings: React.FC = () => {
 													{model.name}
 												</option>
 											))}
-										</select>
+										</Select>
 									</div>
 								)}
 								{provider.id === "claude-code" && (
@@ -403,7 +404,7 @@ const Settings: React.FC = () => {
 									<label htmlFor="knowledge-mode" className="settings-label">
 										{t("Write mode")}
 									</label>
-									<select
+									<Select
 										id="knowledge-mode"
 										className="field settings-input"
 										value={settings.knowledgeMode}
@@ -417,7 +418,7 @@ const Settings: React.FC = () => {
 										<option value="automatic">{t("Automatic")}</option>
 										<option value="hybrid">{t("Hybrid")}</option>
 										<option value="read_only">{t("Read only")}</option>
-									</select>
+									</Select>
 								</div>
 								<div className="settings-row">
 									<div className="settings-row-copy">
@@ -444,7 +445,7 @@ const Settings: React.FC = () => {
 									<label htmlFor="thinking-level" className="settings-label">
 										{t("Thinking level")}
 									</label>
-									<select
+									<Select
 										id="thinking-level"
 										className="field settings-input"
 										value={settings.thinkingLevel}
@@ -458,7 +459,7 @@ const Settings: React.FC = () => {
 										<option value="low">{t("Low")}</option>
 										<option value="medium">{t("Medium")}</option>
 										<option value="high">{t("High")}</option>
-									</select>
+									</Select>
 								</div>
 								<div className="settings-row settings-row--field">
 									<div className="settings-row-copy">

@@ -1,0 +1,232 @@
+.confirmation-dialog {
+	width: min(28rem, calc(100vw - 2rem));
+	max-height: calc(100dvh - 2rem);
+	margin: auto;
+	padding: 0;
+	overflow: auto;
+	border: 1px solid var(--ui-border);
+	border-radius: 1rem;
+	background: var(--color-surface);
+	color: var(--color-primary);
+	box-shadow: var(--ui-shadow-panel);
+}
+
+.confirmation-dialog::backdrop {
+	background: rgb(20 30 35 / 48%);
+	backdrop-filter: blur(3px);
+}
+
+.confirmation-header {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 1.25rem 1.25rem 0;
+}
+
+.confirmation-header h2 {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 650;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+.confirmation-icon {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 0.75rem;
+	background: var(--ui-danger-surface);
+	color: var(--ui-danger);
+}
+
+.confirmation-dialog[data-tone="warning"] .confirmation-icon {
+	background: var(--ui-warning-surface);
+	color: var(--ui-warning);
+}
+
+.confirmation-dialog[data-tone="accent"] .confirmation-icon {
+	background: var(--ui-brand-soft);
+	color: var(--ui-brand-ink);
+}
+
+.confirmation-body {
+	padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.confirmation-body p {
+	margin: 0;
+	color: var(--color-secondary);
+	font-size: 0.8125rem;
+	line-height: 1.75;
+	white-space: pre-line;
+	overflow-wrap: anywhere;
+}
+
+.confirmation-body .confirmation-error {
+	margin-top: 0.75rem;
+	color: var(--ui-danger);
+}
+
+.confirmation-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	padding: 0.875rem 1.25rem;
+	border-top: 1px solid var(--ui-border);
+	background: var(--ui-surface-muted);
+}
+
+.confirmation-footer button {
+	min-height: 2.5rem;
+	padding: 0.5rem 1rem;
+	border-radius: 0.5rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+html[data-theme] .confirmation-dialog[data-tone="danger"] .confirmation-submit {
+	border-color: var(--ui-danger-action);
+	background: var(--ui-danger-action);
+	color: var(--ui-on-danger);
+}
+
+html[data-theme]
+	.confirmation-dialog[data-tone="danger"]
+	.confirmation-submit:hover:not(:disabled) {
+	background: var(--ui-danger-action-hover);
+}
+
+.ui-select {
+	position: relative;
+	display: inline-grid;
+	min-width: 0;
+	max-width: 100%;
+	vertical-align: middle;
+}
+
+html[data-theme] .ui-select-trigger {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	min-width: 0;
+	min-height: 2.5rem;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.5rem;
+	background: var(--color-surface);
+	color: var(--color-primary);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	text-align: start;
+	cursor: pointer;
+}
+
+.ui-select-trigger > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ui-select-trigger > svg {
+	flex: 0 0 auto;
+	color: var(--color-secondary);
+}
+
+html[data-theme] .ui-select-trigger:hover:not(:disabled),
+html[data-theme] .ui-select-trigger[aria-expanded="true"] {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-wash);
+}
+
+html[data-theme] .ui-select-trigger:disabled {
+	background: var(--ui-surface-muted);
+	color: var(--color-secondary);
+	cursor: not-allowed;
+	opacity: 0.65;
+}
+
+.ui-select-native {
+	position: absolute;
+	width: 1px !important;
+	height: 1px !important;
+	min-height: 0 !important;
+	padding: 0 !important;
+	opacity: 0;
+	pointer-events: none;
+	clip-path: inset(50%);
+}
+
+.ui-select-popup {
+	margin: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 0.35rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 0.75rem;
+	background: var(--color-surface);
+	color: var(--color-primary);
+	box-shadow: var(--ui-shadow-panel);
+	outline: none;
+}
+
+.ui-select-option {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	min-height: 2.25rem;
+	padding: 0.5rem 0.625rem;
+	border: 1px solid transparent;
+	border-radius: 0.4rem;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+.ui-select-option > span {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.ui-select-option > svg {
+	flex: 0 0 auto;
+	color: var(--color-secondary);
+}
+
+.ui-select-option[aria-selected="true"] {
+	background: var(--ui-brand-soft);
+	color: var(--ui-brand-ink);
+	font-weight: 600;
+}
+
+.ui-select-option.is-active:not([aria-disabled="true"]) {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-hover);
+}
+
+.ui-select-option[aria-disabled="true"] {
+	background: var(--ui-surface-muted);
+	color: var(--color-secondary);
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.ui-select-trigger,
+	.ui-select-option,
+	.confirmation-footer button {
+		transition:
+			background-color 140ms ease,
+			border-color 140ms ease;
+	}
+}

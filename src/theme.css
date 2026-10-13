@@ -8,6 +8,11 @@
 	--ui-surface-muted: #f0f3f4;
 	--ui-brand-accent: #286f63;
 	--ui-danger: #b42318;
+	--ui-danger-surface: #fff0ee;
+	--ui-danger-border: #e9b6af;
+	--ui-danger-action: #b42318;
+	--ui-danger-action-hover: #941d14;
+	--ui-on-danger: #ffffff;
 	--ui-warning: #805409;
 	--ui-warning-border: #d9b353;
 	--ui-warning-surface: #fff7df;
@@ -16,6 +21,10 @@
 	--ui-brand-soft-strong: #d7e9e3;
 	--ui-brand-soft: #e9f2ee;
 	--ui-brand-wash: #f5f9f7;
+	--ui-status-neutral-surface: #eef1f2;
+	--ui-status-neutral-ink: #4c5a60;
+	--ui-status-positive-surface: #e4f1e8;
+	--ui-status-positive-ink: #286140;
 	--ui-brand-rgb: 40 111 99;
 	--ui-border: #dce2e4;
 	--ui-hover: #e9eeef;
@@ -38,6 +47,11 @@
 	--ui-surface-muted: #222a2d;
 	--ui-brand-accent: #8ec5b4;
 	--ui-danger: #fda4a4;
+	--ui-danger-surface: #3e2628;
+	--ui-danger-border: #875053;
+	--ui-danger-action: #fda4a4;
+	--ui-danger-action-hover: #febbbb;
+	--ui-on-danger: #3b1316;
 	--ui-warning: #f3cd70;
 	--ui-warning-border: #8b6929;
 	--ui-warning-surface: #362b17;
@@ -46,6 +60,10 @@
 	--ui-brand-soft-strong: #2c4840;
 	--ui-brand-soft: #243a33;
 	--ui-brand-wash: #1e2d28;
+	--ui-status-neutral-surface: #293236;
+	--ui-status-neutral-ink: #c0cbd0;
+	--ui-status-positive-surface: #20392b;
+	--ui-status-positive-ink: #9fd8b2;
 	--ui-brand-rgb: 142 197 180;
 	--ui-border: #354045;
 	--ui-hover: #2a3438;

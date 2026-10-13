@@ -85,16 +85,20 @@ if (!process.versions.electron) {
 	};
 	const field = async (label, value) => {
 		await until(
-			`[...document.querySelectorAll(".mcp-settings label")].some(item => item.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)} && item.querySelector("input,textarea,select")?.checkVisibility({ visibilityProperty: true }) && !item.querySelector("input,textarea,select").matches(":disabled"))`,
+			`[...document.querySelectorAll(".mcp-settings label")].some(item => item.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)} && item.querySelector(".ui-select-trigger,input,textarea")?.checkVisibility({ visibilityProperty: true }) && !item.querySelector(".ui-select-trigger,input,textarea").matches(":disabled"))`,
 			`editable ${label}`,
 		);
-		await host(`(() => {
+		const dropdown = await host(`(() => {
 			const label = [...document.querySelectorAll(".mcp-settings label")].find(item => item.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)});
+			const trigger = label.querySelector(".ui-select-trigger");
+			if (trigger) { trigger.click(); return true; }
 			const input = label.querySelector("input,textarea,select");
 			const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
 			Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, ${JSON.stringify(value)});
 			input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+			return false;
 		})()`);
+		if (dropdown) await click(`.ui-select-popup [role="option"][data-value="${value}"]`);
 		await sleep(40);
 	};
 	const textButton = async (text, scope = ".mcp-settings") => {
@@ -109,6 +113,7 @@ if (!process.versions.electron) {
 		await sleep(50);
 	};
 	const checkAppearance = async (label) => {
+		await sleep(180);
 		assert(
 			await host(`(() => {
 				const root = document.querySelector(".mcp-settings");
@@ -150,7 +155,7 @@ if (!process.versions.electron) {
 				.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
 				.reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
 			return [...document.querySelectorAll(
-				".mcp-server h3, .mcp-server-meta, .mcp-server-metrics, .mcp-state, .mcp-sign-in-hint strong, .mcp-sign-in-hint p, .mcp-icon-action"
+				".mcp-server h3, .mcp-server-meta, .mcp-server-metrics, .mcp-state, .mcp-sign-in-hint strong, .mcp-sign-in-hint p, .mcp-icon-action, .mcp-hint, .ui-select-trigger"
 			)].filter(element => element.checkVisibility({ visibilityProperty: true }) && !element.matches(":disabled") && element.getAttribute("aria-disabled") !== "true").map(element => {
 				let background = element;
 				while (background.parentElement && (!rgb(getComputedStyle(background).backgroundColor).length || rgb(getComputedStyle(background).backgroundColor)[3] === 0))
@@ -222,9 +227,23 @@ if (!process.versions.electron) {
 		const authError = "MCP OAuth authorization requires user interaction";
 		const previewActions = [];
 		const openedUrls = [];
+		const longToolDescription =
+			"Review this tool before approving it. Its description must remain available without changing the row height. ".repeat(
+				30,
+			);
 		ipcMain.handle(ipcChannels.mcpList, async () => {
 			const overview = await service.overview(workspace);
-			return previewServer ? { ...overview, servers: [previewServer] } : overview;
+			return previewServer
+				? { ...overview, servers: [previewServer] }
+				: {
+						...overview,
+						servers: overview.servers.map((server) => ({
+							...server,
+							tools: server.tools.map((tool) =>
+								tool.name === "echo" ? { ...tool, description: longToolDescription } : tool,
+							),
+						})),
+					};
 		});
 		ipcMain.handle(ipcChannels.mcpEdit, (_event, request) =>
 			service.edit(workspace, validateMcpTarget(request)),
@@ -421,6 +440,31 @@ if (!process.versions.electron) {
 		await until('document.querySelector(".mcp-dialog")?.open', "tool inspector opens modally");
 		await checkDialog();
 		await until('document.querySelectorAll(".mcp-tool").length === 5', "tool discovery");
+		const collapsedHeight = await host(
+			'document.querySelector(".mcp-tool").getBoundingClientRect().height',
+		);
+		await click('[aria-label="echo Description"]');
+		assert.equal(
+			await host(
+				'document.querySelector(".mcp-tool-description-panel:popover-open p").textContent',
+			),
+			longToolDescription,
+			"The full description is available in the popover.",
+		);
+		assert.equal(
+			await host('document.querySelector(".mcp-tool").getBoundingClientRect().height'),
+			collapsedHeight,
+			"Opening a long description does not resize the tool row.",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until(
+			'!document.querySelector(".mcp-tool-description-panel:popover-open")',
+			"Escape dismisses the description",
+		);
+		assert(
+			await host('document.querySelector(".mcp-dialog").open'),
+			"Description dismissal keeps the tools modal open.",
+		);
 		assert.equal(
 			await host(
 				'[...document.querySelectorAll(".mcp-tool select[aria-label$=Permission]")].every(input => input.value === "blocked")',
@@ -428,14 +472,18 @@ if (!process.versions.electron) {
 			true,
 			"Read-only annotations do not approve tools.",
 		);
-		await host(`(() => {
-			const input = document.querySelector('[aria-label="echo Permission"]');
-			Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(input, "read");
-			input.dispatchEvent(new Event("change", { bubbles: true }));
-		})()`);
+		await click('button[aria-label="echo Permission"]');
+		assert.equal(
+			await host(
+				'document.querySelector(".ui-select-popup").closest("dialog") === document.querySelector(".mcp-dialog")',
+			),
+			true,
+			"Dropdown is in the native modal top layer.",
+		);
+		await click('.ui-select-popup [role="option"][data-value="read"]');
 		await textButton("Save tool settings");
 		await until(
-			'document.querySelector(\'[aria-label="echo Permission"]\')?.value === "read" && document.querySelector(".mcp-state")?.textContent === "Connected"',
+			'document.querySelector(\'select[aria-label="echo Permission"]\')?.value === "read" && document.querySelector(".mcp-state")?.textContent === "Connected"',
 			"approval persisted",
 		);
 		assert.equal(
@@ -445,7 +493,7 @@ if (!process.versions.electron) {
 		await field("Tool exposure", "direct");
 		await textButton("Save tool settings");
 		await until(
-			'document.querySelector(\'[aria-label="echo Tool exposure"]\')?.value === "direct" && document.querySelector(".mcp-state")?.textContent === "Connected"',
+			'document.querySelector(\'select[aria-label="echo Tool exposure"]\')?.value === "direct" && document.querySelector(".mcp-state")?.textContent === "Connected"',
 			"direct exposure saved",
 		);
 		assert.equal(
@@ -470,11 +518,82 @@ if (!process.versions.electron) {
 			await until(`document.documentElement.dataset.theme === ${JSON.stringify(theme)}`, theme);
 			for (const width of [375, 768, 1024, 1440]) {
 				browser.setContentSize(width, 720);
+				await until(
+					`innerWidth === ${width} && document.querySelector(".mcp-dialog").getBoundingClientRect().width <= ${width} - 30`,
+					"modal layout settles after resize",
+				);
 				await sleep(80);
 				await checkAppearance(`Connected ${theme} ${width}px`);
 				await checkDialog();
 				assert(
 					await host('document.querySelector(".mcp-tools").getBoundingClientRect().width > 0'),
+				);
+				const rows = await host(`(() => {
+					const tools = [...document.querySelectorAll(".mcp-tool")];
+					return {
+						heights: tools.map(tool => tool.getBoundingClientRect().height),
+						controls: tools.flatMap(tool => [...tool.querySelectorAll(".ui-select-trigger")].map(item => item.getBoundingClientRect().height)),
+						descriptions: tools.map(tool => tool.querySelector(".mcp-tool-description-panel")?.checkVisibility() ?? false)
+					};
+				})()`);
+				assert(
+					rows.heights.every((height) => Math.abs(height - rows.heights[0]) < 1),
+					`${theme} ${width}: equal-height tool rows`,
+				);
+				assert(
+					rows.controls.every((height) => height >= 40 && height <= 48),
+					`${theme} ${width}: compact selectors`,
+				);
+				assert(
+					rows.descriptions.every((visible) => !visible),
+					"Descriptions are collapsed by default.",
+				);
+				await click('button[aria-label="echo Permission"]');
+				const popup = await host(`(() => {
+					const list = document.querySelector(".ui-select-popup");
+					const rect = list.getBoundingClientRect();
+					return { bounds: rect.toJSON(), topLayer: list.closest("dialog")?.matches(":modal"),
+						icons: [...list.querySelectorAll("[role=option]")].every(item => item.firstElementChild.tagName === "svg"),
+						selected: list.querySelector('[aria-selected=true]')?.dataset.value };
+				})()`);
+				assert(
+					popup.topLayer && popup.icons,
+					"Every dropdown item has a leading icon in the modal layer.",
+				);
+				assert.equal(popup.selected, "read");
+				await screenshot(`mcp-dropdown-${theme}-${width}`);
+				assert(
+					popup.bounds.left >= 0 &&
+						popup.bounds.right <= width + 1 &&
+						popup.bounds.top >= 0 &&
+						popup.bounds.bottom <= 721,
+					`${theme} ${width}: popup remains inside the viewport ${JSON.stringify(popup.bounds)}`,
+				);
+				browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+				await until(
+					'!document.querySelector(".ui-select-popup") && document.activeElement?.getAttribute("aria-label") === "echo Permission"',
+					"Escape closes only the dropdown and restores focus",
+				);
+				assert(
+					await host('document.querySelector(".mcp-dialog").open'),
+					"Escape does not dismiss the enclosing modal.",
+				);
+				await click('[aria-label="echo Description"]');
+				const description = await host(
+					'document.querySelector(".mcp-tool-description-panel:popover-open").getBoundingClientRect().toJSON()',
+				);
+				assert(
+					description.left >= 0 &&
+						description.right <= width + 1 &&
+						description.top >= 0 &&
+						description.bottom <= 721,
+					`${theme} ${width}: long description is visible inside the viewport ${JSON.stringify(description)}`,
+				);
+				await screenshot(`mcp-description-${theme}-${width}`);
+				browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+				await until(
+					'!document.querySelector(".mcp-tool-description-panel:popover-open")',
+					"description dismisses without resizing its row",
 				);
 			}
 		}
@@ -497,6 +616,12 @@ if (!process.versions.electron) {
 		);
 		await textButton("Disable");
 		await until('document.querySelector(".mcp-state")?.textContent === "Disabled"', "disabled");
+		assert(
+			await host(
+				`getComputedStyle(document.querySelector(".mcp-server")).backgroundColor === getComputedStyle(document.documentElement).getPropertyValue("--ui-surface-muted").trim().replace(/^#([0-9a-f]{6})$/i, (_, hex) => "rgb(" + [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16)).join(", ") + ")")`,
+			),
+			"Disabled server has a muted card background.",
+		);
 		await textButton("Enable");
 		await until(
 			'document.querySelector(".mcp-state")?.textContent === "Connected"',

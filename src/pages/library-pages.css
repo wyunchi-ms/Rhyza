@@ -76,13 +76,13 @@ html[data-theme] .library-page .status-badge {
 }
 
 html[data-theme] .library-page .status-success {
-	background: var(--ui-brand-soft);
-	color: var(--ui-brand-ink);
+	background: var(--ui-status-positive-surface);
+	color: var(--ui-status-positive-ink);
 }
 
 html[data-theme] .library-page .status-progress {
-	background: var(--ui-surface-muted);
-	color: var(--color-secondary);
+	background: var(--ui-status-neutral-surface);
+	color: var(--ui-status-neutral-ink);
 }
 
 html[data-theme] .library-page .library-section-heading {

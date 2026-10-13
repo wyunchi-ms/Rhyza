@@ -1,5 +1,6 @@
 import { SessionNodeContextMenu, useSessionContextMenu } from "./SessionContextMenu";
 import { ProgressMarker } from "./ProgressMarker";
+import { confirmAction } from "./ConfirmationDialog";
 import clsx from "clsx";
 import {
 	AlertCircle,
@@ -482,11 +483,13 @@ const SessionGroup = ({
 							title="删除对话"
 							aria-label={`删除对话“${session?.title ?? node.title}”`}
 							className="p-1 rounded hover:bg-red-500/20 hover:text-red-600"
-							onClick={() => {
+							onClick={async () => {
 								if (
-									window.confirm(
-										`确定删除对话“${session?.title ?? node.title}”及其全部消息和分支吗？`,
-									)
+									await confirmAction({
+										title: t("Delete session?"),
+										description: `${session?.title ?? node.title}\n\n${t("All messages and branches in this session will be deleted.")}`,
+										confirmLabel: t("Delete"),
+									})
 								)
 									onDelete(node.sessionId);
 							}}
