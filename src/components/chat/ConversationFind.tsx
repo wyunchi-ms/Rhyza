@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { Turn } from "../../types";
-import { revealMarkdownHeadingEvent } from "../../utils/markdownSections";
+import { revealMarkdownDetails, revealMarkdownHeadingEvent } from "../../utils/markdownSections";
 
 interface ConversationMatch {
 	turnId: string;
@@ -98,6 +98,7 @@ export function ConversationFind({
 			current.range.startContainer.parentElement ??
 			document.getElementById(`turn-${current.turnId}`);
 		const frame = window.requestAnimationFrame(() => {
+			if (target) revealMarkdownDetails(target);
 			const section = target?.closest<HTMLElement>("[data-markdown-section-id]");
 			if (section) {
 				section.dispatchEvent(

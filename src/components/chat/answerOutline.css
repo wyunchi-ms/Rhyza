@@ -31,8 +31,8 @@
 .answer-outline-list button {
 	display: block;
 	width: 100%;
-	border-left: 2px solid transparent;
-	border-radius: 0 5px 5px 0;
+	border: 1px solid transparent;
+	border-radius: 5px;
 	padding: 0.4rem 0.6rem;
 	color: var(--color-secondary);
 	font-size: inherit;
@@ -48,8 +48,13 @@
 }
 
 .answer-outline-list button[aria-current="location"] {
-	border-left-color: var(--ui-brand-accent);
-	background: var(--ui-brand-soft);
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft-strong);
 	color: var(--ui-brand-ink);
 	font-weight: 600;
+}
+
+.answer-outline-list button:focus-visible {
+	outline: 2px solid var(--ui-brand-accent);
+	outline-offset: -2px;
 }

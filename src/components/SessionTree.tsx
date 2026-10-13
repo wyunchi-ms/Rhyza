@@ -418,7 +418,6 @@ const SessionGroup = ({
 								else openMenu(event, node.id);
 							}}
 						>
-							{isInView && <span className="session-viewport-rail" aria-hidden="true" />}
 							<ProgressMarker status={session?.progressStatus} active={isCurrent} />
 							{node.rounds.some((round) => round.user?.pathSummary) && (
 								<FileText size={13} aria-label={t("Summary")} />

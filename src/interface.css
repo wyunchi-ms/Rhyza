@@ -336,20 +336,17 @@ html[data-theme] .session-node-button:hover {
 	background: var(--ui-hover);
 }
 
-html[data-theme] .session-node-button.is-current {
-	background: var(--ui-selected);
+html[data-theme] .session-node-button.is-current,
+html[data-theme] .session-node-button.is-in-view {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft-strong);
 	color: var(--ui-brand-ink);
-	box-shadow: inset 2px 0 0 var(--ui-brand-accent);
+	box-shadow: none;
 }
 
 html[data-theme] .session-node-actions {
 	background: var(--ui-hover);
 	color: var(--color-secondary);
-}
-
-html[data-theme] .session-viewport-rail {
-	background: var(--ui-brand-accent);
-	box-shadow: none;
 }
 
 html[data-theme] .chat-topbar {
@@ -428,7 +425,7 @@ html[data-theme] .chat-turn.is-user:hover .user-bubble {
 }
 
 html[data-theme] .user-bubble .markdown-body,
-html[data-theme] .user-bubble .markdown-body :is(h1, h2, h3, h4, strong) {
+html[data-theme] .user-bubble .markdown-body :is(h1, h2, h3, h4, strong, b) {
 	color: var(--color-primary);
 }
 
@@ -436,9 +433,18 @@ html[data-theme] .user-bubble::before {
 	color: var(--ui-brand-ink);
 }
 
-html[data-theme] .chat-turn.is-focused .turn-body::after {
-	background: var(--ui-brand-accent);
-	box-shadow: none;
+html[data-theme] .chat-turn.is-focused .turn-body {
+	outline: 1px solid var(--ui-brand-border);
+	outline-offset: 3px;
+	background: var(--ui-brand-wash);
+}
+
+html[data-theme] .markdown-body :is(strong, b) {
+	color: var(--color-primary);
+}
+
+html[data-theme] .markdown-body details > summary :is(strong, b) {
+	color: inherit;
 }
 
 html[data-theme] .user-message-quote,

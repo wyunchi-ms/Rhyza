@@ -142,13 +142,10 @@
 html[data-theme] .session-node-button.is-summary-selected,
 html[data-theme] .session-node-button.is-summary-selected:hover,
 html[data-theme] .session-node-button.is-current.is-summary-selected {
+	border-color: var(--ui-brand-ink);
 	background: var(--ui-action);
 	color: var(--ui-on-action);
-	box-shadow: inset 0 0 0 2px var(--ui-brand-ink);
-}
-
-html[data-theme] .session-node-button.is-summary-selected .session-viewport-rail {
-	background: var(--ui-on-action);
+	box-shadow: none;
 }
 
 html[data-theme] .session-graph-node.is-summary-selected,
