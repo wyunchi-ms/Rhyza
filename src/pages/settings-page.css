@@ -98,23 +98,28 @@ html[data-theme] .settings-page .settings-search {
 	gap: 0.2rem;
 }
 
+.settings-page .settings-navigation-group + .settings-navigation-group {
+	border-top: 1px solid var(--ui-border);
+	padding-top: 1rem;
+}
+
 .settings-page .settings-navigation-group-heading {
-	margin: 0 0 0.25rem;
+	margin: 0 0 0.5rem;
 	padding-inline: 0.7rem;
 	color: var(--color-secondary);
-	font-size: 0.7rem;
-	font-weight: 600;
-	letter-spacing: 0.04em;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
 }
 
 html[data-theme] .settings-page .settings-navigation nav button {
 	display: block;
 	width: 100%;
-	border: 0;
+	border: 1px solid transparent;
 	border-radius: 0.5rem;
-	padding: 0.55rem 0.7rem;
+	padding: 0.55rem 1rem;
 	background: transparent;
-	color: var(--color-secondary);
+	color: var(--color-primary);
 	cursor: pointer;
 	font-family: inherit;
 	font-size: 0.78rem;
@@ -122,6 +127,7 @@ html[data-theme] .settings-page .settings-navigation nav button {
 	text-align: left;
 	transition:
 		background-color 160ms ease,
+		border-color 160ms ease,
 		color 160ms ease,
 		transform 160ms ease;
 }
@@ -136,10 +142,10 @@ html[data-theme] .settings-page .settings-navigation nav button:active {
 }
 
 html[data-theme] .settings-page .settings-navigation nav button.is-active {
-	background: var(--ui-hover);
-	color: var(--color-primary);
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft-strong);
+	color: var(--ui-brand-ink);
 	font-weight: 600;
-	box-shadow: inset 2px 0 0 var(--ui-brand-accent);
 }
 
 .settings-page .settings-navigation nav button:focus-visible {
@@ -750,10 +756,6 @@ html.high-contrast .settings-page .settings-section-header p {
 		flex: 0 0 auto;
 		width: auto;
 		white-space: nowrap;
-	}
-
-	html[data-theme] .settings-page .settings-navigation nav button.is-active {
-		box-shadow: inset 0 -2px 0 var(--ui-brand-accent);
 	}
 }
 

@@ -293,6 +293,28 @@ if (!process.versions.electron) {
 			await host('outlineButton("Nested explanation").getAttribute("aria-current")'),
 			"location",
 		);
+		for (const theme of ["light", "dark"]) {
+			await host(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}`);
+			await frame();
+			const selection = await host(`(() => {
+				const style = getComputedStyle(outlineButton("Nested explanation"));
+				return {
+					background: style.backgroundColor,
+					borders: ["Top", "Right", "Bottom", "Left"].map(side => ({
+						color: style["border" + side + "Color"],
+						width: style["border" + side + "Width"],
+						style: style["border" + side + "Style"]
+					}))
+				};
+			})()`);
+			assert.notEqual(selection.background, "rgba(0, 0, 0, 0)", `${theme}: filled outline item`);
+			for (const border of selection.borders) {
+				assert.equal(border.width, "1px", `${theme}: full outline selection border`);
+				assert.equal(border.style, "solid", `${theme}: full outline selection border`);
+				assert.notEqual(border.color, "rgba(0, 0, 0, 0)", `${theme}: visible selection border`);
+				assert.equal(border.color, selection.borders[0].color, `${theme}: no left-side accent`);
+			}
+		}
 		assert.ok(
 			await host(`(() => {
 			const heading = outlineHeading("Nested explanation").getBoundingClientRect();

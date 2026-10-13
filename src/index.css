@@ -4,7 +4,8 @@
 
 @theme {
 	--font-sans:
-		"Segoe UI Variable", "Segoe UI", ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
+		"Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+		"Noto Sans CJK SC", ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
 	--color-primary: #212121;
 	--color-secondary: #6b6b6b;
 	--color-accent: #10a37f;
@@ -981,6 +982,7 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 	height: 2.15rem;
 	cursor: pointer;
 	align-items: center;
+	border: 1px solid transparent;
 	border-radius: 6px;
 	padding-left: 0.5rem;
 	color: #303030;
@@ -988,6 +990,7 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 	font-size: 0.84rem;
 	transition:
 		background-color 150ms ease,
+		border-color 150ms ease,
 		box-shadow 150ms ease,
 		color 150ms ease;
 }
@@ -995,10 +998,10 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 	background: #f1f3f5;
 }
 .session-node-button.is-current {
+	border-color: #c9d6e8;
 	background: #e8eef7;
 	color: #172033;
 	font-weight: 650;
-	box-shadow: inset 0 0 0 1px #c9d6e8;
 }
 .session-node-button.is-branch {
 	font-weight: 600;
@@ -1104,15 +1107,6 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 }
 .session-node-button.is-current .session-progress-marker {
 	color: #334155;
-}
-.session-viewport-rail {
-	width: 3px;
-	height: 1.55rem;
-	flex: 0 0 auto;
-	margin-right: 0.35rem;
-	border-radius: 999px;
-	background: var(--ui-brand-ink, #0f9f7a);
-	box-shadow: 0 0 0 1px rgb(var(--ui-brand-rgb, 15 159 122) / 8%);
 }
 .session-viewport-indicator {
 	display: inline-flex;
@@ -1422,16 +1416,13 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 .chat-turn.is-user {
 	justify-content: flex-end;
 }
-.chat-turn.is-focused .turn-body::after {
-	position: absolute;
-	inset-block: 0;
-	left: -0.8rem;
-	width: 3px;
-	border-radius: 999px;
-	background: #6f8fca;
-	content: "";
-	box-shadow: 0 0 0 3px rgb(var(--ui-brand-rgb, 111 143 202) / 12%);
-	pointer-events: none;
+.chat-turn.is-focused .turn-body {
+	outline: 1px solid var(--ui-brand-border);
+	outline-offset: 3px;
+	background: var(--ui-brand-wash);
+}
+.chat-turn.is-focused .assistant-body {
+	border-radius: 8px;
 }
 .assistant-mark {
 	display: flex;
@@ -1456,10 +1447,81 @@ html[data-theme="dark"] .graph-content-preview > section > strong {
 	position: relative;
 	min-width: 0;
 }
+
+.markdown-body details {
+	margin-block: 0.75rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+	padding-inline: 1rem;
+}
+
+.markdown-body details > summary {
+	margin-inline: -1rem;
+	border-radius: 7px;
+	padding: 0.875rem 1rem;
+	color: var(--color-primary);
+	cursor: pointer;
+	font-weight: 500;
+	line-height: 1.5;
+	list-style-position: inside;
+	transition: background-color 160ms ease;
+}
+
+.markdown-body details > summary::marker {
+	color: var(--color-secondary);
+	font-size: 0.8em;
+}
+
+.markdown-body details > summary :is(b, strong) {
+	color: inherit;
+	font-weight: inherit;
+}
+
+.markdown-body details > summary:hover {
+	background: var(--ui-hover);
+}
+
+.markdown-body details > summary:focus-visible {
+	outline: 2px solid var(--ui-brand-accent);
+	outline-offset: -3px;
+}
+
+.markdown-body details[open] {
+	padding-bottom: 1rem;
+}
+
+.markdown-body details[open] > summary {
+	margin-bottom: 0.75rem;
+	border-bottom: 1px solid var(--ui-border);
+	border-radius: 7px 7px 0 0;
+	background: var(--ui-surface-muted);
+}
+
+.markdown-body details > :last-child:not(summary) {
+	margin-bottom: 0;
+}
+
 .assistant-body {
 	width: 100%;
 	padding: 0.15rem 1rem 0.15rem 0;
 }
+
+.chat-turn .assistant-body {
+	padding: 1rem 1.25rem;
+}
+
+.chat-turn .response-collapse {
+	top: 0.625rem;
+	right: 0.5rem;
+}
+
+@container (max-width: 38rem) {
+	.chat-turn .assistant-body {
+		padding: 0.75rem 1rem;
+	}
+}
+
 .user-bubble {
 	position: relative;
 	max-width: 44rem;
@@ -3376,10 +3438,7 @@ html[data-theme="dark"] .user-message-quote-label {
 	cursor: pointer;
 	transition:
 		background-color 160ms ease,
-		box-shadow 160ms ease;
-}
-.knowledge-list-preview-trigger:hover {
-	box-shadow: inset 3px 0 0 #2563eb;
+		border-color 160ms ease;
 }
 .knowledge-preview-backdrop {
 	position: fixed;
@@ -3818,10 +3877,8 @@ html[data-theme="dark"] .user-message-quote-label {
 }
 .knowledge-resource-list button.is-selected {
 	border-color: var(--ui-brand-border, #99d5ca);
-	background: #fff;
-	box-shadow:
-		inset 3px 0 0 var(--ui-brand-ink, #0f766e),
-		0 1px 3px rgb(15 23 42 / 6%);
+	background: var(--ui-brand-soft-strong);
+	box-shadow: none;
 }
 .knowledge-resource-list button > span {
 	min-width: 0;
@@ -5264,7 +5321,7 @@ a:focus-visible {
 .markdown-body h4 {
 	margin: 1.1rem 0 0.45rem;
 	color: #0f172a;
-	font-weight: 800;
+	font-weight: 600;
 	line-height: 1.3;
 }
 .markdown-body h1 {
@@ -5296,9 +5353,10 @@ a:focus-visible {
 .markdown-body li > ol {
 	margin: 0.2rem 0;
 }
-.markdown-body strong {
+.markdown-body strong,
+.markdown-body b {
 	color: #0f172a;
-	font-weight: 750;
+	font-weight: 600;
 }
 .markdown-body a {
 	color: var(--color-accent);
@@ -6405,11 +6463,9 @@ html[data-theme="dark"] .knowledge-resource-list button:hover {
 	background: #202124;
 }
 html[data-theme="dark"] .knowledge-resource-list button.is-selected {
-	border-color: #3a8f7d;
-	background: #1c2422;
-	box-shadow:
-		inset 3px 0 0 #2dd4bf,
-		0 1px 3px rgb(0 0 0 / 24%);
+	border-color: var(--ui-brand-border);
+	background: var(--ui-brand-soft-strong);
+	box-shadow: none;
 }
 html[data-theme="dark"] .knowledge-detail-area,
 html[data-theme="dark"] .knowledge-primary-detail {

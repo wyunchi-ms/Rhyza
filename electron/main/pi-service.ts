@@ -55,6 +55,7 @@ import { WorktreeService } from "./worktree-service.js";
 import type { SourceService } from "./source-service.js";
 import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import { McpService, type McpRuntime } from "./mcp-service.js";
+import { AgentDiagnosticTrace, type AgentDiagnosticWriter } from "./agent-diagnostics.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import { readWorkspaceTodos } from "./todo-service.js";
 import {
@@ -92,6 +93,7 @@ interface ActiveSession {
 	mcpRevision: number;
 	mcp: McpRuntime;
 	writable: boolean;
+	diagnostics?: AgentDiagnosticTrace;
 }
 
 type SourceReference = NonNullable<AgentPromptResponse["sourceRefs"]>[number];
@@ -126,6 +128,7 @@ export class PiService {
 		agentDir: string = getAgentDir(),
 		protected readonly sourceService?: SourceService,
 		mcp?: McpService,
+		private readonly writeAgentDiagnostic: AgentDiagnosticWriter = () => {},
 	) {
 		this.agentDir = agentDir;
 		this.azureOpenAI = new AzureOpenAIProvider(userDataPath);
@@ -378,6 +381,16 @@ export class PiService {
 	}
 
 	async promptAgent(request: PiPromptRequest, workspacePath: string): Promise<AgentPromptResponse> {
+		const diagnostics = new AgentDiagnosticTrace(
+			this.writeAgentDiagnostic,
+			"prompt",
+			request.frontendSessionId,
+			request.frontendTurnId,
+		);
+		diagnostics.mark("request-received", {
+			transcriptTurns: request.transcript.length,
+			writable: request.writable === true,
+		});
 		const promptUsage = emptyAgentUsage();
 		this.activeInferenceCount++;
 		try {
@@ -391,9 +404,15 @@ export class PiService {
 					"Azure OpenAI currently supports text-only conversations. Remove attached images or start a conversation without images in its history.",
 				);
 			}
-			const runtime = await this.getModelRuntime();
-			const model = await resolveRequestedModel(runtime, request.model);
-			const active = await this.getSession(workspacePath, request, model);
+			const runtime = await diagnostics.span("model-runtime", () => this.getModelRuntime());
+			const model = await diagnostics.span("model-selection", () =>
+				resolveRequestedModel(runtime, request.model),
+			);
+			const active = await diagnostics.span("session-initialize", () =>
+				this.getSession(workspacePath, request, model, diagnostics),
+			);
+			active.diagnostics = diagnostics;
+			active.mcp.diagnostics = diagnostics;
 			active.knowledgeInventory.current = request.knowledgeInventory ?? emptyKnowledgeInventory();
 			active.sourceRefs.clear();
 			const session = active.session;
@@ -402,7 +421,18 @@ export class PiService {
 				sessionId: session.sessionId,
 				message: request.prompt,
 			});
+			let receivedOutput = false;
+			let receivedText = false;
 			const unsubscribeUsage = session.subscribe((event) => {
+				const delta = extractStreamDelta(event);
+				if (delta && !receivedOutput) {
+					receivedOutput = true;
+					diagnostics.mark("first-output");
+				}
+				if (delta?.kind === "text" && !receivedText) {
+					receivedText = true;
+					diagnostics.mark("first-text");
+				}
 				const usage = getEventUsage(event);
 				if (usage) addUsage(promptUsage, usage);
 			});
@@ -421,7 +451,7 @@ export class PiService {
 							})),
 						]
 					: promptText;
-				await session.sendUserMessage(promptContent);
+				await diagnostics.span("send-user-message", () => session.sendUserMessage(promptContent));
 			} finally {
 				unsubscribeUsage();
 				session.sessionManager.appendCustomEntry("rhyza.mcp-loadout", {
@@ -446,12 +476,14 @@ export class PiService {
 				sourceRefs: [...active.sourceRefs.values()],
 			};
 		} catch (error) {
+			diagnostics.mark("request-failed");
 			return {
 				ok: false,
 				error: errorToMessage(error),
 				usage: hasUsage(promptUsage) ? promptUsage : undefined,
 			};
 		} finally {
+			diagnostics.mark("request-finished");
 			this.activeInferenceCount--;
 		}
 	}
@@ -497,24 +529,30 @@ export class PiService {
 	}
 
 	async generateSummary(request: SummaryRequest, workspacePath: string): Promise<SummaryResponse> {
+		const diagnostics = new AgentDiagnosticTrace(this.writeAgentDiagnostic, "title");
+		diagnostics.mark("request-received");
 		this.activeInferenceCount++;
 		try {
 			if (this.azureConfigSaving)
 				throw new Error("Wait for the Azure configuration save to finish.");
-			const runtime = await this.getModelRuntime();
-			const model = await resolveRequestedModel(runtime, request.model);
+			const runtime = await diagnostics.span("model-runtime", () => this.getModelRuntime());
+			const model = await diagnostics.span("model-selection", () =>
+				resolveRequestedModel(runtime, request.model),
+			);
 			if (!model) throw new Error("No configured model is available for summary generation.");
-			const { session } = await createAgentSession({
-				cwd: workspacePath,
-				agentDir: this.agentDir,
-				modelRuntime: runtime,
-				model,
-				settingsManager: this.createSessionSettings(workspacePath),
-				sessionManager: SessionManager.inMemory(workspacePath, {
-					id: `kb-summary-${crypto.randomUUID()}`,
+			const { session } = await diagnostics.span("agent-session-create", () =>
+				createAgentSession({
+					cwd: workspacePath,
+					agentDir: this.agentDir,
+					modelRuntime: runtime,
+					model,
+					settingsManager: this.createSessionSettings(workspacePath),
+					sessionManager: SessionManager.inMemory(workspacePath, {
+						id: `kb-summary-${crypto.randomUUID()}`,
+					}),
+					tools: [],
 				}),
-				tools: [],
-			});
+			);
 			if (model.provider === codexAppServerProviderId) {
 				this.codexAppServer.registerSession(session.sessionId, {
 					cwd: workspacePath,
@@ -527,8 +565,10 @@ export class PiService {
 					request.requestId,
 					() => session.abort(),
 					async () => {
-						await session.sendUserMessage(
-							`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
+						await diagnostics.span("send-user-message", () =>
+							session.sendUserMessage(
+								`Create a concise semantic title for this user question. Return only the title, no quotes or explanation. Use 8-20 Chinese characters for Chinese input, otherwise at most 8 words.\n\n${request.text}`,
+							),
 						);
 						const summary = getLastAssistantText(session)
 							?.replace(/^["'“”]+|["'“”]+$/g, "")
@@ -544,8 +584,10 @@ export class PiService {
 				session.dispose();
 			}
 		} catch (error) {
+			diagnostics.mark("request-failed");
 			return { error: errorToMessage(error) };
 		} finally {
+			diagnostics.mark("request-finished");
 			this.activeInferenceCount--;
 		}
 	}
@@ -667,31 +709,37 @@ export class PiService {
 		request: KnowledgeExtractionRequest,
 		workspacePath: string,
 	): Promise<KnowledgeExtractionResponse> {
+		const diagnostics = new AgentDiagnosticTrace(this.writeAgentDiagnostic, "extraction");
+		diagnostics.mark("request-received");
 		this.activeInferenceCount++;
 		try {
 			if (this.azureConfigSaving)
 				throw new Error("Wait for the Azure configuration save to finish.");
-			const runtime = await this.getModelRuntime();
-			const model = await resolveRequestedModel(runtime, request.model);
+			const runtime = await diagnostics.span("model-runtime", () => this.getModelRuntime());
+			const model = await diagnostics.span("model-selection", () =>
+				resolveRequestedModel(runtime, request.model),
+			);
 			if (!model) throw new Error("No configured model is available for knowledge extraction.");
-			const { session } = await createAgentSession({
-				cwd: workspacePath,
-				agentDir: this.agentDir,
-				modelRuntime: runtime,
-				model,
-				thinkingLevel: "low",
-				settingsManager: this.createSessionSettings(workspacePath),
-				sessionManager: SessionManager.inMemory(workspacePath, {
-					id: `kb-extract-${crypto.randomUUID()}`,
+			const { session } = await diagnostics.span("agent-session-create", () =>
+				createAgentSession({
+					cwd: workspacePath,
+					agentDir: this.agentDir,
+					modelRuntime: runtime,
+					model,
+					thinkingLevel: "low",
+					settingsManager: this.createSessionSettings(workspacePath),
+					sessionManager: SessionManager.inMemory(workspacePath, {
+						id: `kb-extract-${crypto.randomUUID()}`,
+					}),
+					tools: ["search_knowledge"],
+					customTools: this.createKnowledgeTools({
+						current: {
+							existingEntities: request.existingEntities,
+							existingDiagrams: request.existingDiagrams,
+						},
+					}),
 				}),
-				tools: ["search_knowledge"],
-				customTools: this.createKnowledgeTools({
-					current: {
-						existingEntities: request.existingEntities,
-						existingDiagrams: request.existingDiagrams,
-					},
-				}),
-			});
+			);
 			if (model.provider === codexAppServerProviderId) {
 				this.codexAppServer.registerSession(session.sessionId, {
 					cwd: workspacePath,
@@ -703,7 +751,9 @@ export class PiService {
 					request.requestId,
 					() => session.abort(),
 					async () => {
-						await session.sendUserMessage(buildKnowledgeExtractionPrompt(request));
+						await diagnostics.span("send-user-message", () =>
+							session.sendUserMessage(buildKnowledgeExtractionPrompt(request)),
+						);
 						const output = getLastAssistantText(session);
 						if (!output) throw new Error("The model returned an empty extraction result.");
 						return {
@@ -717,6 +767,7 @@ export class PiService {
 				session.dispose();
 			}
 		} catch (error) {
+			diagnostics.mark("request-failed");
 			return {
 				entities: [],
 				relations: [],
@@ -724,6 +775,7 @@ export class PiService {
 				error: errorToMessage(error),
 			};
 		} finally {
+			diagnostics.mark("request-finished");
 			this.activeInferenceCount--;
 		}
 	}
@@ -789,8 +841,9 @@ export class PiService {
 		workspacePath: string,
 		request: PiPromptRequest,
 		model: PiModel | undefined,
+		diagnostics: AgentDiagnosticTrace,
 	): Promise<ActiveSession> {
-		await this.mcp.refresh(workspacePath);
+		await diagnostics.span("mcp-refresh", () => this.mcp.refresh(workspacePath));
 		const modelKey = model ? `${model.provider}/${model.id}` : undefined;
 		const activeSession = this.activeSessions.get(request.frontendSessionId);
 		if (
@@ -799,56 +852,80 @@ export class PiService {
 			activeSession.mcpRevision === this.mcp.revision(workspacePath) &&
 			activeSession.writable === (request.writable === true)
 		) {
+			diagnostics.mark("session-reused");
 			activeSession.frontendTurnId = request.frontendTurnId;
 			if (model && activeSession.modelKey !== modelKey) {
-				await activeSession.session.setModel(model);
+				await diagnostics.span("session-set-model", () => activeSession.session.setModel(model));
 				activeSession.modelKey = modelKey;
 			}
 			activeSession.session.setThinkingLevel(request.thinkingLevel ?? "medium");
 			return activeSession;
 		}
-		this.disposeSession(request.frontendSessionId);
-		const sessionWorkspace = await this.worktreeService.resolveSessionWorkspace(
-			workspacePath,
-			request.frontendSessionId,
-			request.writable === true,
+		diagnostics.measure("previous-session-dispose", () =>
+			this.disposeSession(request.frontendSessionId),
 		);
-		const settingsManager = this.createSessionSettings(sessionWorkspace.path);
-		const mcp = this.mcp.createRuntime(
-			workspacePath,
-			() => request.writable === true && sessionWorkspace.isolated,
+		const sessionWorkspace = await diagnostics.span("session-workspace", () =>
+			this.worktreeService.resolveSessionWorkspace(
+				workspacePath,
+				request.frontendSessionId,
+				request.writable === true,
+			),
 		);
+		diagnostics.mark("workspace-ready", { isolated: sessionWorkspace.isolated });
+		const settingsManager = diagnostics.measure("session-settings", () =>
+			this.createSessionSettings(sessionWorkspace.path),
+		);
+		const mcp = diagnostics.measure("mcp-runtime-create", () =>
+			this.mcp.createRuntime(
+				workspacePath,
+				() => request.writable === true && sessionWorkspace.isolated,
+			),
+		);
+		mcp.diagnostics = diagnostics;
 		try {
-			const resourceLoader = new DefaultResourceLoader({
-				cwd: sessionWorkspace.path,
-				agentDir: this.agentDir,
-				settingsManager,
-				extensionFactories: [createToolSearchExtension(), mcp.extension],
+			const resourceLoader = diagnostics.measure(
+				"resource-loader-create",
+				() =>
+					new DefaultResourceLoader({
+						cwd: sessionWorkspace.path,
+						agentDir: this.agentDir,
+						settingsManager,
+						extensionFactories: [
+							createToolSearchExtension(),
+							(pi) => diagnostics.span("mcp-extension-factory", () => mcp.extension(pi)),
+						],
 
-				appendSystemPromptOverride: (base) => [
-					...base,
-					workspaceExplorationGuidance,
-					todoTrackingGuidance,
-					...(this.sourceService ? [sourceRetrievalGuidance] : []),
-					...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
-					responsePresentationGuidance,
-				],
+						appendSystemPromptOverride: (base) => [
+							...base,
+							workspaceExplorationGuidance,
+							todoTrackingGuidance,
+							...(this.sourceService ? [sourceRetrievalGuidance] : []),
+							...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
+							responsePresentationGuidance,
+						],
+					}),
+			);
+			await diagnostics.span("resources-reload", () => resourceLoader.reload());
+			diagnostics.mark("resources-ready", {
+				extensions: resourceLoader.getExtensions().extensions.length,
+				extensionErrors: resourceLoader.getExtensions().errors.length,
 			});
-			await resourceLoader.reload();
 			const extensionToolNames = resourceLoader
 				.getExtensions()
 				.extensions.flatMap((extension) => [...extension.tools.keys()])
 				.filter((name) => name !== "tool_search");
-			const { sessionManager } = await openOrCreatePiSession({
-				workspacePath: sessionWorkspace.path,
-				sessionDir: path.join(this.agentDir, "rhyza-sessions"),
-				frontendSessionId: request.sessionGeneration
-					? `${request.frontendSessionId}-${request.sessionGeneration}`
-					: request.frontendSessionId,
-				parentFrontendSessionId: request.parentFrontendSessionId,
-				forkedFromTurnId: request.forkedFromTurnId,
-				transcript: request.transcript,
-			});
+			const { sessionManager } = await diagnostics.span("session-history", () =>
+				openOrCreatePiSession({
+					workspacePath: sessionWorkspace.path,
+					sessionDir: path.join(this.agentDir, "rhyza-sessions"),
+					frontendSessionId: request.sessionGeneration
+						? `${request.frontendSessionId}-${request.sessionGeneration}`
+						: request.frontendSessionId,
+					parentFrontendSessionId: request.parentFrontendSessionId,
+					forkedFromTurnId: request.forkedFromTurnId,
+					transcript: request.transcript,
+				}),
+			);
 			const sourceRefs = new Map<string, SourceReference>();
 			const knowledgeInventory: KnowledgeInventoryHolder = {
 				current: request.knowledgeInventory ?? emptyKnowledgeInventory(),
@@ -870,27 +947,33 @@ export class PiService {
 					]),
 				],
 			});
-			const { session } = await createAgentSession({
-				cwd: sessionWorkspace.path,
-				agentDir: this.agentDir,
-				modelRuntime: await this.getModelRuntime(),
-				model,
-				thinkingLevel: request.thinkingLevel ?? "medium",
-				sessionManager,
-				settingsManager,
-				resourceLoader,
-				excludeTools:
-					request.writable && sessionWorkspace.isolated
-						? ["powershell", "codemode"]
-						: ["edit", "write", "bash", "powershell", "codemode"],
-				customTools,
-			});
+			const modelRuntime = await diagnostics.span("session-model-runtime", () =>
+				this.getModelRuntime(),
+			);
+			const { session } = await diagnostics.span("agent-session-create", () =>
+				createAgentSession({
+					cwd: sessionWorkspace.path,
+					agentDir: this.agentDir,
+					modelRuntime,
+					model,
+					thinkingLevel: request.thinkingLevel ?? "medium",
+					sessionManager,
+					settingsManager,
+					resourceLoader,
+					excludeTools:
+						request.writable && sessionWorkspace.isolated
+							? ["powershell", "codemode"]
+							: ["edit", "write", "bash", "powershell", "codemode"],
+					customTools,
+				}),
+			);
 			let requestSequence = 0;
 			let activeRequestId: string | undefined;
 			let activeSnapshot: AgentModelRequestSnapshot | undefined;
 			let activeCache: AgentCacheEvidence | undefined;
 			const originalStream = session.agent.streamFunction;
 			session.agent.streamFunction = async (requestModel, context, options) => {
+				created.diagnostics?.mark("model-request", { sequence: requestSequence + 1 });
 				activeRequestId = crypto.randomUUID();
 				activeCache = undefined;
 				const frontendTurnId = created.frontendTurnId ?? "unmapped";
@@ -941,6 +1024,7 @@ export class PiService {
 					? await originalOnPayload(payload, payloadModel)
 					: payload;
 				const finalPayload = transformed === undefined ? payload : transformed;
+				created.diagnostics?.mark("wire-request", { sequence: requestSequence });
 				const sanitizedPayload = sanitizeForRenderer(finalPayload);
 				if (activeSnapshot) {
 					activeSnapshot = { ...activeSnapshot, wirePayload: sanitizedPayload };
@@ -1004,9 +1088,11 @@ export class PiService {
 				mcp,
 				mcpRevision: this.mcp.revision(workspacePath),
 				writable: request.writable === true,
+				diagnostics,
 			};
 			mcp.session = session;
-			await session.bindExtensions({});
+			await diagnostics.span("extensions-bind", () => session.bindExtensions({}));
+			diagnostics.mark("session-ready");
 			if (model?.provider === codexAppServerProviderId) {
 				this.codexAppServer.registerSession(session.sessionId, {
 					cwd: sessionWorkspace.path,
@@ -1191,7 +1277,7 @@ export class PiService {
 		this.disposeAllSessions();
 	}
 
-	dispose(): void {
+	async dispose(): Promise<void> {
 		for (const controller of this.pathSummaryControllers) controller.abort();
 		this.pathSummaryControllers.clear();
 		for (const abort of this.auxiliaryAborters.values()) void abort();
@@ -1199,8 +1285,7 @@ export class PiService {
 		for (const expiry of this.pendingAuxiliaryCancels.values()) clearTimeout(expiry);
 		this.pendingAuxiliaryCancels.clear();
 		this.disposeAllSessions();
-		void this.codexAppServer.dispose();
-		void this.mcp.dispose();
+		await Promise.all([this.codexAppServer.dispose(), this.mcp.dispose()]);
 	}
 }
 

@@ -8,6 +8,9 @@
 	--ui-surface-muted: #f0f3f4;
 	--ui-brand-accent: #286f63;
 	--ui-danger: #b42318;
+	--ui-warning: #805409;
+	--ui-warning-border: #d9b353;
+	--ui-warning-surface: #fff7df;
 	--ui-brand-ink: #226357;
 	--ui-brand-border: #a4c6be;
 	--ui-brand-soft-strong: #d7e9e3;
@@ -35,6 +38,9 @@
 	--ui-surface-muted: #222a2d;
 	--ui-brand-accent: #8ec5b4;
 	--ui-danger: #fda4a4;
+	--ui-warning: #f3cd70;
+	--ui-warning-border: #8b6929;
+	--ui-warning-surface: #362b17;
 	--ui-brand-ink: #a2d3c4;
 	--ui-brand-border: #466e63;
 	--ui-brand-soft-strong: #2c4840;

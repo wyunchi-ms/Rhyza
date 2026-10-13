@@ -279,7 +279,13 @@ Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离�
 
 **Import MCP configuration** 接受带 `mcpServers` 的 JSON，每次选择一个服务器，检查表单后保存，不会直接启用整份导入文件。用户配置保存在 `~\.pi\agent\mcp.json`；项目配置保存在原 Workspace 的 `.pi\mcp.json`，不是生成的 Worktree。项目配置必须先经 **Trust project** 确认才会加载，同名项目服务器覆盖用户服务器。不要把凭据写进受版本控制的项目文件。**Revoke trust** 会断开项目连接并清除该 Workspace 的工具授权，保留聊天记录。
 
-保存后查看连接状态；失败会显示错误，可用 **Reconnect** 重试。未提供 `Authorization` Header 的 HTTP 服务器可使用 **Sign in** 在浏览器完成 OAuth/PKCE，支持已注册 client、凭据持久化和刷新；**Cancel sign-in** 取消等待，**Sign out** 移除 OAuth 登录。OAuth 凭据由 Pi 在本地管理，不进入设置页。直接修改配置文件后，点击 **Refresh** 或发送下一轮聊天会重新加载配置，不热替换正在执行的请求。
+保存后查看连接状态；卡片右下方直接显示登录管理、工具与资源、重连、启用／禁用、编辑和删除的图标，按钮在同一行保持间距。OAuth 的 **Sign in** / **Sign out** 共用一个位置，按实际认证状态切换；连接成功本身不等于 OAuth 登录。需要登录时使用黄色警告，原始诊断保留在 **Connection details**；其他连接失败直接显示错误。
+
+常规操作使用图标按钮，悬停显示上述操作名称；键盘及屏幕阅读器可读取同样的名称。信任、撤销信任和删除的确认弹窗保留文字，说明影响后再确认。
+
+添加、编辑和 **Tools & resources** 在弹窗内操作，支持 Escape 关闭并回到原按钮；保存或资源读取期间不能关闭。未连接时工具资源入口不可用，需要登录时先完成验证，重连按钮也保持禁用。保存失败会在表单弹窗中显示错误并保留草稿。
+
+未提供 `Authorization` Header 的 HTTP 服务器可使用 **Sign in** 在浏览器完成 OAuth/PKCE，支持已注册 client、凭据持久化和刷新；**Cancel sign-in** 取消等待，**Sign out** 移除 OAuth 登录。OAuth 凭据由 Pi 在本地管理，不进入设置页。直接修改配置文件后，点击 **Refresh** 或发送下一轮聊天会重新加载配置，不热替换正在执行的请求。
 
 在 **Tools & resources** 审核工具并保存：
 

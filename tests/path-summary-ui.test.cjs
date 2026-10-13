@@ -200,7 +200,7 @@ if (!process.versions.electron) {
 				isElectron: true,
 				onAgentEvent: () => () => {},
 				modelCatalog: () => Promise.resolve({ models: [] }),
-				appStateLoad: () => localStorage.getItem("rhyza-workspace-v2"),
+				appStateLoad: async () => localStorage.getItem("rhyza-workspace-v2"),
 				onPathSummaryEvent: listener => { window.summaryListeners.add(listener); return () => window.summaryListeners.delete(listener); },
 				generatePathSummary: request => {
 					window.summaryRequests.push(request);
@@ -239,10 +239,15 @@ if (!process.versions.electron) {
 				document.body.append(swatch);
 				const matches = getComputedStyle(selected).backgroundColor === getComputedStyle(swatch).backgroundColor;
 				swatch.remove();
-				return matches;
+				const style = getComputedStyle(selected);
+				return matches && style.boxShadow === "none"
+					&& style.borderLeftWidth === "1px"
+					&& style.borderLeftColor === style.borderRightColor
+					&& style.borderTopColor === style.borderBottomColor
+					&& !selected.querySelector(".session-viewport-rail");
 			})()`),
 			true,
-			"the current node remains visibly selected",
+			"the current node retains a filled multi-selection with a full border and no left rail",
 		);
 		await click(listRow("r2"));
 		assert.equal(

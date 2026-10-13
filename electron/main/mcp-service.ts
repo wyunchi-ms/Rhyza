@@ -22,6 +22,7 @@ import {
 	type McpTransport,
 } from "@earendil-works/pi-mcp";
 import { McpOAuthAuthorizationRequiredError } from "@earendil-works/pi-mcp/oauth";
+import type { AgentDiagnosticTrace } from "./agent-diagnostics.js";
 import { isRecord, errorToMessage } from "../../src/shared/value.js";
 import {
 	effectiveMcpExposure,
@@ -139,6 +140,7 @@ export class McpService {
 					!Object.keys(entry.config.headers ?? {}).some(
 						(key) => key.toLowerCase() === "authorization",
 					),
+				authenticated: states.some((state) => state.authenticated),
 				connections: states.filter((state) => state.state === "connected").length,
 				tools: [...tools.values()].map((tool) => ({
 					...tool,
@@ -430,6 +432,7 @@ export class McpService {
 interface RuntimeState {
 	state: Exclude<McpServerInfo["state"], "disabled">;
 	error?: string;
+	authenticated?: boolean;
 	tools: McpServerInfo["tools"];
 }
 
@@ -437,6 +440,7 @@ export class McpRuntime {
 	readonly states = new Map<string, RuntimeState>();
 	readonly extension: ExtensionFactory;
 	session?: AgentSession;
+	diagnostics?: AgentDiagnosticTrace;
 	invalidated = false;
 	private readonly transports = new Set<McpTransport>();
 	private readonly entries = new Map<string, McpEntry>();
@@ -445,6 +449,7 @@ export class McpRuntime {
 	private commandBusy = false;
 	private readonly restoredTools = new Set<string>();
 	private loginCancelled = false;
+	private closingPromise?: Promise<void>;
 
 	constructor(
 		private readonly host: McpService,
@@ -636,7 +641,18 @@ export class McpRuntime {
 									resolveValue(value),
 								]),
 							),
-							authProvider,
+							authProvider: authProvider && {
+								token: async () => {
+									const token = await authProvider.token();
+									const state = this.states.get(entry.name);
+									if (state && state.authenticated !== Boolean(token)) {
+										state.authenticated = Boolean(token);
+										this.host.changed(this.workspace);
+									}
+									return token;
+								},
+								onUnauthorized: authProvider.onUnauthorized?.bind(authProvider),
+							},
 						})
 					: new StdioTransport({
 							command: expandHome(resolveValue(config.command)),
@@ -652,11 +668,14 @@ export class McpRuntime {
 			throw error;
 		}
 		this.transports.add(transport);
-		const pending = new Map<string | number, string>();
+		const serverOrdinal = [...this.entries.keys()].indexOf(entry.name) + 1;
+		const pending = new Map<string | number, { method: string; finish?: (ok: boolean) => void }>();
 		transport.onMessage((message) => {
 			if (!("id" in message) || message.id === null) return;
-			const method = pending.get(message.id);
+			const request = pending.get(message.id);
+			const method = request?.method;
 			pending.delete(message.id);
+			request?.finish?.(!("error" in message));
 			if ("result" in message && isRecord(message.result)) {
 				if (method === "tools/list" && Array.isArray(message.result.tools)) {
 					const state = this.states.get(entry.name);
@@ -697,6 +716,8 @@ export class McpRuntime {
 			),
 		);
 		transport.onClose(() => {
+			for (const request of pending.values()) request.finish?.(false);
+			pending.clear();
 			this.transports.delete(transport);
 			const current = this.states.get(entry.name);
 			if (!this.invalidated && current?.state === "connected")
@@ -722,10 +743,33 @@ export class McpRuntime {
 			throw error;
 		};
 		return {
-			start: () => transport.start().catch(fail),
+			start: () =>
+				(this.diagnostics
+					? this.diagnostics.span("mcp-transport-start", () => transport.start())
+					: transport.start()
+				).catch(fail),
 			send: (message: JsonRpcMessage) => {
-				if ("method" in message && "id" in message) pending.set(message.id, message.method);
-				return transport.send(message).catch(fail);
+				if ("method" in message && "id" in message) {
+					const measured = [
+						"initialize",
+						"tools/list",
+						"resources/list",
+						"resources/templates/list",
+					].includes(message.method);
+					pending.set(message.id, {
+						method: message.method,
+						finish: measured
+							? this.diagnostics?.begin(`mcp-rpc-${message.method}`, { serverOrdinal })
+							: undefined,
+					});
+				}
+				return transport.send(message).catch((error: unknown) => {
+					if ("id" in message && message.id !== null) {
+						pending.get(message.id)?.finish?.(false);
+						pending.delete(message.id);
+					}
+					return fail(error);
+				});
 			},
 			close: () => transport.close(),
 			onMessage: (listener) => transport.onMessage(listener),
@@ -763,7 +807,12 @@ export class McpRuntime {
 
 	private state(name: string, state: RuntimeState["state"], error?: string): void {
 		const previous = this.states.get(name);
-		this.states.set(name, { state, tools: previous?.tools ?? [], error });
+		this.states.set(name, {
+			state,
+			tools: previous?.tools ?? [],
+			error,
+			authenticated: state === "needs-auth" ? false : (previous?.authenticated ?? false),
+		});
 		this.host.changed(this.workspace);
 	}
 
@@ -815,12 +864,16 @@ export class McpRuntime {
 		this.cancelAuth?.();
 	}
 
-	async close(): Promise<void> {
-		if (this.invalidated) return;
+	close(): Promise<void> {
+		if (this.closingPromise) return this.closingPromise;
 		this.invalidated = true;
 		this.cancelLogin();
-		await Promise.all([...this.transports].map((transport) => transport.close()));
-		this.transports.clear();
-		this.host.release(this);
+		this.closingPromise = Promise.all(
+			[...this.transports].map((transport) => transport.close()),
+		).then(() => {
+			this.transports.clear();
+			this.host.release(this);
+		});
+		return this.closingPromise;
 	}
 }

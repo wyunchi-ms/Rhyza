@@ -203,6 +203,15 @@ test("MCP configuration preserves content, requires project trust and invalidate
 	);
 });
 
+test("concurrent MCP runtime cleanup shares its completion promise during service shutdown", async (t) => {
+	const { workspace, service } = await setup(t);
+	const runtime = service.createRuntime(workspace, () => false);
+	const closing = runtime.close();
+	const shutdown = service.dispose();
+	assert.strictEqual(runtime.close(), closing, "shutdown must await an already-closing runtime");
+	await Promise.all([closing, shutdown]);
+});
+
 test("SDK MCP connects stdio, discovers tools, enforces live permissions and reads paginated resources", async (t) => {
 	const { workspace, agentDir, service } = await setup(t);
 	await service.save(workspace, {
@@ -497,6 +506,11 @@ test("HTTP MCP connects with headers, reconnects and reports OAuth-required stat
 	await service.overview(workspace);
 	await until(async () => (await service.overview(workspace)).servers[0].state === "connected");
 	assert.equal((await service.overview(workspace)).servers[0].tools[0].name, "echo");
+	assert.equal(
+		(await service.overview(workspace)).servers[0].authenticated,
+		false,
+		"A static Authorization header is not an OAuth login.",
+	);
 	await service.action(workspace, { name: "http", scope: "user", action: "reconnect" });
 	await service.save(workspace, {
 		name: "auth",
@@ -583,6 +597,7 @@ test("Pi chat discovers MCP without a tools allowlist and restores the selected 
 		},
 	]);
 	const events: import("../src/shared/ipc.js").AgentBridgeEvent[] = [];
+	const diagnostics: import("../electron/main/agent-diagnostics.js").AgentDiagnosticEvent[] = [];
 	const pi = new PiService(
 		directory,
 		undefined,
@@ -590,6 +605,7 @@ test("Pi chat discovers MCP without a tools allowlist and restores the selected 
 		agentDir,
 		undefined,
 		service,
+		(event) => diagnostics.push(event),
 	);
 	t.after(() => pi.dispose());
 	const model = { providerId: "github-copilot" as const, modelId: "mcp-fixture" };
@@ -604,6 +620,28 @@ test("Pi chat discovers MCP without a tools allowlist and restores the selected 
 		workspace,
 	);
 	assert.equal(first.ok, true, first.error);
+	for (const stage of [
+		"mcp-refresh",
+		"resources-reload",
+		"session-history",
+		"agent-session-create",
+		"extensions-bind",
+		"mcp-transport-start",
+		"mcp-rpc-initialize",
+		"mcp-rpc-tools/list",
+	]) {
+		assert(
+			diagnostics.some((event) => event.stage === stage && event.status === "end" && event.ok),
+			`Missing successful diagnostic stage: ${stage}`,
+		);
+	}
+	assert(diagnostics.some((event) => event.stage === "model-request"));
+	assert(
+		diagnostics.every(
+			(event) => event.frontendSessionId === "root" && event.frontendTurnId === "root-answer",
+		),
+	);
+	assert.equal(JSON.stringify(diagnostics).includes("Use MCP"), false);
 	assert(
 		!contexts[0].includes("mcp__demo__echo"),
 		"Deferred tools are absent from the initial model request.",

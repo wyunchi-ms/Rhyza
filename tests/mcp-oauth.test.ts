@@ -145,9 +145,11 @@ test(
 			throw new Error("OAuth fixture state did not settle.");
 		};
 		await waitFor(async () => (await service.overview(root)).servers[0].state === "needs-auth");
+		assert.equal((await service.overview(root)).servers[0].authenticated, false);
 		await service.action(root, { ...target, action: "login" });
 		assert.equal(openCount, 1);
 		assert.equal((await service.overview(root)).servers[0].state, "connected");
+		assert.equal((await service.overview(root)).servers[0].authenticated, true);
 		const credentialsPath = path.join(root, "mcp-auth.json");
 		const credentials: unknown = JSON.parse(await readFile(credentialsPath, "utf8"));
 		const expire = (value: unknown) => {
@@ -159,9 +161,11 @@ test(
 		await writeFile(credentialsPath, JSON.stringify(credentials));
 		await service.action(root, { ...target, action: "reconnect" });
 		assert(refreshCount > 0, "Reconnection refreshes expired OAuth credentials.");
+		assert.equal((await service.overview(root)).servers[0].authenticated, true);
 		assert(!JSON.stringify(await service.overview(root)).includes("oauth-fixture-access"));
 		await service.action(root, { ...target, action: "logout" });
 		assert.equal((await service.overview(root)).servers[0].state, "needs-auth");
+		assert.equal((await service.overview(root)).servers[0].authenticated, false);
 		const signedOutCredentials = await readFile(credentialsPath, "utf8");
 		assert(!signedOutCredentials.includes("oauth-fixture-access"));
 		assert(

@@ -136,6 +136,12 @@ if (mainSamples.length) {
 		`\nMain process: max p99 loop delay ${maximumP99}ms, max delay ${maximumDelay}ms, peak RSS ${(maximumRss / 1024 / 1024).toFixed(1)} MiB`,
 	);
 }
+const workerSamples = entries.filter((entry) => entry.kind === "worker-sample");
+if (workerSamples.length) {
+	console.log(
+		`\nBackend worker: max loop delay ${Math.max(...workerSamples.map((sample) => Number(sample.eventLoopDelayMs?.max ?? 0)))}ms (not the Electron UI/Main thread)`,
+	);
+}
 const operations = entries.filter((entry) => entry.kind === "operation-end");
 console.log("\nSlow operations:");
 for (const operation of operations
@@ -144,4 +150,64 @@ for (const operation of operations
 	console.log(
 		`${String(operation.operation).padEnd(20)} ${String(operation.durationMs).padStart(8)}ms  ${operation.ok ? "ok" : "failed"}`,
 	);
+}
+
+const agentStages = entries.filter((entry) => entry.kind === "agent-stage");
+console.log("\nAgent initialization and MCP stages (wall time includes asynchronous waits):");
+const stageTotals = new Map();
+const traces = new Map();
+const unfinished = new Map();
+for (const event of agentStages) {
+	const trace = traces.get(event.traceId) ?? [];
+	trace.push(event);
+	traces.set(event.traceId, trace);
+	if (event.status === "start" && event.spanId) unfinished.set(event.spanId, event);
+	if (event.status !== "end") continue;
+	unfinished.delete(event.spanId);
+	const key = `${event.context}/${event.stage}`;
+	const total = stageTotals.get(key) ?? { count: 0, totalMs: 0, maxMs: 0, syncMaxMs: 0, failed: 0 };
+	total.count++;
+	total.totalMs += event.durationMs ?? 0;
+	total.maxMs = Math.max(total.maxMs, event.durationMs ?? 0);
+	total.syncMaxMs = Math.max(total.syncMaxMs, event.syncDispatchMs ?? 0);
+	total.failed += Number(event.ok === false);
+	stageTotals.set(key, total);
+}
+if (!agentStages.length) console.log("No stage traces yet. Restart the updated Electron app.");
+for (const [name, total] of [...stageTotals].sort(
+	(left, right) => right[1].maxMs - left[1].maxMs,
+)) {
+	console.log(
+		`${name.padEnd(44)} count=${total.count} avg=${(total.totalMs / total.count).toFixed(1)}ms max=${total.maxMs.toFixed(1)}ms sync-dispatch max=${total.syncMaxMs.toFixed(1)}ms failed=${total.failed}`,
+	);
+}
+console.log("\nSlowest agent traces (nested stages overlap; do not add durations):");
+for (const [traceId, trace] of [...traces]
+	.sort(
+		(left, right) =>
+			Math.max(...right[1].map((event) => event.elapsedMs)) -
+			Math.max(...left[1].map((event) => event.elapsedMs)),
+	)
+	.slice(0, 5)) {
+	const first = trace[0];
+	console.log(
+		`${first.timestamp} ${first.context} trace=${traceId} pid=${first.processId ?? "unknown"} session=${first.frontendSessionId ?? "-"} turn=${first.frontendTurnId ?? "-"} thread=${first.thread ?? "main"}:${first.threadId ?? 0}`,
+	);
+	for (const event of trace.slice(0, 80)) {
+		const duration =
+			event.durationMs === undefined
+				? ""
+				: ` duration=${event.durationMs.toFixed(1)}ms sync-dispatch=${event.syncDispatchMs?.toFixed(1) ?? "-"}ms`;
+		const counts = event.counts ? ` counts=${JSON.stringify(event.counts)}` : "";
+		console.log(
+			`  +${event.elapsedMs.toFixed(1).padStart(9)}ms ${event.status.padEnd(5)} ${event.stage}${duration}${event.ok === false ? " FAILED" : ""}${counts}`,
+		);
+	}
+	if (trace.length > 80) console.log(`  ${trace.length - 80} additional events omitted.`);
+}
+if (unfinished.size) {
+	console.log("\nStages without an end event (pending, interrupted, or log still being written):");
+	for (const event of [...unfinished.values()].slice(-10)) {
+		console.log(`${event.timestamp} ${event.context}/${event.stage} trace=${event.traceId}`);
+	}
 }
