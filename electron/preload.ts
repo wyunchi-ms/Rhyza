@@ -78,6 +78,7 @@ const bridge: RhyzaBridge = {
 
 	openExternal: (request) => ipcRenderer.invoke(ipcChannels.openExternal, request),
 	showApplicationMenu: () => ipcRenderer.invoke(ipcChannels.showApplicationMenu),
+	windowThemeSet: (theme) => ipcRenderer.invoke(ipcChannels.windowThemeSet, theme),
 	appStateLoad: () => ipcRenderer.invoke(ipcChannels.appStateLoad),
 	appStateSave: (request) => ipcRenderer.invoke(ipcChannels.appStateSave, request),
 	diagnosticReport: (report) => ipcRenderer.invoke(ipcChannels.diagnosticReport, report),

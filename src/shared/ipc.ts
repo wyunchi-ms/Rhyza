@@ -54,6 +54,7 @@ export const ipcChannels = {
 
 	openExternal: "rhyza:open-external",
 	showApplicationMenu: "rhyza:show-application-menu",
+	windowThemeSet: "rhyza:window-theme-set",
 	appStateLoad: "rhyza:app-state-load",
 	appStateSave: "rhyza:app-state-save",
 	diagnosticReport: "rhyza:diagnostic-report",
@@ -697,6 +698,7 @@ export interface RhyzaBridge {
 
 	openExternal(request: OpenExternalRequest): Promise<{ ok: true }>;
 	showApplicationMenu(): Promise<{ ok: true }>;
+	windowThemeSet(theme: "light" | "dark"): Promise<{ ok: true }>;
 	appStateLoad(): Promise<string | WorkspaceStateEnvelope | null>;
 	appStateSave(request: AppStateSaveRequest): Promise<{ ok: true }>;
 	diagnosticReport(report: DiagnosticReport): Promise<{ ok: true }>;

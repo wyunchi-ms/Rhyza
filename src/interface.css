@@ -19,10 +19,10 @@
 	flex: 0 0 32px;
 	align-items: center;
 	gap: 5px;
-	border-bottom: 1px solid #343639;
-	background: #242527;
+	border-bottom: 1px solid var(--ui-border);
+	background: var(--ui-surface-muted);
 	padding: 0 140px 0 10px;
-	color: #d7dce2;
+	color: var(--color-text);
 	-webkit-app-region: drag;
 }
 
@@ -38,19 +38,19 @@
 	flex: 0 0 auto;
 	place-items: center;
 	border-radius: 5px;
-	color: #aeb5bd;
+	color: var(--color-secondary);
 	-webkit-app-region: no-drag;
 }
 
 .app-titlebar button:hover,
 .app-titlebar button:focus-visible {
-	background: #383a3e;
-	color: #fff;
+	background: var(--ui-hover);
+	color: var(--color-primary);
 }
 
 .app-titlebar [role="alert"] {
 	margin-left: 8px;
-	color: #ffc9c9;
+	color: var(--ui-danger);
 	font-size: 11px;
 }
 
