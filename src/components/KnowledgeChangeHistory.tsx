@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store";
 import type { ChangeSet } from "../types";
+import { Select } from "./Select";
 
 export function KnowledgeChangeHistory({ objectId }: { objectId?: string }) {
 	const { changesets, undoChangeSet, acceptChangeSet, rejectChangeSet } = useAppStore();
@@ -41,7 +42,7 @@ export function KnowledgeChangeHistory({ objectId }: { objectId?: string }) {
 							aria-label="Filter knowledge history"
 						/>
 					</div>
-					<select
+					<Select
 						className="field shrink-0"
 						style={{ width: 160 }}
 						value={statusFilter}
@@ -53,7 +54,7 @@ export function KnowledgeChangeHistory({ objectId }: { objectId?: string }) {
 						<option value="committed">Committed</option>
 						<option value="reverted">Reverted</option>
 						<option value="superseded">Rejected</option>
-					</select>
+					</Select>
 				</div>
 				<div className="overflow-y-auto space-y-3">
 					{visibleChanges.map((change) => {

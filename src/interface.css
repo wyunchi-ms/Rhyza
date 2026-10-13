@@ -564,6 +564,10 @@ html[data-theme] .page-subtitle {
 html[data-theme]
 	:is(
 		.global-search-dialog,
+		dialog,
+		.json-preview-dialog,
+		.html-preview-dialog,
+		.mermaid-preview-dialog,
 		.knowledge-preview-dialog,
 		.turn-detail-dialog,
 		.composer-runtime-menu,
@@ -581,6 +585,63 @@ html[data-theme]
 	background: var(--color-surface);
 	color: var(--color-text);
 	box-shadow: var(--ui-shadow-panel);
+}
+
+html[data-theme] :is(dialog, [role="dialog"][aria-modal="true"]) {
+	border: 1px solid var(--ui-border);
+	border-radius: 1rem;
+}
+
+html[data-theme]
+	:is(
+		.global-search-backdrop,
+		.knowledge-preview-backdrop,
+		.turn-detail-backdrop,
+		.json-preview-backdrop,
+		.html-preview-backdrop,
+		.mermaid-preview-backdrop
+	) {
+	background: rgb(20 30 35 / 48%);
+	backdrop-filter: blur(3px);
+}
+
+html[data-theme] dialog::backdrop {
+	background: rgb(20 30 35 / 48%);
+	backdrop-filter: blur(3px);
+}
+
+html[data-theme] .source-removal-footer .command-button {
+	background: var(--ui-danger-action);
+	border-color: var(--ui-danger-action);
+	color: var(--ui-on-danger);
+}
+
+html[data-theme] .source-removal-footer .command-button:hover:not(:disabled) {
+	background: var(--ui-danger-action-hover);
+}
+
+html[data-theme] .composer-runtime-menu-scroll > button {
+	grid-template-columns: 1.1rem minmax(0, 1fr) 1.1rem;
+	gap: 0.625rem;
+	min-height: 2.75rem;
+}
+
+html[data-theme] .composer-runtime-menu-scroll > button > span:nth-child(2) {
+	min-width: 0;
+}
+
+html[data-theme] .composer-runtime-menu-scroll > button > svg {
+	color: var(--color-secondary);
+}
+
+html[data-theme] .composer-runtime-menu-scroll strong {
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+html[data-theme] .composer-runtime-menu-scroll small {
+	font-size: 0.6875rem;
+	color: var(--color-secondary);
 }
 
 html[data-theme]

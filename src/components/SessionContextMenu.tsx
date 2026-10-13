@@ -12,6 +12,7 @@ import { progressOptions } from "./ProgressMarker";
 import { usePathSummarySelection } from "./PathSummarySelection";
 import { projectConversationGraph } from "../utils/conversationGraph";
 import { useTranslation } from "../i18n";
+import { confirmAction } from "./ConfirmationDialog";
 
 export function useSessionContextMenu() {
 	const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
@@ -44,6 +45,7 @@ export function SessionNodeContextMenu({
 	onClose: () => void;
 }) {
 	const selection = usePathSummarySelection();
+	const { t } = useTranslation();
 	const session = useAppStore((state) => state.sessions.find((item) => item.id === nodeId));
 	const running = useAppStore((state) =>
 		isSessionRunning(
@@ -63,13 +65,15 @@ export function SessionNodeContextMenu({
 		useConversationFocus.getState().setFocus(id, null);
 		navigate("/");
 	};
-	const remove = () => {
+	const remove = async () => {
 		const state = useAppStore.getState();
 		const hasChildren = state.sessions.some((item) => item.parentId === nodeId);
 		if (
-			window.confirm(
-				`Delete session “${session.title}” and all its messages${hasChildren ? " and branches" : ""}?`,
-			)
+			await confirmAction({
+				title: t("Delete session?"),
+				description: `${session.title}\n\n${hasChildren ? t("All messages and branches in this session will be deleted.") : t("All messages in this session will be deleted.")}`,
+				confirmLabel: t("Delete"),
+			})
 		)
 			state.deleteSession(nodeId);
 	};
@@ -87,7 +91,7 @@ export function SessionNodeContextMenu({
 			onSelect={(status) => useAppStore.getState().setSessionProgressStatus(nodeId, status)}
 			onFork={() => create("forkNode")}
 			onClone={() => create("cloneNode")}
-			onDelete={remove}
+			onDelete={() => void remove()}
 			onSummary={summarize}
 			copyDisabled={running || selection.running}
 			onClose={onClose}

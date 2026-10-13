@@ -17,6 +17,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { KnowledgeChangeHistoryDialog } from "../components/KnowledgeChangeHistory";
 import { DiagramViewer } from "../components/DiagramViewer";
+import { Select } from "../components/Select";
+import { confirmAction } from "../components/ConfirmationDialog";
 import { DiagramTypeIcon } from "../components/DiagramTypeIcon";
 import { MermaidDiagram } from "../components/MermaidDiagram";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
@@ -503,7 +505,7 @@ function EntityCenterEditor({
 				</label>
 				<label className="form-label">
 					Confidence
-					<select
+					<Select
 						className="field mt-1"
 						value={draft.confidence}
 						onChange={(event) =>
@@ -513,7 +515,7 @@ function EntityCenterEditor({
 						<option value="confirmed">已确认</option>
 						<option value="inferred">推断</option>
 						<option value="disputed">有争议</option>
-					</select>
+					</Select>
 				</label>
 				<label className="form-label">
 					Aliases
@@ -576,6 +578,7 @@ function EntityMetaPanel({
 	onOpenHistory: () => void;
 	onOpenDiagram: (diagramId: string) => void;
 }) {
+	const { t } = useTranslation();
 	const {
 		softDeleteEntity,
 		saveEntity,
@@ -718,8 +721,14 @@ function EntityMetaPanel({
 					<button
 						type="button"
 						title="归档实体"
-						onClick={() => {
-							if (window.confirm(`Archive “${entity.name}” and its relations?`))
+						onClick={async () => {
+							if (
+								await confirmAction({
+									title: t("Archive entity?"),
+									description: `${entity.name}\n\n${t("This entity and its relations will be archived.")}`,
+									confirmLabel: t("Archive"),
+								})
+							)
 								softDeleteEntity(entity.id);
 						}}
 						className="secondary-button shrink-0 text-red-600"
@@ -811,7 +820,7 @@ function EntityMetaPanel({
 						</div>
 						<label>
 							<span>关联实体</span>
-							<select
+							<Select
 								className="field"
 								value={relationForm.relatedEntityId}
 								onChange={(event) =>
@@ -826,7 +835,7 @@ function EntityMetaPanel({
 											{item.name}
 										</option>
 									))}
-							</select>
+							</Select>
 						</label>
 						<label>
 							<span>关系类型</span>
@@ -1006,6 +1015,7 @@ function DiagramEditor({
 	onOpenEntity: (entityId: string) => void;
 	onDeleted: () => void;
 }) {
+	const { t } = useTranslation();
 	const { saveDiagram, softDeleteDiagram } = useAppStore();
 	const [draft, setDraft] = useState(diagram);
 	const [entityLinkForm, setEntityLinkForm] = useState<{
@@ -1081,8 +1091,14 @@ function DiagramEditor({
 						type="button"
 						title="归档图表"
 						className="secondary-button shrink-0 text-red-600"
-						onClick={() => {
-							if (window.confirm(`Archive diagram “${diagram.name}”?`)) {
+						onClick={async () => {
+							if (
+								await confirmAction({
+									title: t("Archive diagram?"),
+									description: `${diagram.name}\n\n${t("This diagram will be archived.")}`,
+									confirmLabel: t("Archive"),
+								})
+							) {
 								softDeleteDiagram(diagram.id);
 								onDeleted();
 							}
@@ -1102,7 +1118,7 @@ function DiagramEditor({
 			</label>
 			<label className="form-label">
 				Type
-				<select
+				<Select
 					className="field mt-1"
 					value={draft.type}
 					onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}
@@ -1116,7 +1132,7 @@ function DiagramEditor({
 					<option value="sequence">时序图</option>
 					<option value="swimlane">泳道图</option>
 					<option value="dependency">依赖图</option>
-				</select>
+				</Select>
 			</label>
 			<section aria-labelledby="diagram-linked-heading">
 				<div className="entity-section-heading">
@@ -1199,7 +1215,7 @@ function DiagramEditor({
 						</div>
 						<label>
 							<span>图表节点</span>
-							<select
+							<Select
 								className="field"
 								disabled={entityLinkForm.editing}
 								value={entityLinkForm.nodeId}
@@ -1215,11 +1231,11 @@ function DiagramEditor({
 										{node.label}
 									</option>
 								))}
-							</select>
+							</Select>
 						</label>
 						<label>
 							<span>实体</span>
-							<select
+							<Select
 								className="field"
 								value={entityLinkForm.entityId}
 								onChange={(event) =>
@@ -1232,7 +1248,7 @@ function DiagramEditor({
 										{entity.name}
 									</option>
 								))}
-							</select>
+							</Select>
 						</label>
 						<div className="entity-relation-form-actions">
 							<button

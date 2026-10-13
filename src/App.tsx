@@ -2,6 +2,7 @@ import type React from "react";
 import { useEffect, useLayoutEffect } from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import { ConfirmationHost } from "./components/ConfirmationDialog";
 import Changes from "./pages/Changes";
 import Knowledge from "./pages/Knowledge";
 import Settings from "./pages/Settings";
@@ -26,6 +27,7 @@ const App: React.FC = () => {
 	}, []);
 	return (
 		<HashRouter>
+			<ConfirmationHost />
 			<Routes>
 				<Route path="/" element={<Layout />}>
 					<Route index element={<Workspace />} />

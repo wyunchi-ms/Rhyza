@@ -8,6 +8,11 @@
 	--ui-surface-muted: #f0f3f4;
 	--ui-brand-accent: #286f63;
 	--ui-danger: #b42318;
+	--ui-danger-surface: #fff0ee;
+	--ui-danger-border: #e9b6af;
+	--ui-danger-action: #b42318;
+	--ui-danger-action-hover: #941d14;
+	--ui-on-danger: #ffffff;
 	--ui-warning: #805409;
 	--ui-warning-border: #d9b353;
 	--ui-warning-surface: #fff7df;
@@ -38,6 +43,11 @@
 	--ui-surface-muted: #222a2d;
 	--ui-brand-accent: #8ec5b4;
 	--ui-danger: #fda4a4;
+	--ui-danger-surface: #3e2628;
+	--ui-danger-border: #875053;
+	--ui-danger-action: #fda4a4;
+	--ui-danger-action-hover: #febbbb;
+	--ui-on-danger: #3b1316;
 	--ui-warning: #f3cd70;
 	--ui-warning-border: #8b6929;
 	--ui-warning-surface: #362b17;

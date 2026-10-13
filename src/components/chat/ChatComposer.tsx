@@ -820,12 +820,13 @@ function ComposerRuntimeControls({
 										setOpenMenu(null);
 									}}
 								>
-									<span className="composer-menu-check">
-										{item.id === providerId && <Check size={13} />}
-									</span>
+									<Cloud size={16} aria-hidden="true" />
 									<span>
 										<strong>{item.label}</strong>
 										<small>{item.externalAuth ? "Uses local CLI sign-in" : "Uses Pi"}</small>
+									</span>
+									<span className="composer-menu-check">
+										{item.id === providerId && <Check size={13} />}
 									</span>
 								</button>
 							))}
@@ -875,11 +876,12 @@ function ComposerRuntimeControls({
 									setOpenMenu(null);
 								}}
 							>
-								<span className="composer-menu-check">{!selectedModel && <Check size={13} />}</span>
+								<Settings size={16} aria-hidden="true" />
 								<span>
 									<strong>服务提供方默认值</strong>
 									<small>Let {provider.label} choose</small>
 								</span>
+								<span className="composer-menu-check">{!selectedModel && <Check size={13} />}</span>
 							</button>
 							{selectedModel && !model && (
 								<button
@@ -889,12 +891,13 @@ function ComposerRuntimeControls({
 									className="is-selected"
 									onClick={() => setOpenMenu(null)}
 								>
-									<span className="composer-menu-check">
-										<Check size={13} />
-									</span>
+									<Gauge size={16} aria-hidden="true" />
 									<span>
 										<strong>{selectedModel}</strong>
 										<small>当前模型</small>
+									</span>
+									<span className="composer-menu-check">
+										<Check size={13} />
 									</span>
 								</button>
 							)}
@@ -910,15 +913,16 @@ function ComposerRuntimeControls({
 										setOpenMenu(null);
 									}}
 								>
-									<span className="composer-menu-check">
-										{item.id === selectedModel && <Check size={13} />}
-									</span>
+									<Gauge size={16} aria-hidden="true" />
 									<span>
 										<strong>{item.name}</strong>
 										<small>
 											{formatCompactTokens(item.contextWindow)} context
 											{item.reasoning ? " · reasoning" : ""}
 										</small>
+									</span>
+									<span className="composer-menu-check">
+										{item.id === selectedModel && <Check size={13} />}
 									</span>
 								</button>
 							))}
@@ -964,12 +968,13 @@ function ComposerRuntimeControls({
 										setOpenMenu(null);
 									}}
 								>
-									<span className="composer-menu-check">
-										{item.value === thinking && <Check size={13} />}
-									</span>
+									<Brain size={16} aria-hidden="true" />
 									<span>
 										<strong>{item.label}</strong>
 										<small>{item.detail}</small>
+									</span>
+									<span className="composer-menu-check">
+										{item.value === thinking && <Check size={13} />}
 									</span>
 								</button>
 							))}

@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	type KeyboardEvent,
+	type ReactNode,
+} from "react";
 import {
 	BookOpen,
 	ExternalLink,
 	FileInput,
 	Files,
+	Info,
 	List,
 	LogIn,
 	LogOut,
@@ -22,6 +31,8 @@ import {
 	X,
 } from "lucide-react";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
+import { ConfirmationDialog } from "../../components/ConfirmationDialog";
+import { Select } from "../../components/Select";
 import { useTranslation } from "../../i18n";
 import { useAppStore } from "../../store";
 import { errorToMessage, isRecord } from "../../shared/value";
@@ -222,8 +233,14 @@ export function McpSettings() {
 			)}
 			{overview?.workspacePath && (
 				<>
-					<div className="settings-panel mcp-trust">
-						<ShieldAlert size={18} aria-hidden="true" />
+					<div
+						className={`settings-panel mcp-trust ${overview.projectTrusted ? "is-trusted" : "is-untrusted"}`}
+					>
+						{overview.projectTrusted ? (
+							<ShieldCheck size={20} aria-hidden="true" />
+						) : (
+							<ShieldAlert size={20} aria-hidden="true" />
+						)}
 						<div>
 							<strong>{t("Project MCP configuration")}</strong>
 							<p className="settings-help">
@@ -410,7 +427,7 @@ function McpServerCard({
 	const AuthIcon = signedIn ? LogOut : LogIn;
 	return (
 		<article
-			className={`settings-panel mcp-server${needsAuth ? " needs-auth" : ""}`}
+			className={`settings-panel mcp-server is-${server.enabled ? server.state : "disabled"}${needsAuth ? " needs-auth" : ""}`}
 			aria-label={server.name}
 		>
 			<header className="mcp-server-heading">
@@ -731,7 +748,7 @@ function McpEditor({
 						</label>
 						<label>
 							{t("Configuration scope")}
-							<select
+							<Select
 								className="field"
 								value={scope}
 								disabled={existing}
@@ -743,11 +760,11 @@ function McpEditor({
 								<option value="project" disabled={!projectTrusted}>
 									{t("Project")}
 								</option>
-							</select>
+							</Select>
 						</label>
 						<label>
 							{t("Transport")}
-							<select
+							<Select
 								className="field"
 								value={transport}
 								onChange={(event) => {
@@ -757,11 +774,11 @@ function McpEditor({
 							>
 								<option value="stdio">stdio</option>
 								<option value="http">Streamable HTTP</option>
-							</select>
+							</Select>
 						</label>
 						<label>
 							{t("Tool exposure")}
-							<select
+							<Select
 								className="field"
 								value={exposure}
 								onChange={(event) =>
@@ -777,7 +794,7 @@ function McpEditor({
 								<option value="deferred">{t("Discover on demand")}</option>
 								<option value="direct">{t("Always available")}</option>
 								<option value="hidden">{t("Hidden")}</option>
-							</select>
+							</Select>
 						</label>
 					</div>
 					<label>
@@ -947,6 +964,52 @@ function McpEditor({
 	);
 }
 
+function ToolDescription({ name, description }: { name: string; description: string }) {
+	const { t } = useTranslation();
+	const id = useId();
+	const trigger = useRef<HTMLButtonElement>(null);
+	const panel = useRef<HTMLDivElement>(null);
+	const anchor = `--mcp-description-${id.replace(/:/g, "")}`;
+	const dismiss = (event: KeyboardEvent<HTMLElement>) => {
+		if (event.key !== "Escape" || !panel.current?.matches(":popover-open")) return;
+		event.preventDefault();
+		event.stopPropagation();
+		panel.current.hidePopover();
+		trigger.current?.focus({ preventScroll: true });
+	};
+	return (
+		<span className="mcp-tool-description">
+			<button
+				ref={trigger}
+				type="button"
+				className="mcp-description-trigger"
+				popoverTarget={id}
+				style={{ anchorName: anchor }}
+				aria-label={`${name} ${t("Description")}`}
+				title={t("Description")}
+				onKeyDown={dismiss}
+			>
+				<Info size={16} aria-hidden="true" />
+			</button>
+			<div
+				id={id}
+				ref={panel}
+				tabIndex={-1}
+				popover="auto"
+				className="mcp-tool-description-panel"
+				style={{ positionAnchor: anchor }}
+				onKeyDown={dismiss}
+				onToggle={(event) => {
+					if (event.newState === "open") panel.current?.focus({ preventScroll: true });
+				}}
+			>
+				<strong>{name}</strong>
+				<p>{description}</p>
+			</div>
+		</span>
+	);
+}
+
 function McpDetails({
 	server,
 	busy,
@@ -1049,21 +1112,35 @@ function McpDetails({
 				<div className="mcp-tools">
 					{server.tools.map((tool) => (
 						<div className="mcp-tool" key={tool.name}>
-							<div>
-								<strong>{tool.name}</strong>
-								<p className="settings-help">{tool.description}</p>
-								{tool.readOnlyHint !== undefined && (
-									<small>
-										{t("Server read-only hint")}: {String(tool.readOnlyHint)}
-									</small>
-								)}
-								{tool.destructiveHint && (
-									<small>{t("Server marks this tool as destructive.")}</small>
-								)}
+							<div className="mcp-tool-identity">
+								<div className="mcp-tool-name">
+									<strong title={tool.name}>{tool.name}</strong>
+									{tool.description && (
+										<ToolDescription name={tool.name} description={tool.description} />
+									)}
+								</div>
+								<div className="mcp-tool-hints">
+									{tool.readOnlyHint !== undefined && (
+										<small className={`mcp-hint ${tool.readOnlyHint ? "is-read" : "is-write"}`}>
+											{tool.readOnlyHint ? (
+												<BookOpen size={12} aria-hidden="true" />
+											) : (
+												<Pencil size={12} aria-hidden="true" />
+											)}
+											{t("Server read-only hint")}: {String(tool.readOnlyHint)}
+										</small>
+									)}
+									{tool.destructiveHint && (
+										<small className="mcp-hint is-destructive">
+											<TriangleAlert size={12} aria-hidden="true" />
+											{t("Server marks this tool as destructive.")}
+										</small>
+									)}
+								</div>
 							</div>
 							<label>
 								{t("Permission")}
-								<select
+								<Select
 									className="field"
 									aria-label={`${tool.name} ${t("Permission")}`}
 									disabled={busy}
@@ -1083,11 +1160,11 @@ function McpDetails({
 									<option value="blocked">{t("Blocked")}</option>
 									<option value="read">{t("Approved read")}</option>
 									<option value="write">{t("Approved write")}</option>
-								</select>
+								</Select>
 							</label>
 							<label>
 								{t("Tool exposure")}
-								<select
+								<Select
 									className="field"
 									aria-label={`${tool.name} ${t("Tool exposure")}`}
 									disabled={busy}
@@ -1107,7 +1184,7 @@ function McpDetails({
 									<option value="deferred">{t("Discover on demand")}</option>
 									<option value="direct">{t("Always available")}</option>
 									<option value="hidden">{t("Hidden")}</option>
-								</select>
+								</Select>
 							</label>
 						</div>
 					))}
@@ -1196,36 +1273,23 @@ function McpConfirmation({
 	onConfirm: () => void;
 }) {
 	const { t } = useTranslation();
-	const ref = useRef<HTMLDialogElement>(null);
-	useEffect(() => {
-		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		const dialog = ref.current;
-		dialog?.showModal();
-		return () => {
-			dialog?.close();
-			previous?.focus();
-		};
-	}, []);
 	return (
-		<dialog
-			ref={ref}
+		<ConfirmationDialog
 			className="mcp-confirmation"
-			aria-labelledby="mcp-confirmation-heading"
-			aria-describedby="mcp-confirmation-copy"
-			onCancel={(event) => {
-				event.preventDefault();
-				if (!busy) onClose();
-			}}
-		>
-			<h2 id="mcp-confirmation-heading">
-				{kind === "trust"
+			tone={kind === "trust" ? "accent" : kind === "revoke" ? "warning" : "danger"}
+			busy={busy}
+			error={error}
+			onClose={onClose}
+			onConfirm={onConfirm}
+			title={
+				kind === "trust"
 					? t("Trust project MCP?")
 					: kind === "revoke"
 						? t("Revoke project trust?")
-						: `${t("Delete MCP server?")} ${name}`}
-			</h2>
-			<p id="mcp-confirmation-copy">
-				{kind === "trust"
+						: `${t("Delete MCP server?")} ${name}`
+			}
+			description={
+				kind === "trust"
 					? t(
 							"Project configuration can launch programs and contact external services using your OS account. Trust only repositories you have reviewed. Tool permissions still require separate approval.",
 						)
@@ -1235,25 +1299,11 @@ function McpConfirmation({
 							)
 						: t(
 								"This removes the server configuration and disconnects it. Files, chats and knowledge are kept.",
-							)}
-			</p>
-			{error && (
-				<p className="mcp-error" role="alert">
-					{error}
-				</p>
-			)}
-			<div className="mcp-actions">
-				<button type="button" className="secondary-button" disabled={busy} onClick={onClose}>
-					{t("Cancel")}
-				</button>
-				<button type="button" className="command-button" disabled={busy} onClick={onConfirm}>
-					{kind === "trust"
-						? t("Trust project")
-						: kind === "revoke"
-							? t("Revoke trust")
-							: t("Delete")}
-				</button>
-			</div>
-		</dialog>
+							)
+			}
+			confirmLabel={
+				kind === "trust" ? t("Trust project") : kind === "revoke" ? t("Revoke trust") : t("Delete")
+			}
+		/>
 	);
 }
