@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { ListTree } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import type { Turn } from "../types";
+import { useAppStore } from "../store";
 
 export function TurnNavigator({
 	turns,
@@ -13,6 +14,7 @@ export function TurnNavigator({
 	const userTurns = useMemo(() => turns.filter((turn) => turn.role === "user"), [turns]);
 	const [expanded, setExpanded] = useState(false);
 	const [activeId, setActiveId] = useState(userTurns[userTurns.length - 1]?.id ?? "");
+	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
 
 	useEffect(() => {
 		if (!userTurns.some((turn) => turn.id === activeId)) {
@@ -75,7 +77,10 @@ export function TurnNavigator({
 			container.scrollTo({
 				top:
 					container.scrollTop + elementRect.top - containerRect.top - container.clientHeight * 0.2,
-				behavior: "smooth",
+				behavior:
+					reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+						? "auto"
+						: "smooth",
 			});
 		}
 		element?.classList.add("turn-target");
@@ -107,7 +112,7 @@ export function TurnNavigator({
 				))}
 			</button>
 			{expanded && (
-				<div className="ml-2 w-56 max-h-[60vh] overflow-y-auto border border-gray-200 bg-white shadow-xl p-2 rounded-lg">
+				<div className="turn-navigator-popup ml-2 w-56 max-h-[60vh] overflow-y-auto border p-2 rounded-lg">
 					<div className="flex items-center gap-2 px-2 py-1 text-xs font-bold text-gray-500 uppercase">
 						<ListTree size={14} /> Turns
 					</div>
@@ -118,7 +123,7 @@ export function TurnNavigator({
 							onClick={() => navigate(turn)}
 							aria-current={activeId === turn.id ? "step" : undefined}
 							className={clsx(
-								"w-full text-left px-2 py-2 text-xs rounded-md flex gap-2",
+								"turn-navigator-option w-full text-left px-2 py-2 text-xs rounded-md flex gap-2",
 								activeId === turn.id
 									? "bg-accent/10 text-accent"
 									: "hover:bg-gray-50 text-secondary",

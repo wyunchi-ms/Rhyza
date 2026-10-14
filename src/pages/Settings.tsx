@@ -9,11 +9,16 @@ import {
 	Cloud,
 	Copy,
 	ExternalLink,
+	FolderOpen,
+	Download,
 	LoaderCircle,
+	LogIn,
+	LogOut,
 	Moon,
 	Package,
 	Palette,
 	ShieldAlert,
+	RefreshCw,
 	Sun,
 	Trash2,
 } from "lucide-react";
@@ -31,6 +36,7 @@ import {
 	settingsCategories,
 	SettingsNavigation,
 } from "./settings/SettingsNavigation";
+import { confirmAction } from "../components/ConfirmationDialog";
 
 const Settings: React.FC = () => {
 	const { settings, updateSettings } = useAppStore();
@@ -44,6 +50,21 @@ const Settings: React.FC = () => {
 	const setupInstructions =
 		electron.providerStatus?.setupInstructions ?? provider.setupInstructions;
 	const selectedModel = settings.defaultModel;
+	const authActionLabel =
+		electron.action === "login"
+			? t("Signing in…")
+			: electron.action === "logout"
+				? t("Signing out…")
+				: electron.providerStatus?.configured
+					? t("Sign out")
+					: t("Sign in");
+	const refreshActionLabel = electron.loading
+		? t("Checking connection…")
+		: electron.providerStatus?.configured
+			? t("Refresh status")
+			: provider.id === "azure-openai"
+				? t("Check sign-in")
+				: t("Check connection");
 	const customModel = selectedModel && !electron.models.some((model) => model.id === selectedModel);
 	const visibleCategories = settingsCategories.filter((category) =>
 		matchesSettingsSearch(settingsQuery, category.terms),
@@ -261,33 +282,38 @@ const Settings: React.FC = () => {
 														: electron.login())
 												}
 												disabled={!electron.isElectron || electron.loading}
-												className="secondary-button"
+												className="icon-button settings-icon-action provider-auth-action"
+												title={authActionLabel}
+												aria-label={`${authActionLabel}: ${provider.label}`}
+												aria-busy={electron.action === "login" || electron.action === "logout"}
 											>
-												{electron.action === "login"
-													? "Signing In…"
-													: electron.action === "logout"
-														? "Signing Out…"
-														: electron.providerStatus?.configured
-															? "Sign Out"
-															: "Sign In"}
+												{electron.action === "login" || electron.action === "logout" ? (
+													<LoaderCircle
+														size={17}
+														className="pi-plugin-spinner"
+														aria-hidden="true"
+													/>
+												) : electron.providerStatus?.configured ? (
+													<LogOut size={17} aria-hidden="true" />
+												) : (
+													<LogIn size={17} aria-hidden="true" />
+												)}
 											</button>
 										)}
 										<button
 											type="button"
 											onClick={() => void electron.refresh()}
 											disabled={!electron.isElectron || electron.loading}
-											className="secondary-button"
+											className="icon-button settings-icon-action provider-refresh-action"
+											title={refreshActionLabel}
+											aria-label={`${refreshActionLabel}: ${provider.label}`}
+											aria-busy={electron.loading}
 										>
-											{electron.loading && (
-												<LoaderCircle size={14} className="pi-plugin-spinner" aria-hidden="true" />
+											{electron.loading ? (
+												<LoaderCircle size={17} className="pi-plugin-spinner" aria-hidden="true" />
+											) : (
+												<RefreshCw size={17} aria-hidden="true" />
 											)}
-											{electron.action === "refresh"
-												? "Checking…"
-												: electron.providerStatus?.configured
-													? "Refresh status"
-													: provider.id === "azure-openai"
-														? "Check sign-in"
-														: "Check connection"}
 										</button>
 									</div>
 								</div>
@@ -651,6 +677,14 @@ function PluginSettings() {
 
 	const remove = async (pluginSource: string) => {
 		if (!bridge) return;
+		if (
+			!(await confirmAction({
+				title: t("Remove package?"),
+				description: `${pluginDisplayName(pluginSource)}\n\n${t("This removes the package from your user configuration and reloads Agent sessions. It does not delete chats.")}`,
+				confirmLabel: t("Remove package"),
+			}))
+		)
+			return;
 		setBusySource(pluginSource);
 		setError(null);
 		try {
@@ -696,28 +730,37 @@ function PluginSettings() {
 					/>
 					<button
 						type="submit"
-						className="command-button"
+						className="icon-button settings-icon-action pi-plugin-install-action"
 						disabled={!bridge || !source.trim() || busySource !== null}
+						title={t("Install")}
+						aria-label={t("Install")}
+						aria-busy={Boolean(source.trim()) && busySource === source.trim()}
 					>
-						{busySource && busySource !== "list" ? (
-							<LoaderCircle className="pi-plugin-spinner" size={14} aria-hidden="true" />
+						{source.trim() && busySource === source.trim() ? (
+							<LoaderCircle className="pi-plugin-spinner" size={17} aria-hidden="true" />
 						) : (
-							<Package size={14} aria-hidden="true" />
+							<Download size={17} aria-hidden="true" />
 						)}
-						{t("Install")}
+					</button>
+					<button
+						type="button"
+						className="icon-button settings-icon-action pi-plugin-local-action"
+						disabled={!bridge || busySource !== null}
+						title={t("Install from local folder…")}
+						aria-label={t("Install from local folder…")}
+						aria-busy={busySource === "local"}
+						onClick={() => void installLocal()}
+					>
+						{busySource === "local" ? (
+							<LoaderCircle className="pi-plugin-spinner" size={17} aria-hidden="true" />
+						) : (
+							<FolderOpen size={17} aria-hidden="true" />
+						)}
 					</button>
 				</div>
 				<p id="pi-plugin-source-help">
 					{t("Supports npm:, git:, HTTPS/SSH Git URLs, and absolute local paths.")}
 				</p>
-				<button
-					type="button"
-					className="secondary-button"
-					disabled={!bridge || busySource !== null}
-					onClick={() => void installLocal()}
-				>
-					<Package size={14} aria-hidden="true" /> {t("Install from local folder…")}
-				</button>
 			</form>
 			<div className="pi-plugin-list-header">
 				<h3 id="installed-packages-heading">
@@ -725,15 +768,22 @@ function PluginSettings() {
 				</h3>
 				<button
 					type="button"
-					className="secondary-button"
-					onClick={() =>
-						void bridge?.openExternal({
-							url: "https://www.npmjs.com/search?q=keywords%3Api-package",
-						})
-					}
+					className="icon-button settings-icon-action pi-plugin-browse-action"
+					title={t("Browse packages")}
+					aria-label={t("Browse packages")}
+					onClick={async () => {
+						setError(null);
+						try {
+							await bridge?.openExternal({
+								url: "https://www.npmjs.com/search?q=keywords%3Api-package",
+							});
+						} catch (reason) {
+							setError(errorToMessage(reason));
+						}
+					}}
 					disabled={!bridge}
 				>
-					<ExternalLink size={14} aria-hidden="true" /> {t("Browse packages")}
+					<ExternalLink size={17} aria-hidden="true" />
 				</button>
 			</div>
 			{error && (
@@ -759,32 +809,41 @@ function PluginSettings() {
 							<div>
 								<strong>{pluginDisplayName(plugin.source)}</strong>
 								<code>{plugin.source}</code>
-								<small>
-									{plugin.scope === "project" ? "Workspace" : "User"} ·{" "}
-									{plugin.installed ? "Installed" : "Missing on disk"}
-								</small>
+								<div className="pi-plugin-badges">
+									<span className="status-badge status-neutral" data-plugin-scope={plugin.scope}>
+										{plugin.scope === "project" ? t("Workspace") : t("User")}
+									</span>
+									<span
+										className={`status-badge ${plugin.installed ? "status-success" : "status-warning"}`}
+										data-plugin-status={plugin.installed ? "installed" : "missing"}
+									>
+										{plugin.installed ? t("Installed") : t("Missing on disk")}
+									</span>
+								</div>
 								{plugin.scope === "project" && (
-									<small>Managed by the workspace .pi/settings.json file.</small>
+									<small>
+										{t("Project packages are managed by the workspace .pi/settings.json file.")}
+									</small>
 								)}
 							</div>
 							<button
 								type="button"
-								className="secondary-button pi-plugin-remove"
+								className="icon-button settings-icon-action pi-plugin-remove"
 								disabled={busySource !== null || plugin.scope === "project"}
-								aria-label={`Remove ${pluginDisplayName(plugin.source)}`}
+								aria-label={`${t("Remove package")}: ${pluginDisplayName(plugin.source)}`}
+								aria-busy={busySource === plugin.source}
 								title={
 									plugin.scope === "project"
-										? "Project packages are managed by the workspace .pi/settings.json file."
-										: "Remove package"
+										? t("Project packages are managed by the workspace .pi/settings.json file.")
+										: t("Remove package")
 								}
 								onClick={() => void remove(plugin.source)}
 							>
 								{busySource === plugin.source ? (
-									<LoaderCircle className="pi-plugin-spinner" size={14} aria-hidden="true" />
+									<LoaderCircle className="pi-plugin-spinner" size={17} aria-hidden="true" />
 								) : (
-									<Trash2 size={14} aria-hidden="true" />
-								)}{" "}
-								Remove
+									<Trash2 size={17} aria-hidden="true" />
+								)}
 							</button>
 						</li>
 					))}
@@ -794,6 +853,11 @@ function PluginSettings() {
 				Installing or removing a package reloads Agent sessions; the next message uses the new
 				plugin set.
 			</p>
+			{busySource !== null && busySource !== "list" && (
+				<p role="status" className="settings-help">
+					{t("Updating packages…")}
+				</p>
+			)}
 		</div>
 	);
 }

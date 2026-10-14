@@ -35,7 +35,7 @@ import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { Select } from "../../components/Select";
 import { useTranslation } from "../../i18n";
 import { useAppStore } from "../../store";
-import { errorToMessage, isRecord } from "../../shared/value";
+import { errorToMessage, FieldValidationError, isRecord } from "../../shared/value";
 import {
 	validateMcpConfig,
 	validateMcpSave,
@@ -637,24 +637,62 @@ function McpEditor({
 	const [importText, setImportText] = useState("");
 	const [importName, setImportName] = useState("");
 	const [error, setError] = useState("");
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+	const fieldProps = (field: string) => ({
+		id: `mcp-editor-${field}`,
+		"data-field": field,
+		"aria-invalid": Boolean(fieldErrors[field]),
+		"aria-describedby": fieldErrors[field] ? `mcp-editor-${field}-error` : undefined,
+	});
+	const fieldError = (field: string) =>
+		fieldErrors[field] ? (
+			<span id={`mcp-editor-${field}-error`} className="field-error" role="alert">
+				{fieldErrors[field]}
+			</span>
+		) : null;
+	const readJson = (field: string, text: string): unknown => {
+		try {
+			return JSON.parse(text);
+		} catch (reason) {
+			throw new FieldValidationError(field, errorToMessage(reason));
+		}
+	};
 	const errorRef = useRef<HTMLParagraphElement>(null);
 	useEffect(() => {
 		if (error || operationError) errorRef.current?.scrollIntoView({ block: "nearest" });
 	}, [error, operationError]);
 
 	const importConfig = () => {
+		setFieldErrors({});
+		setError("");
 		try {
-			const parsed: unknown = JSON.parse(importText);
+			const parsed = readJson("importText", importText);
 			if (!isRecord(parsed) || !isRecord(parsed.mcpServers))
-				throw new Error(t("Import a JSON object containing mcpServers."));
+				throw new FieldValidationError(
+					"importText",
+					t("Import a JSON object containing mcpServers."),
+				);
 			const entries = Object.entries(parsed.mcpServers);
-			if (!entries.length) throw new Error(t("The imported configuration has no servers."));
-			for (const [key, value] of entries)
-				validateMcpSave({ name: key, scope, config: value, policy: { tools: {} } });
+			if (!entries.length)
+				throw new FieldValidationError(
+					"importText",
+					t("The imported configuration has no servers."),
+				);
 			const selected =
 				entries.find(([key]) => key === importName) ??
 				(entries.length === 1 ? entries[0] : undefined);
-			if (!selected) throw new Error(t("Enter the server name to import from this configuration."));
+			if (!selected)
+				throw new FieldValidationError(
+					"importName",
+					t("Enter the server name to import from this configuration."),
+				);
+			for (const [key, value] of entries) {
+				try {
+					validateMcpSave({ name: key, scope, config: value, policy: { tools: {} } });
+				} catch (reason) {
+					throw new FieldValidationError("importText", `${key}: ${errorToMessage(reason)}`);
+				}
+			}
 			const loaded = validateMcpConfig(selected[1]);
 			setName(selected[0]);
 			setConfig(loaded);
@@ -672,10 +710,17 @@ function McpEditor({
 			setTimeoutValue(loaded.timeout ?? 60);
 			setError("");
 		} catch (reason) {
-			setError(errorToMessage(reason));
+			if (reason instanceof FieldValidationError) {
+				setFieldErrors({ [reason.field]: errorToMessage(reason) });
+				document.getElementById(`mcp-editor-${reason.field}`)?.focus();
+			} else {
+				setError(errorToMessage(reason));
+			}
 		}
 	};
 	const submit = async () => {
+		if (busy) return;
+		setFieldErrors({});
 		try {
 			const base = {
 				description: description || undefined,
@@ -686,19 +731,38 @@ function McpEditor({
 			};
 			const next =
 				transport === "http"
-					? { ...base, url, headers: JSON.parse(values), oauth: JSON.parse(oauth) }
+					? { ...base, url, headers: readJson("values", values), oauth: readJson("oauth", oauth) }
 					: {
 							...base,
 							command,
-							args: JSON.parse(args),
-							env: JSON.parse(values),
+							args: readJson("args", args),
+							env: readJson("values", values),
 							cwd: cwd || undefined,
 						};
 			const draft = validateMcpSave({ name, scope, config: next, policy: initial.policy });
 			setError("");
 			await onSave(draft);
 		} catch (reason) {
-			setError(errorToMessage(reason));
+			if (reason instanceof FieldValidationError) {
+				const aliases: Record<string, string> = {
+					server: "url",
+					environment: "values",
+					headers: "values",
+					"working directory": "cwd",
+					callback: "oauth",
+				};
+				const field = reason.field.startsWith("OAuth")
+					? "oauth"
+					: (aliases[reason.field] ?? reason.field);
+				setFieldErrors({ [field]: errorToMessage(reason) });
+				setError("");
+				requestAnimationFrame(() => {
+					const input = document.getElementById(`mcp-editor-${field}`);
+					const details = input?.closest("details");
+					if (details) details.open = true;
+					input?.focus();
+				});
+			} else setError(errorToMessage(reason));
 		}
 	};
 	return (
@@ -733,11 +797,18 @@ function McpEditor({
 						{error || operationError}
 					</p>
 				)}
-				<fieldset disabled={busy}>
+				<fieldset
+					disabled={busy}
+					onChange={(event) => {
+						const field = (event.target as HTMLElement).getAttribute("data-field");
+						if (field) setFieldErrors((current) => ({ ...current, [field]: "" }));
+					}}
+				>
 					<div className="mcp-form-grid">
 						<label>
 							{t("Server name")}
 							<input
+								{...fieldProps("name")}
 								className="field"
 								value={name}
 								autoFocus={!existing}
@@ -745,10 +816,12 @@ function McpEditor({
 								required
 								onChange={(event) => setName(event.target.value)}
 							/>
+							{fieldError("name")}
 						</label>
 						<label>
 							{t("Configuration scope")}
 							<Select
+								{...fieldProps("scope")}
 								className="field"
 								value={scope}
 								disabled={existing}
@@ -761,6 +834,7 @@ function McpEditor({
 									{t("Project")}
 								</option>
 							</Select>
+							{fieldError("scope")}
 						</label>
 						<label>
 							{t("Transport")}
@@ -800,22 +874,26 @@ function McpEditor({
 					<label>
 						{t("Description")}
 						<input
+							{...fieldProps("description")}
 							className="field"
 							value={description}
 							autoFocus={existing}
 							onChange={(event) => setDescription(event.target.value)}
 						/>
+						{fieldError("description")}
 					</label>
 					{transport === "stdio" ? (
 						<>
 							<label>
 								{t("Executable")}
 								<input
+									{...fieldProps("command")}
 									className="field"
 									required
 									value={command}
 									onChange={(event) => setCommand(event.target.value)}
 								/>
+								{fieldError("command")}
 							</label>
 							<p className="settings-help">
 								{t("Use one executable, not a shell command. Arguments are a JSON array.")}
@@ -823,43 +901,51 @@ function McpEditor({
 							<label>
 								{t("Arguments")}
 								<textarea
+									{...fieldProps("args")}
 									className="field"
 									rows={3}
 									value={args}
 									onChange={(event) => setArgs(event.target.value)}
 									spellCheck={false}
 								/>
+								{fieldError("args")}
 							</label>
 							<label>
 								{t("Working directory")}
 								<input
+									{...fieldProps("cwd")}
 									className="field"
 									value={cwd}
 									onChange={(event) => setCwd(event.target.value)}
 								/>
+								{fieldError("cwd")}
 							</label>
 						</>
 					) : (
 						<label>
 							{t("Server URL")}
 							<input
+								{...fieldProps("url")}
 								className="field"
 								type="url"
 								required
 								value={url}
 								onChange={(event) => setUrl(event.target.value)}
 							/>
+							{fieldError("url")}
 						</label>
 					)}
 					<label>
 						{transport === "http" ? t("HTTP headers (JSON)") : t("Environment variables (JSON)")}
 						<textarea
+							{...fieldProps("values")}
 							className="field"
 							rows={3}
 							value={values}
 							onChange={(event) => setValues(event.target.value)}
 							spellCheck={false}
 						/>
+						{fieldError("values")}
 					</label>
 					<p className="settings-help">
 						{t(
@@ -877,18 +963,21 @@ function McpEditor({
 							<label>
 								{t("OAuth configuration (JSON)")}
 								<textarea
+									{...fieldProps("oauth")}
 									className="field"
 									rows={4}
 									value={oauth}
 									onChange={(event) => setOauth(event.target.value)}
 									spellCheck={false}
 								/>
+								{fieldError("oauth")}
 							</label>
 						</details>
 					)}
 					<label>
 						{t("Request timeout (seconds)")}
 						<input
+							{...fieldProps("timeout")}
 							className="field"
 							type="number"
 							min={1}
@@ -896,6 +985,7 @@ function McpEditor({
 							value={timeout}
 							onChange={(event) => setTimeoutValue(Number(event.target.value))}
 						/>
+						{fieldError("timeout")}
 					</label>
 					{!existing && (
 						<details>
@@ -903,20 +993,24 @@ function McpEditor({
 							<label>
 								{t("Configuration JSON")}
 								<textarea
+									{...fieldProps("importText")}
 									className="field"
 									rows={5}
 									value={importText}
 									onChange={(event) => setImportText(event.target.value)}
 									spellCheck={false}
 								/>
+								{fieldError("importText")}
 							</label>
 							<label>
 								{t("Server name to import")}
 								<input
+									{...fieldProps("importName")}
 									className="field"
 									value={importName}
 									onChange={(event) => setImportName(event.target.value)}
 								/>
+								{fieldError("importName")}
 							</label>
 							<p className="settings-help">
 								{t(
@@ -950,12 +1044,17 @@ function McpEditor({
 							<X size={17} aria-hidden="true" />
 						</button>
 						<button
-							className="command-button mcp-icon-action"
+							className="command-button"
 							type="submit"
 							aria-label={busy ? t("Saving…") : t("Save")}
 							title={busy ? t("Saving…") : t("Save")}
 						>
-							<Save size={17} aria-hidden="true" />
+							{busy ? (
+								<RefreshCw size={17} className="animate-spin" aria-hidden="true" />
+							) : (
+								<Save size={17} aria-hidden="true" />
+							)}
+							<span>{busy ? t("Saving…") : t("Save")}</span>
 						</button>
 					</div>
 				</fieldset>
@@ -1191,13 +1290,18 @@ function McpDetails({
 				</div>
 				<button
 					type="button"
-					className="command-button mcp-icon-action"
-					aria-label={t("Save tool settings")}
-					title={t("Save tool settings")}
+					className="command-button"
+					aria-label={busy ? t("Saving…") : t("Save tool settings")}
+					title={busy ? t("Saving…") : t("Save tool settings")}
 					disabled={busy || (!Object.keys(permissions).length && !Object.keys(exposures).length)}
 					onClick={() => void save()}
 				>
-					<Save size={17} aria-hidden="true" />
+					{busy ? (
+						<RefreshCw size={17} className="animate-spin" aria-hidden="true" />
+					) : (
+						<Save size={17} aria-hidden="true" />
+					)}
+					<span>{busy ? t("Saving…") : t("Save")}</span>
 				</button>
 				<details className="mcp-resources">
 					<summary>{t("Resources")}</summary>

@@ -82,9 +82,11 @@ const Knowledge = () => {
 		if (diagram && diagram.id !== selectedDiagramId) setSelectedDiagramId(diagram.id);
 	}, [diagram, selectedDiagramId]);
 	useEffect(() => {
-		setEntityDraft(selected);
-		setIsEditingEntity(false);
-	}, [selected]);
+		if (!isEditingEntity || selected?.id !== entityDraft?.id) {
+			setEntityDraft(selected);
+			if (selected?.id !== entityDraft?.id) setIsEditingEntity(false);
+		}
+	}, [selected, isEditingEntity, entityDraft?.id]);
 	const rebuildRelations = async () => {
 		if (activeEntities.length < 2 || rebuildState.status === "running") return;
 		const bridge = getRhyzaBridge();
@@ -309,8 +311,8 @@ const Knowledge = () => {
 									<EntityCenterEditor
 										draft={entityDraft}
 										onDraftChange={setEntityDraft}
-										onSave={() => {
-											store.saveEntity(entityDraft);
+										onSave={(draft) => {
+											store.saveEntity({ ...draft, sourceRefs: selected.sourceRefs });
 											setIsEditingEntity(false);
 										}}
 										onCancel={() => {
@@ -402,7 +404,11 @@ function EntityPreview({ entity, onEdit }: { entity: Entity; onEdit: () => void 
 						<div>
 							<div className="flex flex-wrap items-center gap-2">
 								<span className="status-badge status-progress">{entity.type}</span>
-								<span className="status-badge status-success">{entity.confidence}</span>
+								<span
+									className={`status-badge ${entity.confidence === "confirmed" ? "status-success" : entity.confidence === "disputed" ? "status-warning" : "status-neutral"}`}
+								>
+									{entity.confidence}
+								</span>
 								<span className="entity-version">v{entity.version}</span>
 							</div>
 							<h2 className="entity-preview-title">{entity.name}</h2>
@@ -462,11 +468,12 @@ function EntityCenterEditor({
 }: {
 	draft: Entity;
 	onDraftChange: (draft: Entity) => void;
-	onSave: () => void;
+	onSave: (draft: Entity) => void;
 	onCancel: () => void;
 }) {
 	const summaryRef = useRef<HTMLTextAreaElement | null>(null);
 	const contentRef = useRef<HTMLTextAreaElement | null>(null);
+	const [errors, setErrors] = useState<{ name?: string; type?: string; save?: string }>({});
 	useEffect(() => resizeTextArea(summaryRef.current, 144), [draft.summary]);
 	useEffect(() => resizeTextArea(contentRef.current), [draft.content]);
 	return (
@@ -474,7 +481,17 @@ function EntityCenterEditor({
 			className="entity-center-editor h-full overflow-y-auto p-6 lg:p-10"
 			onSubmit={(event) => {
 				event.preventDefault();
-				onSave();
+				const next = {
+					name: draft.name.trim() ? undefined : "Enter an entity name.",
+					type: draft.type.trim() ? undefined : "Enter an entity type.",
+				};
+				setErrors(next);
+				if (next.name || next.type) return;
+				try {
+					onSave(draft);
+				} catch (error) {
+					setErrors({ save: errorToMessage(error) });
+				}
 			}}
 		>
 			<div className="mx-auto max-w-4xl space-y-5">
@@ -490,18 +507,34 @@ function EntityCenterEditor({
 				<label className="form-label">
 					Name
 					<input
+						required
+						aria-invalid={Boolean(errors.name)}
+						aria-describedby={errors.name ? "entity-name-error" : undefined}
 						className="field mt-1"
 						value={draft.name}
 						onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
 					/>
+					{errors.name && (
+						<span id="entity-name-error" className="field-error" role="alert">
+							{errors.name}
+						</span>
+					)}
 				</label>
 				<label className="form-label">
 					Type
 					<input
+						required
+						aria-invalid={Boolean(errors.type)}
+						aria-describedby={errors.type ? "entity-type-error" : undefined}
 						className="field mt-1"
 						value={draft.type}
 						onChange={(event) => onDraftChange({ ...draft, type: event.target.value })}
 					/>
+					{errors.type && (
+						<span id="entity-type-error" className="field-error" role="alert">
+							{errors.type}
+						</span>
+					)}
 				</label>
 				<label className="form-label">
 					Confidence
@@ -557,6 +590,11 @@ function EntityCenterEditor({
 						}}
 					/>
 				</label>
+				{errors.save && (
+					<p className="field-error" role="alert">
+						{errors.save}
+					</p>
+				)}
 				<button type="submit" className="command-button w-full justify-center">
 					Save with diff
 				</button>
@@ -789,9 +827,18 @@ function EntityMetaPanel({
 										className="entity-relation-delete"
 										title="归档关联"
 										aria-label={`Archive relation to ${other?.name ?? otherId}`}
-										onClick={() => softDeleteRelation(relation.id)}
+										onClick={async () => {
+											if (
+												await confirmAction({
+													title: "Archive relation?",
+													description: `${entity.name} → ${other?.name ?? otherId}\n\nThis archives the relation, not its entities. Restore it from Changes if needed.`,
+													confirmLabel: "Archive relation",
+												})
+											)
+												softDeleteRelation(relation.id);
+										}}
 									>
-										<Trash2 size={13} />
+										<Trash2 size={13} /> {t("Archive")}
 									</button>
 								</span>
 							</div>
@@ -1018,14 +1065,40 @@ function DiagramEditor({
 	const { t } = useTranslation();
 	const { saveDiagram, softDeleteDiagram } = useAppStore();
 	const [draft, setDraft] = useState(diagram);
+	const previousDiagram = useRef(diagram);
+	const [saving, setSaving] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
+	const [nameError, setNameError] = useState<string | null>(null);
+	const [saved, setSaved] = useState(false);
+	const [connectionError, setConnectionError] = useState<string | null>(null);
 	const [entityLinkForm, setEntityLinkForm] = useState<{
 		nodeId: string;
 		entityId: string;
 		editing: boolean;
 	} | null>(null);
 	useEffect(() => {
-		setDraft(diagram);
-		setEntityLinkForm(null);
+		const previous = previousDiagram.current;
+		setDraft((current) =>
+			current.id !== diagram.id || current === previous
+				? diagram
+				: {
+						...diagram,
+						name: current.name === previous.name ? diagram.name : current.name,
+						type: current.type === previous.type ? diagram.type : current.type,
+						mermaidSource:
+							current.mermaidSource === previous.mermaidSource
+								? diagram.mermaidSource
+								: current.mermaidSource,
+					},
+		);
+		if (previous.id !== diagram.id) {
+			setEntityLinkForm(null);
+			setSaveError(null);
+			setNameError(null);
+			setSaved(false);
+			setConnectionError(null);
+		}
+		previousDiagram.current = diagram;
 	}, [diagram]);
 	const entityById = new Map(entities.map((entity) => [entity.id, entity]));
 	const linkedNodes = diagram.nodes.flatMap((node) => {
@@ -1037,39 +1110,84 @@ function DiagramEditor({
 	);
 	const saveEntityLink = () => {
 		if (!entityLinkForm?.nodeId || !entityLinkForm.entityId) return;
-		const nodeId = entityLinkForm.nodeId;
-		saveDiagram({
-			...diagram,
-			nodes: diagram.nodes.map((node) =>
-				node.id === nodeId ? { ...node, entityId: entityLinkForm.entityId } : node,
-			),
-			edges: diagram.edges.map((edge) =>
-				edge.source === nodeId || edge.target === nodeId
-					? { ...edge, relationId: undefined }
-					: edge,
-			),
-		});
-		setEntityLinkForm(null);
+		setConnectionError(null);
+		try {
+			const nodeId = entityLinkForm.nodeId;
+			const latest = useAppStore.getState().diagrams.find((item) => item.id === diagram.id);
+			if (!latest || latest.deletedAt) throw new Error("This diagram is no longer available.");
+			saveDiagram({
+				...latest,
+				nodes: latest.nodes.map((node) =>
+					node.id === nodeId ? { ...node, entityId: entityLinkForm.entityId } : node,
+				),
+				edges: latest.edges.map((edge) =>
+					edge.source === nodeId || edge.target === nodeId
+						? { ...edge, relationId: undefined }
+						: edge,
+				),
+			});
+			setEntityLinkForm(null);
+		} catch (error) {
+			setConnectionError(errorToMessage(error));
+		}
 	};
 	const removeEntityLink = (nodeId: string) => {
-		saveDiagram({
-			...diagram,
-			nodes: diagram.nodes.map((node) =>
-				node.id === nodeId ? { ...node, entityId: undefined } : node,
-			),
-			edges: diagram.edges.map((edge) =>
-				edge.source === nodeId || edge.target === nodeId
-					? { ...edge, relationId: undefined }
-					: edge,
-			),
-		});
+		setConnectionError(null);
+		try {
+			const latest = useAppStore.getState().diagrams.find((item) => item.id === diagram.id);
+			if (!latest || latest.deletedAt) throw new Error("This diagram is no longer available.");
+			saveDiagram({
+				...latest,
+				nodes: latest.nodes.map((node) =>
+					node.id === nodeId ? { ...node, entityId: undefined } : node,
+				),
+				edges: latest.edges.map((edge) =>
+					edge.source === nodeId || edge.target === nodeId
+						? { ...edge, relationId: undefined }
+						: edge,
+				),
+			});
+		} catch (error) {
+			setConnectionError(errorToMessage(error));
+		}
+	};
+	const submitDraft = async () => {
+		if (saving) return;
+		const submitted = draft;
+		setSaveError(null);
+		setNameError(null);
+		setSaved(false);
+		if (!submitted.name.trim()) {
+			setNameError("Enter a diagram name.");
+			return;
+		}
+		setSaving(true);
+		try {
+			const { default: mermaid } = await import("mermaid");
+			await mermaid.parse(submitted.mermaidSource);
+			const latest = useAppStore.getState().diagrams.find((item) => item.id === submitted.id);
+			if (!latest || latest.deletedAt) throw new Error("This diagram is no longer available.");
+			saveDiagram({
+				...latest,
+				name: submitted.name,
+				type: submitted.type,
+				mermaidSource: submitted.mermaidSource,
+			});
+			const savedDiagram = useAppStore.getState().diagrams.find((item) => item.id === submitted.id);
+			if (savedDiagram) setDraft((current) => (current === submitted ? savedDiagram : current));
+			setSaved(true);
+		} catch (error) {
+			setSaveError(errorToMessage(error));
+		} finally {
+			setSaving(false);
+		}
 	};
 	return (
 		<form
 			className="knowledge-inspector-content p-5 space-y-5"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (draft.mermaidSource.trim()) saveDiagram(draft);
+				void submitDraft();
 			}}
 		>
 			<div className="knowledge-inspector-heading">
@@ -1111,16 +1229,26 @@ function DiagramEditor({
 			<label className="form-label">
 				Name
 				<input
+					required
+					disabled={saving}
+					aria-invalid={Boolean(nameError)}
+					aria-describedby={nameError ? "diagram-name-error" : undefined}
 					className="field mt-1"
 					value={draft.name}
 					onChange={(event) => setDraft({ ...draft, name: event.target.value })}
 				/>
+				{nameError && (
+					<span id="diagram-name-error" className="field-error" role="alert">
+						{nameError}
+					</span>
+				)}
 			</label>
 			<label className="form-label">
 				Type
 				<Select
 					className="field mt-1"
 					value={draft.type}
+					disabled={saving}
 					onChange={(event) => setDraft({ ...draft, type: event.target.value as Diagram["type"] })}
 				>
 					<option value="architecture">架构图</option>
@@ -1153,11 +1281,23 @@ function DiagramEditor({
 							}
 							title="关联实体"
 							aria-label="关联实体"
+							aria-describedby={
+								unlinkedNodes.length === 0 || entities.length === 0
+									? "diagram-connect-help"
+									: undefined
+							}
 						>
 							<Plus size={14} />
 						</button>
 					</span>
 				</div>
+				{(unlinkedNodes.length === 0 || entities.length === 0) && (
+					<p id="diagram-connect-help" className="text-xs text-secondary">
+						{entities.length === 0
+							? "Add an entity before connecting diagram nodes."
+							: "All indexed nodes are already connected, or no nodes are indexed."}
+					</p>
+				)}
 				<div className="entity-relation-list">
 					{linkedNodes.map(({ node, entity }) => (
 						<div key={node.id} className="entity-relation-item">
@@ -1191,9 +1331,19 @@ function DiagramEditor({
 									className="entity-relation-delete"
 									title="移除关联实体"
 									aria-label={`Remove connection for ${node.label}`}
-									onClick={() => removeEntityLink(node.id)}
+									onClick={async () => {
+										if (
+											await confirmAction({
+												title: "Remove entity connection?",
+												description: `${node.label} → ${entity.name}\n\nThis removes the node connection and associated edge references, not the entity. Restore it from Changes if needed.`,
+												confirmLabel: "Remove connection",
+												tone: "warning",
+											})
+										)
+											removeEntityLink(node.id);
+									}}
 								>
-									<Trash2 size={13} />
+									<Trash2 size={13} /> {t("Remove connection")}
 								</button>
 							</span>
 						</div>
@@ -1269,26 +1419,45 @@ function DiagramEditor({
 						</div>
 					</div>
 				)}
+				{connectionError && (
+					<p className="field-error" role="alert">
+						{connectionError}
+					</p>
+				)}
 			</section>
 			<label className="form-label">
 				Mermaid source
 				<textarea
 					required
+					disabled={saving}
+					aria-invalid={Boolean(saveError)}
+					aria-describedby={saveError ? "diagram-source-error" : undefined}
 					spellCheck={false}
 					className="field mt-1 min-h-52 font-mono text-xs"
 					value={draft.mermaidSource}
 					onChange={(event) => setDraft({ ...draft, mermaidSource: event.target.value })}
 				/>
 			</label>
+			{saveError && (
+				<p id="diagram-source-error" className="field-error" role="alert">
+					{saveError}
+				</p>
+			)}
+			{saved && (
+				<p role="status" className="text-xs text-secondary">
+					Diagram saved.
+				</p>
+			)}
 			<p className="text-xs text-secondary">
 				{draft.nodes.length} indexed nodes · {draft.edges.length} indexed edges
 			</p>
 			<button
 				type="submit"
 				className="command-button w-full justify-center"
-				disabled={!draft.mermaidSource.trim()}
+				disabled={saving}
+				aria-busy={saving}
 			>
-				Save Mermaid diagram
+				{saving ? "Saving…" : "Save Mermaid diagram"}
 			</button>
 		</form>
 	);

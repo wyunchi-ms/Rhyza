@@ -610,6 +610,49 @@ html[data-theme] .settings-page .pi-plugin-warning {
 
 .settings-page .pi-plugin-source-row {
 	align-items: stretch;
+	gap: 0.5rem;
+}
+
+html[data-theme] .settings-page .settings-icon-action {
+	display: inline-flex;
+	width: 2.5rem;
+	height: 2.5rem;
+	min-width: 2.5rem;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 1px solid var(--ui-border);
+	border-radius: 6px;
+	background: var(--color-surface);
+	color: var(--color-secondary);
+}
+
+html[data-theme] .settings-page .settings-icon-action:hover:not(:disabled) {
+	border-color: var(--ui-brand-border);
+	background: var(--ui-hover);
+	color: var(--color-primary);
+}
+
+.settings-page .pi-plugin-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin-top: 0.3rem;
+}
+
+html[data-theme] .settings-page .pi-plugin-badges .status-badge {
+	padding: 0.15rem 0.4rem;
+	font-size: 0.6875rem;
+	font-weight: 500;
+	line-height: 1.4;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+html[data-theme] .settings-page .pi-plugin-badges .status-success {
+	background: var(--ui-status-positive-surface);
+	color: var(--ui-status-positive-ink);
 }
 
 .settings-page .pi-plugin-install > .secondary-button {

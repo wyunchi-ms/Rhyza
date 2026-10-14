@@ -1,5 +1,5 @@
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
-import { isRecord } from "./value.js";
+import { FieldValidationError, isRecord } from "./value.js";
 
 export type McpScope = "user" | "project";
 export type McpExposure = "deferred" | "direct" | "hidden";
@@ -70,10 +70,13 @@ export interface McpEvent {
 
 export function validateMcpTarget(value: unknown): McpTarget {
 	if (!isRecord(value) || !["user", "project"].includes(String(value.scope))) {
-		throw new Error("Choose a user or project MCP configuration.");
+		throw new FieldValidationError("scope", "Choose a user or project MCP configuration.");
 	}
 	if (typeof value.name !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.name)) {
-		throw new Error("Use letters, numbers, underscores or hyphens for the server name.");
+		throw new FieldValidationError(
+			"name",
+			"Use letters, numbers, underscores or hyphens for the server name.",
+		);
 	}
 	return { scope: value.scope as McpScope, name: value.name };
 }
@@ -85,20 +88,22 @@ function requireText(value: unknown, label: string, max = 4096): string {
 		value.length > max ||
 		/[\u0000-\u001f\u007f]/.test(value)
 	) {
-		throw new Error(`Invalid MCP ${label}.`);
+		throw new FieldValidationError(label, `Invalid MCP ${label}.`);
 	}
 	return value;
 }
 
 function stringMap(value: unknown, label: string): Record<string, string> | undefined {
 	if (value === undefined) return undefined;
-	if (!isRecord(value) || Object.keys(value).length > 100) throw new Error(`Invalid MCP ${label}.`);
+	if (!isRecord(value) || Object.keys(value).length > 100)
+		throw new FieldValidationError(label, `Invalid MCP ${label}.`);
 	const result: Record<string, string> = Object.create(null);
 	for (const [key, item] of Object.entries(value)) {
 		requireText(key, label, 200);
 		const text = requireText(item, label, 8192);
 		if (text.startsWith("!")) {
-			throw new Error(
+			throw new FieldValidationError(
+				label,
 				"MCP command-valued secrets are not supported. Use ${ENVIRONMENT_VARIABLE} instead.",
 			);
 		}
@@ -113,7 +118,7 @@ function requireUrl(value: unknown, label: string, callback = false): string {
 	try {
 		url = new URL(text);
 	} catch {
-		throw new Error(`Invalid MCP ${label} URL.`);
+		throw new FieldValidationError(label, `Invalid MCP ${label} URL.`);
 	}
 	const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 	if (
@@ -124,7 +129,8 @@ function requireUrl(value: unknown, label: string, callback = false): string {
 			? url.protocol !== "http:" || !loopback
 			: url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
 	) {
-		throw new Error(
+		throw new FieldValidationError(
+			label,
 			`MCP ${label} requires HTTPS, or HTTP on a loopback address without embedded credentials.`,
 		);
 	}
@@ -166,7 +172,7 @@ export function validateMcpConfig(value: unknown): McpServerConfig {
 			value.timeout < 1 ||
 			value.timeout > 600)
 	) {
-		throw new Error("MCP timeout must be between 1 and 600 seconds.");
+		throw new FieldValidationError("timeout", "MCP timeout must be between 1 and 600 seconds.");
 	}
 	const toolExposure: Record<string, McpExposure> = Object.create(null);
 	if (value.toolExposure !== undefined) {
@@ -200,7 +206,8 @@ export function validateMcpConfig(value: unknown): McpServerConfig {
 		}
 		let oauth: Extract<McpServerConfig, { url: string }>["oauth"];
 		if (value.oauth !== undefined) {
-			if (!isRecord(value.oauth)) throw new Error("Invalid MCP OAuth settings.");
+			if (!isRecord(value.oauth))
+				throw new FieldValidationError("oauth", "Invalid MCP OAuth settings.");
 			const fields = new Set([
 				"clientId",
 				"clientSecret",
@@ -211,20 +218,24 @@ export function validateMcpConfig(value: unknown): McpServerConfig {
 				"authServerMetadataUrl",
 			]);
 			for (const key of Object.keys(value.oauth)) {
-				if (!fields.has(key)) throw new Error(`Unsupported OAuth field: ${key}.`);
+				if (!fields.has(key))
+					throw new FieldValidationError("oauth", `Unsupported OAuth field: ${key}.`);
 			}
 			oauth = {};
 			for (const key of ["clientId", "clientSecret", "scope", "clientName"] as const) {
 				if (value.oauth[key] !== undefined) {
 					oauth[key] = requireText(value.oauth[key], `OAuth ${key}`);
 					if (oauth[key]?.startsWith("!"))
-						throw new Error("Use an environment variable for OAuth secrets.");
+						throw new FieldValidationError(
+							"oauth",
+							"Use an environment variable for OAuth secrets.",
+						);
 				}
 			}
 			if (value.oauth.callbackPort !== undefined) {
 				const port = value.oauth.callbackPort;
 				if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535)
-					throw new Error("Invalid OAuth callback port.");
+					throw new FieldValidationError("oauth", "Invalid OAuth callback port.");
 				oauth.callbackPort = port;
 			}
 			if (value.oauth.callbackUrl !== undefined)
@@ -258,7 +269,7 @@ export function validateMcpConfig(value: unknown): McpServerConfig {
 				(arg) => typeof arg !== "string" || arg.length > 4096 || /[\u0000-\u001f\u007f]/.test(arg),
 			))
 	) {
-		throw new Error("MCP arguments must be an array of strings.");
+		throw new FieldValidationError("args", "MCP arguments must be an array of strings.");
 	}
 	return {
 		...base,

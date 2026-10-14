@@ -74,7 +74,12 @@ interface SummaryJunctionData {
 
 const nodeTypes = { session: SessionGraphNode, summaryJunction: SummaryJunctionNode };
 const edgeTypes = { conversation: ConversationPathEdge };
-const edgeArrow = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#a5b4fc" };
+const edgeArrow = {
+	type: MarkerType.ArrowClosed,
+	width: 14,
+	height: 14,
+	color: "var(--color-secondary)",
+};
 
 export function SessionGraph({
 	viewControl,
@@ -337,7 +342,7 @@ export function SessionGraph({
 						elementsSelectable
 						proOptions={{ hideAttribution: true }}
 					>
-						<Background color="#a5b4fc" gap={22} size={1} />
+						<Background color="var(--ui-border)" gap={22} size={1} />
 						<Controls
 							showInteractive={false}
 							onZoomIn={interrupt}
@@ -349,7 +354,9 @@ export function SessionGraph({
 							style={{ width: 100, height: 70 }}
 							pannable
 							zoomable
-							nodeColor={(node) => (node.id === activeRoundId ? "#8b5cf6" : "#a5b4fc")}
+							nodeColor={(node) =>
+								node.id === activeRoundId ? "var(--ui-brand-accent)" : "var(--color-secondary)"
+							}
 							maskColor="rgb(238 242 255 / 76%)"
 						/>
 					</ReactFlow>

@@ -16,6 +16,7 @@ export function SourceRemovalDialog({
 }) {
 	const { t } = useTranslation();
 	const dialogRef = useRef<HTMLDialogElement>(null);
+	const cancelRef = useRef<HTMLButtonElement>(null);
 	const removingRef = useRef(false);
 	const [removing, setRemoving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function SourceRemovalDialog({
 			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		const dialog = dialogRef.current;
 		dialog?.showModal();
+		cancelRef.current?.focus({ preventScroll: true });
 		return () => {
 			dialog?.close();
 			previousFocus?.focus();
@@ -98,7 +100,13 @@ export function SourceRemovalDialog({
 				)}
 			</div>
 			<footer className="source-removal-footer">
-				<button type="button" className="secondary-button" disabled={removing} onClick={close}>
+				<button
+					ref={cancelRef}
+					type="button"
+					className="secondary-button"
+					disabled={removing}
+					onClick={close}
+				>
 					{t("Cancel")}
 				</button>
 				<button

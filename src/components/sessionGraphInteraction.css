@@ -19,9 +19,9 @@
 .session-graph-node > .graph-runtime-compact:hover,
 .session-graph-node > .graph-runtime-compact:focus-visible,
 .session-graph-node > .graph-runtime-compact[aria-expanded="true"] {
-	background: rgb(139 92 246 / 8%);
+	background: var(--ui-brand-soft);
 }
 .session-graph-node > .graph-runtime-compact:focus-visible {
-	outline: 2px solid #a78bfa;
+	outline: 2px solid var(--ui-brand-accent);
 	outline-offset: -2px;
 }

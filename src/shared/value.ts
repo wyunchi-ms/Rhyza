@@ -6,3 +6,13 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function errorToMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
+
+export class FieldValidationError extends Error {
+	constructor(
+		public readonly field: string,
+		message: string,
+	) {
+		super(message);
+		this.name = "FieldValidationError";
+	}
+}

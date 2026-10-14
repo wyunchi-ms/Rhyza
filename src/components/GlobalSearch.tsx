@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
 import type { SessionNode, Turn } from "../types";
 import { useTranslation } from "../i18n";
+import { useModalDialog } from "../hooks/useModalDialog";
 
 interface GlobalSearchResult {
 	session: SessionNode;
@@ -21,6 +22,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 	const [activeIndex, setActiveIndex] = useState(0);
 	const deferredQuery = useDeferredValue(query);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const dialogRef = useModalDialog(open, onClose, inputRef);
 	const navigate = useNavigate();
 	const results = useMemo(
 		() => buildGlobalResults(deferredQuery, sessions, turns),
@@ -30,18 +32,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 	useEffect(() => {
 		if (!open) return;
 		setActiveIndex(0);
-		const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
-		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			onClose();
-		};
-		window.addEventListener("keydown", closeOnEscape);
-		return () => {
-			window.cancelAnimationFrame(frame);
-			window.removeEventListener("keydown", closeOnEscape);
-		};
-	}, [onClose, open]);
+	}, [open]);
 
 	useEffect(() => {
 		setActiveIndex((current) => Math.min(current, Math.max(0, results.length - 1)));
@@ -70,8 +61,9 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 				if (event.target === event.currentTarget) onClose();
 			}}
 		>
-			<section
-				className="global-search-dialog"
+			<dialog
+				ref={dialogRef}
+				className="ui-modal-dialog global-search-dialog"
 				role="dialog"
 				aria-modal="true"
 				aria-label={t("Search all chats")}
@@ -157,8 +149,12 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 					{results.length === 0 && (
 						<div className="global-search-empty">
 							<Search size={22} />
-							<strong>{t("No matching chats")}</strong>
-							<span>{t("Try fewer words or a shorter spelling.")}</span>
+							<strong>{query.trim() ? t("No matching chats") : t("No chats yet")}</strong>
+							<span>
+								{query.trim()
+									? t("Try fewer words or a shorter spelling.")
+									: t("Start a chat to search your conversation history.")}
+							</span>
 						</div>
 					)}
 				</div>
@@ -174,7 +170,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
 						<kbd>Esc</kbd> {t("Close")}
 					</span>
 				</footer>
-			</section>
+			</dialog>
 		</div>
 	);
 }

@@ -36,6 +36,8 @@ const Sources = () => {
 	const [hits, setHits] = useState<SourceSearchHit[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [sourceLoadError, setSourceLoadError] = useState<string | null>(null);
+	const [sourceReload, setSourceReload] = useState(0);
 	const [searching, setSearching] = useState(false);
 	const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
 	const [searchError, setSearchError] = useState<string | null>(null);
@@ -60,13 +62,14 @@ const Sources = () => {
 		}
 		let cancelled = false;
 		setLoading(true);
+		setSourceLoadError(null);
 		void bridge
 			.sourceList()
 			.then((items) => {
 				if (!cancelled) syncSources(items);
 			})
 			.catch((reason) => {
-				if (!cancelled) setError(String(reason));
+				if (!cancelled) setSourceLoadError(errorToMessage(reason));
 			})
 			.finally(() => {
 				if (!cancelled) setLoading(false);
@@ -74,7 +77,7 @@ const Sources = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [syncSources, workspacePath]);
+	}, [syncSources, workspacePath, sourceReload]);
 
 	useEffect(() => {
 		const bridge = getRhyzaBridge();
@@ -320,6 +323,19 @@ const Sources = () => {
 					aria-labelledby="sources-catalog-title"
 					aria-busy={loading}
 				>
+					{sourceLoadError && (
+						<div className="library-feedback is-error" role="alert">
+							<p>{sourceLoadError}</p>
+							<button
+								type="button"
+								className="secondary-button"
+								disabled={loading}
+								onClick={() => setSourceReload((value) => value + 1)}
+							>
+								{t("Retry")}
+							</button>
+						</div>
+					)}
 					<div className="library-section-heading">
 						<h2 id="sources-catalog-title">
 							{t("Sources")} <span className="library-count">{activeSources.length}</span>
@@ -436,11 +452,21 @@ const Sources = () => {
 							<span className="library-empty-icon" aria-hidden="true">
 								<FolderGit2 size={24} />
 							</span>
-							<h2>{loading ? t("Loading sources…") : t("No sources yet")}</h2>
+							<h2>
+								{loading
+									? t("Loading sources…")
+									: sourceLoadError
+										? t("Could not load sources")
+										: t("No sources yet")}
+							</h2>
 							<p>
 								{loading
 									? t("Reading the workspace index.")
-									: t("Add a repository or documentation folder to build the workspace index.")}
+									: sourceLoadError
+										? t(
+												"Retry reading the workspace index. Existing sources have not been removed.",
+											)
+										: t("Add a repository or documentation folder to build the workspace index.")}
 							</p>
 						</div>
 					)}

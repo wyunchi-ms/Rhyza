@@ -6,7 +6,7 @@ import {
 	parseAzureOpenAISettings,
 	type AzureOpenAISettingsInput,
 } from "../shared/providers";
-import { errorToMessage } from "../shared/value";
+import { errorToMessage, FieldValidationError } from "../shared/value";
 import { useAppStore } from "../store";
 
 function selectDeployment(config: AzureOpenAIConfig | null) {
@@ -41,6 +41,9 @@ export function AzureOpenAISettings({
 	const [loaded, setLoaded] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<
+		Partial<Record<keyof AzureOpenAISettingsInput, string>>
+	>({});
 	const [readError, setReadError] = useState<string | null>(null);
 	const [saved, setSaved] = useState(false);
 	const [readAttempt, setReadAttempt] = useState(0);
@@ -60,6 +63,7 @@ export function AzureOpenAISettings({
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
+		setFieldErrors({});
 		void bridge.azureOpenAIConfigGet().then(
 			(config) => {
 				if (cancelled) return;
@@ -99,6 +103,7 @@ export function AzureOpenAISettings({
 		setDraft((current) => ({ ...current, [key]: value }));
 		setSaved(false);
 		setError(null);
+		setFieldErrors((current) => ({ ...current, [key]: undefined }));
 	};
 
 	const save = async () => {
@@ -109,7 +114,19 @@ export function AzureOpenAISettings({
 		try {
 			config = parseAzureOpenAISettings(draft);
 		} catch (reason) {
-			setError(errorToMessage(reason));
+			const field =
+				reason instanceof FieldValidationError
+					? (
+							["endpoint", "deployment", "subscriptionId", "contextWindow", "maxTokens"] as const
+						).find((key) => key === reason.field)
+					: undefined;
+			if (field) {
+				setFieldErrors({ [field]: errorToMessage(reason) });
+				const input = document.getElementById(`azure-${field}`);
+				const details = input?.closest("details");
+				if (details) details.open = true;
+				input?.focus();
+			} else setError(errorToMessage(reason));
 			return;
 		}
 		savePending.current = true;
@@ -176,17 +193,25 @@ export function AzureOpenAISettings({
 							{help}
 						</p>
 					</div>
-					<input
-						id={`azure-${key}`}
-						type="text"
-						required
-						value={draft[key]}
-						onChange={(event) => updateDraft(key, event.target.value)}
-						placeholder={placeholder}
-						aria-describedby={`azure-${key}-help`}
-						disabled={disabled}
-						className="field settings-input"
-					/>
+					<div>
+						<input
+							id={`azure-${key}`}
+							type="text"
+							required
+							value={draft[key]}
+							onChange={(event) => updateDraft(key, event.target.value)}
+							placeholder={placeholder}
+							aria-invalid={Boolean(fieldErrors[key])}
+							aria-describedby={`azure-${key}-help${fieldErrors[key] ? ` azure-${key}-error` : ""}`}
+							disabled={disabled}
+							className="field settings-input"
+						/>
+						{fieldErrors[key] && (
+							<p id={`azure-${key}-error`} className="field-error" role="alert">
+								{fieldErrors[key]}
+							</p>
+						)}
+					</div>
 				</div>
 			))}
 			<details className="settings-inset">
@@ -205,18 +230,27 @@ export function AzureOpenAISettings({
 						<label htmlFor={`azure-${key}`} className="settings-label">
 							{label}
 						</label>
-						<input
-							id={`azure-${key}`}
-							type="number"
-							min={min}
-							max={max}
-							step={1}
-							required
-							value={draft[key]}
-							onChange={(event) => updateDraft(key, event.target.value)}
-							disabled={disabled}
-							className="field settings-input"
-						/>
+						<div>
+							<input
+								id={`azure-${key}`}
+								type="number"
+								min={min}
+								max={max}
+								step={1}
+								required
+								value={draft[key]}
+								aria-invalid={Boolean(fieldErrors[key])}
+								aria-describedby={fieldErrors[key] ? `azure-${key}-error` : undefined}
+								onChange={(event) => updateDraft(key, event.target.value)}
+								disabled={disabled}
+								className="field settings-input"
+							/>
+							{fieldErrors[key] && (
+								<p id={`azure-${key}-error`} className="field-error" role="alert">
+									{fieldErrors[key]}
+								</p>
+							)}
+						</div>
 					</div>
 				))}
 			</details>

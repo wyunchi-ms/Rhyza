@@ -43,6 +43,7 @@ export function TurnInspectorPanel({
 	const [requestIndex, setRequestIndex] = useState(0);
 	const [analysis, setAnalysis] = useState<ContextRotAnalysis | null>(null);
 	const [copied, setCopied] = useState<"context" | "wire" | null>(null);
+	const [copyError, setCopyError] = useState<string | null>(null);
 	const request = turn.modelRequests?.[requestIndex];
 	const composition = useMemo(
 		() => (request ? analyzeContextComposition(request) : undefined),
@@ -62,14 +63,17 @@ export function TurnInspectorPanel({
 		setRequestIndex(0);
 		setAnalysis(null);
 		setCopied(null);
+		setCopyError(null);
 	}, [turn.id]);
 	const copyJson = async (kind: "context" | "wire", value: unknown) => {
+		setCopyError(null);
 		try {
 			await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 			setCopied(kind);
 			window.setTimeout(() => setCopied((current) => (current === kind ? null : current)), 1_500);
 		} catch (error) {
 			console.warn(`Could not copy ${kind} JSON`, error);
+			setCopyError(error instanceof Error ? error.message : String(error));
 		}
 	};
 	return (
@@ -84,6 +88,11 @@ export function TurnInspectorPanel({
 				</button>
 			</header>
 			<div className="turn-inspector-scroll">
+				{copyError && (
+					<p className="field-error" role="alert">
+						Could not copy: {copyError}
+					</p>
+				)}
 				{view === "context" ? (
 					<>
 						<section className="inspector-section">
@@ -470,14 +479,17 @@ function ContextGrowthChart({
 						? resident
 						: request.usage
 							? request.usage.input + request.usage.cacheWrite
-							: 0,
+							: null,
 				contextWindow: request.contextWindow,
 			};
 		}),
 	);
 	if (!points.length)
 		return <p className="inspector-empty">No call-level context history recorded yet.</p>;
-	const peak = Math.max(...points.map((point) => point.value));
+	const peak = Math.max(
+		0,
+		...points.flatMap((point) => (point.value === null ? [] : [point.value])),
+	);
 	const latest = points[points.length - 1];
 	const latestTurnRequests = turns[turns.length - 1]?.modelRequests;
 	const latestUsage = latestTurnRequests?.[latestTurnRequests.length - 1]?.usage;
@@ -487,18 +499,20 @@ function ContextGrowthChart({
 			<LineChart
 				points={points.map((point) => ({
 					...point,
-					label: `Round ${point.round}, call ${point.call}: ${formatTokens(point.value)}${point.estimated ? " estimated" : ""}`,
+					label: `Round ${point.round}, call ${point.call}: ${point.value === null ? "Not recorded" : `${formatTokens(point.value)}${point.estimated ? " estimated" : ""}`}`,
 				}))}
 				selectedId={selectedId}
 			/>
 			<div className="growth-summary">
 				<span>
 					<small>Latest</small>
-					<strong>{formatTokens(latest.value)}</strong>
+					<strong>{latest.value === null ? "Not recorded" : formatTokens(latest.value)}</strong>
 				</span>
 				<span>
 					<small>Peak</small>
-					<strong>{formatTokens(peak)}</strong>
+					<strong>
+						{points.some((point) => point.value !== null) ? formatTokens(peak) : "Not recorded"}
+					</strong>
 				</span>
 				<span>
 					<small>Latest cache hit</small>
@@ -570,15 +584,15 @@ function UsageChart({
 					id: turn.id,
 					turnId: turn.id,
 					round: index + 1,
-					value: usage ? (metric === "tokens" ? usageTokens(usage) : usage.cost) : 0,
-					label: `Round ${index + 1}: ${formatMetric(usage ? (metric === "tokens" ? usageTokens(usage) : usage.cost) : 0, metric)}`,
+					value: usage ? (metric === "tokens" ? usageTokens(usage) : usage.cost) : null,
+					label: `Round ${index + 1}: ${usage ? formatMetric(metric === "tokens" ? usageTokens(usage) : usage.cost, metric) : "Not recorded"}`,
 				};
 			}),
 		[turns, metric],
 	);
 	return (
 		<>
-			{points.length ? (
+			{points.some((point) => point.value !== null) ? (
 				<LineChart points={points} selectedId={selectedId} />
 			) : (
 				<p className="inspector-empty">No assistant usage recorded.</p>
@@ -589,7 +603,9 @@ function UsageChart({
 					return (
 						<div key={point.id} className={point.turnId === selectedId ? "is-selected" : ""}>
 							<span>Round {point.round}</span>
-							<strong>{formatMetric(point.value, metric)}</strong>
+							<strong>
+								{point.value === null ? "Not recorded" : formatMetric(point.value, metric)}
+							</strong>
 							<small>{requestLabel(sourceTurn)}</small>
 						</div>
 					);
@@ -606,7 +622,7 @@ function LineChart({
 	points: Array<{
 		id: string;
 		turnId: string;
-		value: number;
+		value: number | null;
 		label: string;
 		contextWindow?: number;
 	}>;
@@ -616,12 +632,20 @@ function LineChart({
 	const height = 154;
 	const pad = 18;
 	const maxWindow = Math.max(0, ...points.map((point) => point.contextWindow ?? 0));
-	const max = Math.max(1, maxWindow ? maxWindow * 0.55 : 0, ...points.map((point) => point.value));
+	const max = Math.max(
+		1,
+		maxWindow ? maxWindow * 0.55 : 0,
+		...points.flatMap((point) => (point.value === null ? [] : [point.value])),
+	);
 	const x = (index: number) =>
 		points.length <= 1 ? width / 2 : pad + index * ((width - pad * 2) / (points.length - 1));
 	const y = (value: number) => height - pad - (value / max) * (height - pad * 2);
 	const path = points
-		.map((point, index) => `${index ? "L" : "M"}${x(index)},${y(point.value)}`)
+		.map((point, index) =>
+			point.value === null
+				? ""
+				: `${index && points[index - 1].value !== null ? "L" : "M"}${x(index)},${y(point.value)}`,
+		)
 		.join(" ");
 	const threshold = maxWindow ? y(maxWindow * 0.5) : undefined;
 	return (
@@ -642,14 +666,16 @@ function LineChart({
 				<path d={path} />
 				{points.map((point, index) => (
 					<g key={point.id}>
-						<circle
-							className={point.turnId === selectedId ? "is-selected" : ""}
-							cx={x(index)}
-							cy={y(point.value)}
-							r={point.turnId === selectedId ? 5 : 3.5}
-						>
-							<title>{point.label}</title>
-						</circle>
+						{point.value !== null && (
+							<circle
+								className={point.turnId === selectedId ? "is-selected" : ""}
+								cx={x(index)}
+								cy={y(point.value)}
+								r={point.turnId === selectedId ? 5 : 3.5}
+							>
+								<title>{point.label}</title>
+							</circle>
+						)}
 						<text x={x(index)} y={height - 3} textAnchor="middle">
 							{index + 1}
 						</text>

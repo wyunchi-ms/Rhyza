@@ -4,6 +4,7 @@ import type { SessionNode, Turn } from "../types";
 import { buildTurnSessionMap, turnAtViewportRegion } from "../utils/sessionVisibility";
 import { announceBranchSwitchEnd } from "../utils/branchSwitch";
 import { recordPerformanceTiming } from "../utils/performanceMarks";
+import { useAppStore } from "../store";
 
 /** Coordinates the conversation viewport, keyboard cursor, and tree viewport marker. */
 export function useConversationNavigation(
@@ -13,6 +14,11 @@ export function useConversationNavigation(
 ) {
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 	const focus = useConversationFocus();
+	const reduceMotion = useAppStore((state) => state.settings.reduceMotion);
+	const scrollBehavior = (): ScrollBehavior =>
+		reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+			? "auto"
+			: "smooth";
 	const focusedTurnId = focus.sessionId === activeSessionId ? focus.turnId : null;
 	const setFocusedTurnId = useCallback(
 		(id: string | null) => {
@@ -72,13 +78,13 @@ export function useConversationNavigation(
 			if (!turnId) return;
 			const turn = document.getElementById(`turn-${turnId}`);
 			if (!turn) return;
-			turn.scrollIntoView({ behavior: "smooth", block: "center" });
+			turn.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 			setFocusedTurnId(turnId);
 			window.sessionStorage.removeItem("rhyza-focus-turn");
 		};
 		window.addEventListener("rhyza:focus-turn", focusTurn);
 		return () => window.removeEventListener("rhyza:focus-turn", focusTurn);
-	}, [setFocusedTurnId]);
+	}, [setFocusedTurnId, reduceMotion]);
 
 	const moveKeyboardTurn = useCallback(
 		(direction: -1 | 1) => {
@@ -94,9 +100,9 @@ export function useConversationNavigation(
 			setFocusedTurnId(nextTurn.id);
 			document
 				.getElementById(`turn-${nextTurn.id}`)
-				?.scrollIntoView({ behavior: "smooth", block: "center" });
+				?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 		},
-		[focusedTurnId, sessionTurns, setFocusedTurnId],
+		[focusedTurnId, sessionTurns, setFocusedTurnId, reduceMotion],
 	);
 
 	return {

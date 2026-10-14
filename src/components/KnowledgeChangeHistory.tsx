@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store";
 import type { ChangeSet } from "../types";
 import { Select } from "./Select";
+import { useModalDialog } from "../hooks/useModalDialog";
 
 export function KnowledgeChangeHistory({ objectId }: { objectId?: string }) {
 	const { changesets, undoChangeSet, acceptChangeSet, rejectChangeSet } = useAppStore();
@@ -85,7 +86,17 @@ export function KnowledgeChangeHistory({ objectId }: { objectId?: string }) {
 										</p>
 									</div>
 									<div className="text-right shrink-0">
-										<span className="status-badge status-progress">
+										<span
+											className={`status-badge ${
+												change.status === "committed"
+													? "status-success"
+													: change.status === "proposed"
+														? "status-progress"
+														: change.status === "superseded"
+															? "status-warning"
+															: "status-neutral"
+											}`}
+										>
 											{change.status === "superseded" ? "rejected" : change.status}
 										</span>
 										<p className="text-xs text-gray-400 mt-2">
@@ -196,19 +207,7 @@ export function KnowledgeChangeHistoryDialog({
 	onClose: () => void;
 }) {
 	const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-	useEffect(() => {
-		const previouslyFocused =
-			document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		closeButtonRef.current?.focus();
-		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", closeOnEscape);
-		return () => {
-			window.removeEventListener("keydown", closeOnEscape);
-			previouslyFocused?.focus();
-		};
-	}, [onClose]);
+	const dialogRef = useModalDialog(true, onClose, closeButtonRef);
 
 	return createPortal(
 		<div
@@ -218,8 +217,9 @@ export function KnowledgeChangeHistoryDialog({
 				if (event.target === event.currentTarget) onClose();
 			}}
 		>
-			<section
-				className="knowledge-preview-dialog knowledge-change-history-dialog"
+			<dialog
+				ref={dialogRef}
+				className="ui-modal-dialog knowledge-preview-dialog knowledge-change-history-dialog"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby={`change-history-title-${objectId}`}
@@ -241,7 +241,7 @@ export function KnowledgeChangeHistoryDialog({
 					</button>
 				</header>
 				<KnowledgeChangeHistory objectId={objectId} />
-			</section>
+			</dialog>
 		</div>,
 		document.body,
 	);

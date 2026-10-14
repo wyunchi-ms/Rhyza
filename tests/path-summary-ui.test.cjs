@@ -426,12 +426,20 @@ if (!process.versions.electron) {
 			["r2", "u3"],
 			"only the selected summary's source nodes are highlighted",
 		);
+		const brandAccent = await host(`(() => {
+			const element = document.createElement("span");
+			element.style.color = "var(--ui-brand-accent)";
+			document.body.append(element);
+			const color = getComputedStyle(element).color;
+			element.remove();
+			return color;
+		})()`);
 		assert.ok(
 			highlightedSources.every(
 				({ outline, color, width }) =>
-					outline === "dashed" && color === "rgb(139, 92, 246)" && width === "3px",
+					outline === "dashed" && color === brandAccent && width === "3px",
 			),
-			"source-node highlights use visible purple dashed outlines",
+			"source-node highlights use visible theme-accent dashed outlines",
 		);
 		await click(graphNode("r2"));
 		await until(
@@ -450,9 +458,9 @@ if (!process.versions.electron) {
 		})()`);
 		assert.ok(
 			ordinaryActiveAppearance.path.includes("C") &&
-				ordinaryActiveAppearance.stroke.startsWith("url(") &&
+				ordinaryActiveAppearance.stroke === brandAccent &&
 				ordinaryActiveAppearance.arrow.startsWith("url("),
-			"selected normal links use a curved gradient and arrowhead",
+			"selected normal links use a static theme accent, curve and arrowhead",
 		);
 		await click(graphNode(summaryRoundId));
 		await until(
@@ -505,14 +513,14 @@ if (!process.versions.electron) {
 					edgeAppearance.every(
 						({ length, stroke, width, filter, dash, arrow, curve }) =>
 							length > 0 &&
-							stroke.startsWith("url(") &&
+							stroke === brandAccent &&
 							width === ordinaryActiveAppearance.width &&
 							filter === ordinaryActiveAppearance.filter &&
 							dash !== "none" &&
 							(arrow === ordinaryActiveAppearance.arrow || arrow === 'url("#")') &&
 							curve,
 					),
-				`${orientation} provenance links reuse the curved gradient and arrow into the summary, but remain dashed: ${JSON.stringify(edgeAppearance)}`,
+				`${orientation} provenance links reuse the theme accent, curve and arrow into the summary, but remain dashed: ${JSON.stringify(edgeAppearance)}`,
 			);
 		}
 		await switchView();

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { FieldValidationError } from "../src/shared/value";
 import {
 	validateAgentPromptRequest,
 	validateAzureOpenAIConfig,
@@ -20,6 +21,22 @@ const azureConfig = {
 	deployment: "chat-deployment",
 	subscriptionId: "00000000-1111-2222-3333-444444444444",
 };
+
+test("Azure validation associates errors with the field that needs correction", () => {
+	for (const [field, value] of [
+		["endpoint", "https://example.com"],
+		["deployment", ""],
+		["subscriptionId", "invalid"],
+		["contextWindow", 0],
+		["maxTokens", 0],
+	] as const) {
+		assert.throws(
+			() => validateAzureOpenAIConfig({ ...azureConfig, [field]: value }),
+			(error: unknown) =>
+				error instanceof FieldValidationError && error.field === field && Boolean(error.message),
+		);
+	}
+});
 
 test("Azure configuration normalizes resource URLs and supplies local token budgets", () => {
 	const config = validateAzureOpenAIConfig(azureConfig);

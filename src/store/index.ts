@@ -28,6 +28,7 @@ import type {
 	Turn,
 } from "../types";
 import { createId } from "../utils/common";
+import { isMermaidSource } from "../utils/mermaidSource";
 import {
 	normalizeKnowledgeLabel as normalizeLabel,
 	reconcileKnowledgeGraph,
@@ -829,10 +830,14 @@ export const useAppStore = create<AppState>()(
 				})),
 
 			saveEntity: (entity) => {
+				if (!entity.name.trim()) throw new Error("Enter an entity name.");
+				if (!entity.type.trim()) throw new Error("Enter an entity type.");
 				const state = get();
 				const before = state.entities.find((item) => item.id === entity.id);
 				const after = {
 					...entity,
+					name: entity.name.trim(),
+					type: entity.type.trim(),
 					version: (before?.version ?? 0) + 1,
 					updatedAt: new Date().toISOString(),
 				};
@@ -1022,12 +1027,15 @@ export const useAppStore = create<AppState>()(
 			},
 			saveDiagram: (diagram) => {
 				const before = get().diagrams.find((item) => item.id === diagram.id);
-				if (!before || before.deletedAt || !isMermaidSource(diagram.mermaidSource)) return;
+				if (!before || before.deletedAt) throw new Error("This diagram is no longer available.");
+				if (!diagram.name.trim()) throw new Error("Enter a diagram name.");
+				if (!isMermaidSource(diagram.mermaidSource))
+					throw new Error("Start the source with a supported Mermaid diagram declaration.");
 				const timestamp = new Date().toISOString();
 				const normalizedDiagram = diagram;
 				const after: Diagram = {
 					...normalizedDiagram,
-					name: normalizedDiagram.name.trim() || before.name,
+					name: normalizedDiagram.name.trim(),
 					version: before.version + 1,
 					updatedAt: timestamp,
 					versions: [
@@ -1540,20 +1548,6 @@ function dedupeSourceRefs(sourceRefs: SourceRef[]): SourceRef[] {
 
 function migrateMermaidDiagrams(diagrams: Diagram[]): Diagram[] {
 	return diagrams.filter((diagram) => isMermaidSource(diagram.mermaidSource));
-}
-
-function isMermaidSource(source: unknown): source is string {
-	if (typeof source !== "string") return false;
-	const firstLine = source
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.find((line) => line && !line.startsWith("%%"));
-	return Boolean(
-		firstLine &&
-		/^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|gitGraph|C4\w*)\b/i.test(
-			firstLine,
-		),
-	);
 }
 
 function manualChangeSet(operation: ChangeOperation): ChangeSet {

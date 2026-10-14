@@ -1,3 +1,32 @@
+.ui-modal-dialog {
+	position: fixed;
+	inset: 0;
+	margin: auto;
+	padding: 0;
+	max-width: calc(100vw - 2rem);
+	max-height: calc(100dvh - 2rem);
+	color: var(--color-primary);
+	pointer-events: auto;
+}
+
+.ui-modal-dialog::backdrop {
+	background: rgb(20 30 35 / 48%);
+	backdrop-filter: blur(3px);
+}
+
+html[data-theme]
+	:is(
+		.global-search-backdrop,
+		.knowledge-preview-backdrop,
+		.html-preview-backdrop,
+		.mermaid-preview-backdrop,
+		.json-preview-backdrop
+	):has(> .ui-modal-dialog) {
+	background: transparent;
+	backdrop-filter: none;
+	pointer-events: none;
+}
+
 .confirmation-dialog {
 	width: min(28rem, calc(100vw - 2rem));
 	max-height: calc(100dvh - 2rem);
