@@ -4,6 +4,10 @@
 
 本页只记录需要跨组件或跨进程维护的契约，不复述组件实现，也不把内部 React props 当作对外稳定 API。
 
+## 共享选择器
+
+`src/components/Select.tsx` 保留原生 select 的受控值与 change 事件，实际交互入口为可被 label 关联的按钮。`className` 应用于按钮，`style` 应用于外层；带 `field` 的选择器通过 `src/components/overlays.css` 将外层设为全宽块级网格，并使用表单输入的字号与内边距。页面专用设置样式仍可覆盖尺寸；显式外层宽度（如历史筛选的 160px）保持有效，不带 `field` 的检查器选择器保持紧凑。标签样式不得把 `.ui-select` 当作说明文字，浮层与键盘契约不随表单布局改变。
+
 ## 设置页组件
 
 `src/pages/Settings.tsx` 负责选择当前分区、Store 更新和 Provider 操作；工作区选择只在 `src/pages/Sources.tsx`。`src/pages/settings/SettingsNavigation.tsx` 负责返回入口、搜索框和分区按钮。`SettingsNavigation` 接收 `query`、`selectedSection`、`visibleCategories`，以及 `onQueryChange` / `onSelect` 回调。分类 ID 与分区标题的 `id` 必须一一对应；搜索只保留匹配分类，点击分类不修改 `HashRouter` 路由。右侧只显示当前分区，并在切换时回到内容顶部。

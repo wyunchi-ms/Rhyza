@@ -6,6 +6,7 @@ import test from "node:test";
 import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import {
 	fauxAssistantMessage,
+	fauxToolCall,
 	fauxProvider,
 	getCurrentSystemPrompt,
 	getCurrentTools,
@@ -17,6 +18,127 @@ import { PiService } from "../electron/main/pi-service.js";
 import { summaryCompletionMarker, summarySystemPrompt } from "../electron/main/path-summary.js";
 import type { AgentBridgeEvent } from "../src/shared/ipc.js";
 import { parseTodoChecklist } from "../electron/main/todo-service.js";
+import { WorktreeService } from "../electron/main/worktree-service.js";
+
+test("non-Git Pi chats read and edit live TODO files, while read-only and failed Git sessions exclude write tools", async (t) => {
+	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-pi-directory-write-"));
+	const agentDir = path.join(directory, "agent");
+	const workspace = path.join(directory, "notes");
+	await Promise.all([mkdir(agentDir), mkdir(workspace)]);
+	const runtime = await ModelRuntime.create({
+		authPath: path.join(agentDir, "auth.json"),
+		modelsPath: path.join(agentDir, "models.json"),
+		modelsStorePath: path.join(agentDir, "models-store.json"),
+		allowModelNetwork: false,
+	});
+	const faux = fauxProvider({
+		provider: "github-copilot",
+		api: "openai-responses",
+		models: [{ id: "directory-fixture" }],
+	});
+	runtime.registerNativeProvider(faux.provider);
+	t.mock.method(ModelRuntime, "create", async () => runtime);
+	t.mock.method(CodexAppServer.prototype, "account", async () => null);
+	const service = new PiService(directory, undefined, undefined, agentDir);
+	try {
+		await writeFile(path.join(workspace, "TODO.md"), "- [x] First task\n- [ ] Second task\n");
+		faux.setResponses([
+			(context) => {
+				const tools = getCurrentTools(context.messages).map((tool) => tool.name);
+				for (const name of ["read", "edit", "write", "bash"]) assert(tools.includes(name));
+				return fauxAssistantMessage(fauxToolCall("read", { path: "TODO.md" }), {
+					stopReason: "toolUse",
+				});
+			},
+			(context) => {
+				const readResult = [...context.messages]
+					.reverse()
+					.find((message) => message.role === "toolResult");
+				assert(readResult);
+				assert.match(JSON.stringify(readResult.content), /\[x\] First task/);
+				assert.match(JSON.stringify(readResult.content), /\[ \] Second task/);
+				return fauxAssistantMessage(
+					fauxToolCall("edit", {
+						path: "TODO.md",
+						oldText: "- [ ] Second task",
+						newText: "- [x] Second task",
+					}),
+					{ stopReason: "toolUse" },
+				);
+			},
+			fauxAssistantMessage("Saved both completed tasks"),
+		]);
+		const request = {
+			frontendSessionId: "directory-chat",
+			frontendTurnId: "directory-turn",
+			transcript: [],
+			prompt: "Read the current TODO and mark the second task complete.",
+			model: { providerId: "github-copilot" as const, modelId: "directory-fixture" },
+			writable: true,
+		};
+		const result = await service.promptAgent(request, workspace);
+		assert.equal(result.ok, true, result.error);
+		assert.equal(result.workspacePath, workspace);
+		assert.equal(result.isolated, false);
+		assert.equal(
+			await readFile(path.join(workspace, "TODO.md"), "utf8"),
+			"- [x] First task\n- [x] Second task\n",
+		);
+		assert.equal(
+			(await service.getWorkspaceTodos(request.frontendSessionId, workspace)).completed,
+			2,
+		);
+
+		const readOnlyReply: FauxResponseFactory = (context) => {
+			assert.deepEqual(
+				getCurrentTools(context.messages)
+					.map((tool) => tool.name)
+					.sort(),
+				["find", "grep", "ls", "read"],
+			);
+			assert.match(getCurrentSystemPrompt(context.messages), /read-only session/);
+			return fauxAssistantMessage("Read-only");
+		};
+		faux.setResponses([readOnlyReply]);
+		assert.equal(
+			(
+				await service.promptAgent(
+					{ ...request, frontendTurnId: "readonly-turn", writable: false },
+					workspace,
+				)
+			).ok,
+			true,
+		);
+		t.mock.method(WorktreeService.prototype, "resolveSessionWorkspace", async () => ({
+			path: workspace,
+			isolated: false,
+			writable: false,
+		}));
+		faux.setResponses([readOnlyReply]);
+		assert.equal(
+			(
+				await service.promptAgent(
+					{ ...request, frontendSessionId: "failed-git-chat", frontendTurnId: "failed-git-turn" },
+					workspace,
+				)
+			).ok,
+			true,
+		);
+		let dumpSaved = false;
+		for (let attempt = 0; attempt < 100; attempt++) {
+			const history = await service.getModelRequestHistory("failed-git-chat");
+			if (history.turns["failed-git-turn"]?.[0]?.usage) {
+				dumpSaved = true;
+				break;
+			}
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		assert(dumpSaved, "The final request dump must finish before deleting the fixture directory.");
+	} finally {
+		await service.dispose();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 test("SDK upgrade preserves host context, cache evidence, and explicit feature gates", async (t) => {
 	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-pi-sdk-upgrade-"));

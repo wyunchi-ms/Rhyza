@@ -731,10 +731,6 @@ test("Pi chat discovers MCP without a tools allowlist and restores the selected 
 	assert.equal(resumed.ok, true, resumed.error);
 	const worktree = path.join(directory, "isolated-worktree");
 	await mkdir(worktree);
-	t.mock.method(WorktreeService.prototype, "resolveSessionWorkspace", async () => ({
-		path: worktree,
-		isolated: true,
-	}));
 	await service.trust(workspace, true);
 	await service.save(workspace, {
 		name: "demo",
@@ -742,6 +738,31 @@ test("Pi chat discovers MCP without a tools allowlist and restores the selected 
 		config: { ...configuration, exposure: "direct" },
 		policy: { tools: { write: "write" } },
 	});
+	faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("mcp__demo__write", {}), { stopReason: "toolUse" }),
+		fauxAssistantMessage("Written directly in non-Git workspace"),
+	]);
+	const direct = await pi.promptAgent(
+		{
+			frontendSessionId: "non-git",
+			frontendTurnId: "non-git-answer",
+			prompt: "Write",
+			transcript: [],
+			model,
+			writable: true,
+		},
+		workspace,
+	);
+	assert.equal(direct.ok, true, direct.error);
+	assert.equal(direct.workspacePath, workspace);
+	assert.equal(direct.isolated, false);
+	assert.equal(await readFile(path.join(workspace, "mcp-write.txt"), "utf8"), "fixture write");
+	await rm(path.join(workspace, "mcp-write.txt"));
+	t.mock.method(WorktreeService.prototype, "resolveSessionWorkspace", async () => ({
+		path: worktree,
+		isolated: true,
+		writable: true,
+	}));
 	faux.setResponses([
 		(context) => {
 			assert(

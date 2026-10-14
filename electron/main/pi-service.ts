@@ -48,6 +48,7 @@ import type {
 	PathSummaryProgress,
 	WorkspaceDiffResponse,
 	WorkspaceTodosResponse,
+	WorkspaceTodoUpdateRequest,
 } from "../../src/shared/ipc.js";
 import { AzureOpenAIProvider } from "./azure-openai-provider.js";
 import type { AzureOpenAIConfig } from "../../src/shared/ipc.js";
@@ -57,7 +58,7 @@ import { openOrCreatePiSession } from "./pi-session-lineage.js";
 import { McpService, type McpRuntime } from "./mcp-service.js";
 import { AgentDiagnosticTrace, type AgentDiagnosticWriter } from "./agent-diagnostics.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
-import { readWorkspaceTodos } from "./todo-service.js";
+import { readWorkspaceTodos, updateWorkspaceTodo } from "./todo-service.js";
 import {
 	providerStreamCacheEvidence,
 	responseCacheEvidence,
@@ -204,10 +205,26 @@ export class PiService {
 		frontendSessionId: string | undefined,
 		workspacePath: string,
 	): Promise<WorkspaceTodosResponse> {
-		const effectiveWorkspacePath = frontendSessionId
+		return readWorkspaceTodos(this.getTodoWorkspacePath(frontendSessionId, workspacePath));
+	}
+
+	async updateWorkspaceTodo(
+		request: WorkspaceTodoUpdateRequest,
+		workspacePath: string,
+	): Promise<WorkspaceTodosResponse> {
+		return updateWorkspaceTodo(
+			this.getTodoWorkspacePath(request.frontendSessionId, workspacePath),
+			request,
+		);
+	}
+
+	protected getTodoWorkspacePath(
+		frontendSessionId: string | undefined,
+		workspacePath: string,
+	): string {
+		return frontendSessionId
 			? (this.activeSessions.get(frontendSessionId)?.workspacePath ?? workspacePath)
 			: workspacePath;
-		return readWorkspaceTodos(effectiveWorkspacePath);
 	}
 
 	async getProviderStatus(
@@ -871,15 +888,13 @@ export class PiService {
 				request.writable === true,
 			),
 		);
-		diagnostics.mark("workspace-ready", { isolated: sessionWorkspace.isolated });
+		const writable = request.writable === true && sessionWorkspace.writable;
+		diagnostics.mark("workspace-ready", { isolated: sessionWorkspace.isolated, writable });
 		const settingsManager = diagnostics.measure("session-settings", () =>
 			this.createSessionSettings(sessionWorkspace.path),
 		);
 		const mcp = diagnostics.measure("mcp-runtime-create", () =>
-			this.mcp.createRuntime(
-				workspacePath,
-				() => request.writable === true && sessionWorkspace.isolated,
-			),
+			this.mcp.createRuntime(workspacePath, () => writable),
 		);
 		mcp.diagnostics = diagnostics;
 		try {
@@ -898,7 +913,7 @@ export class PiService {
 						appendSystemPromptOverride: (base) => [
 							...base,
 							workspaceExplorationGuidance,
-							todoTrackingGuidance,
+							writable ? todoTrackingGuidance : "This is a read-only session. Do not modify files.",
 							...(this.sourceService ? [sourceRetrievalGuidance] : []),
 							...(request.knowledgeTools ? [knowledgeRetrievalGuidance] : []),
 							responsePresentationGuidance,
@@ -934,10 +949,9 @@ export class PiService {
 				...this.createSourceTools(sourceRefs, workspacePath),
 				...(request.knowledgeTools ? this.createKnowledgeTools(knowledgeInventory) : []),
 			];
-			const builtInTools =
-				request.writable && sessionWorkspace.isolated
-					? ["read", "grep", "find", "ls", "edit", "write", "bash"]
-					: ["read", "grep", "find", "ls"];
+			const builtInTools = writable
+				? ["read", "grep", "find", "ls", "edit", "write", "bash"]
+				: ["read", "grep", "find", "ls"];
 			settingsManager.applyOverrides({
 				defaultTools: [
 					...new Set([
@@ -960,10 +974,9 @@ export class PiService {
 					sessionManager,
 					settingsManager,
 					resourceLoader,
-					excludeTools:
-						request.writable && sessionWorkspace.isolated
-							? ["powershell", "codemode"]
-							: ["edit", "write", "bash", "powershell", "codemode"],
+					excludeTools: writable
+						? ["powershell", "codemode"]
+						: ["edit", "write", "bash", "powershell", "codemode"],
 					customTools,
 				}),
 			);
@@ -1096,7 +1109,7 @@ export class PiService {
 			if (model?.provider === codexAppServerProviderId) {
 				this.codexAppServer.registerSession(session.sessionId, {
 					cwd: sessionWorkspace.path,
-					writable: request.writable === true,
+					writable,
 				});
 			}
 			this.activeSessions.set(request.frontendSessionId, created);

@@ -38,6 +38,7 @@ const ipcChannels = {
 	agentPrompt: "rhyza:agent-prompt",
 	modelRequestHistory: "rhyza:model-request-history",
 	workspaceTodos: "rhyza:workspace-todos",
+	workspaceTodoUpdate: "rhyza:workspace-todo-update",
 	generateSummary: "rhyza:generate-summary",
 	generatePathSummary: "rhyza:generate-path-summary",
 	pathSummaryEvent: "rhyza:path-summary-event",
@@ -98,6 +99,7 @@ contextBridge.exposeInMainWorld("rhyza", {
 	agentPrompt: (request) => ipcRenderer.invoke(ipcChannels.agentPrompt, request),
 	modelRequestHistory: (request) => ipcRenderer.invoke(ipcChannels.modelRequestHistory, request),
 	workspaceTodos: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodos, request),
+	workspaceTodoUpdate: (request) => ipcRenderer.invoke(ipcChannels.workspaceTodoUpdate, request),
 	generateSummary: (request) => ipcRenderer.invoke(ipcChannels.generateSummary, request),
 	generatePathSummary: (request) => ipcRenderer.invoke(ipcChannels.generatePathSummary, request),
 	onPathSummaryEvent: (listener) => {

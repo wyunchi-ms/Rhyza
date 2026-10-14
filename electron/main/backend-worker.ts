@@ -99,6 +99,7 @@ const handlers: BackendApi = {
 	getModelRequestHistory: agent.getModelRequestHistory.bind(agent),
 	getWorkspaceDiff: agent.getWorkspaceDiff.bind(agent),
 	getWorkspaceTodos: agent.getWorkspaceTodos.bind(agent),
+	updateWorkspaceTodo: agent.updateWorkspaceTodo.bind(agent),
 	generateSummary: agent.generateSummary.bind(agent),
 	extractKnowledge: agent.extractKnowledge.bind(agent),
 	cancelAuxiliaryRequest: agent.cancelAuxiliaryRequest.bind(agent),

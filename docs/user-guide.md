@@ -254,15 +254,21 @@ exports/
 - **Code**：查看当前 Session 绑定目录的 Git status 和 diff；
 - **Export patch**：将当前 Session 的变更导出为 patch。
 
-Git Workspace 中的可写 Session 会尝试创建独立 Worktree。创建失败时会回退到原 Workspace，因此执行高风险操作前应检查 Code 页首行显示的实际路径以及 `Isolated worktree`/`Workspace` 标记。
+Git Workspace 中的可写 Session 会尝试创建独立 Worktree；创建失败时记录错误并只读回退到原 Workspace。非 Git 文件夹会跳过 Worktree 创建，可写聊天直接修改所选目录，不会自动初始化 Git。这些直接修改没有 Git 隔离或自动回滚，应先备份重要文件。
 
-Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离后开放。Codex App Server 按请求的可写标记选择 `workspace-write` 或 `read-only`，不能把 Worktree 失败理解为所有 Provider 都会自动只读。Pi 扩展也有自己的执行能力；Worktree 不等于插件沙箱。
+Copilot、Claude Code、Codex App Server 和宿主 MCP 使用相同的有效可写条件：请求允许写入，且工作区是非 Git 目录或成功隔离的 Git Worktree。只读聊天不会因为目录不是 Git 仓库就获得写权限；Git 探测错误或损坏的 `.git` 也不会自动开放写入。Pi 扩展有自己的执行能力；Worktree 不等于插件沙箱。Code 页的 status、diff 和 patch 导出仍只适用于 Git 目录。
+
+右侧 **Workspace TODOs** 展示当前 Session 绑定目录中的 Markdown 待办清单；未绑定时使用当前 Workspace。点击待办行（或聚焦后按空格）可切换完成状态，直接写回该目录下原文件的 `[x]` / `[ ]`，保存成功后更新状态与进度。这是用户主动编辑，不会开放 Agent 的文件写入权限；若面板显示原 Workspace 路径，修改的就是原 Workspace 文件，而非 Worktree 副本。父子项独立切换，不会自动勾选整组。保存中暂时禁用再次点击；文件内容或工作区已变化、磁盘权限不足等失败会保留原状态并显示错误，刷新清单后可重试。
+
+Workspace TODOs 的每行只展示状态图标与待办正文，不重复显示完成标签或源码行号；保存时图标变为加载动画。除 `TODO.md` 外，也扫描 `task/tasks`、`roadmap`、`checklist` 命名的 `.md`、`.markdown`、`.txt` 清单，支持 `TODO-extra.md`、`tasks_personal.txt` 等后缀（忽略大小写），只提取 Markdown 复选框。扫描最多深入 6 层子目录、50 个匹配文件，每文件最多 2 MB，并跳过 `.git`、依赖、构建和缓存目录。
 
 ### 3.7 阅读长回答
 
 宽屏下，Markdown 回答左侧靠近中间区域左边缘会显示 **In this answer** 目录，内容随当前聚焦的 Assistant 回答切换。点击目录可跳到对应标题，正在阅读的章节会高亮。空间变窄时正文会适度收窄以保留目录；达到正文最小宽度后目录自动隐藏。没有 Markdown 标题时不显示目录。Chats 列表和 Node view 分别记住拖动后的宽度；Node view 折叠再展开不会重置手动缩放。
 
 点击回答标题旁的折叠按钮，可收起该标题下的正文和子章节，再次点击即可展开。目录仍保留折叠章节的条目，点击会展开所需的父章节；页面内查找也会展开匹配内容。折叠只隐藏内容，不卸载其中的交互式 HTML 预览。
+
+标记为 `markdown` 或 `md` 的代码块会显示为 Markdown 预览，支持标题、列表、表格及待办复选框；这些复选框仅展示状态，不会修改文件。其他语言的代码块仍显示源码。将鼠标移到块上，或用键盘聚焦复制按钮，可显示 **Copy source / 复制源码**；触屏上按钮保持可见。复制的是该块的原始正文，不含外层代码围栏，也不包含渲染后的按钮文字。复制成功短暂显示“已复制”，失败会明确提示。预览内的代码示例保持代码形式，预览标题不混入回答目录。
 
 ## 4. 设置说明
 
@@ -293,7 +299,7 @@ Copilot 的内置修改工具和 Claude Code 的可写工具仅在成功隔离�
 | --- | --- |
 | Blocked | 默认拒绝新工具；服务器的 read-only/destructive 标记只是提示，不能自动授权 |
 | Approved read | 允许在只读聊天调用该精确工具；需自行确认其确实不会修改数据 |
-| Approved write | 仅允许可写且成功隔离的聊天调用 |
+| Approved write | 仅允许有效可写的聊天调用：Git 目录须成功隔离，非 Git 目录直接写入 |
 | Discover on demand | 模型用 `tool_search` 查找并加载，不把全部工具声明放入每轮请求 |
 | Always available | 小型、常用工具直接进入当前工具集 |
 | Hidden | 不可调用；与 Blocked 的授权设置相互独立 |

@@ -29,9 +29,12 @@ export const KnowledgePane = () => {
 		: [];
 	const loadedTelemetrySessions = useRef(new Set<string>());
 	const todoRequestSequence = useRef(0);
+	const todoSaveInFlight = useRef(false);
 	const [todos, setTodos] = useState<WorkspaceTodosResponse | null>(null);
 	const [todoLoading, setTodoLoading] = useState(false);
 	const [todoError, setTodoError] = useState<string | null>(null);
+	const [todoSaveError, setTodoSaveError] = useState<string | null>(null);
+	const [savingTodoId, setSavingTodoId] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (store.rightPaneView === "todo") return;
@@ -68,6 +71,7 @@ export const KnowledgePane = () => {
 
 	const loadTodos = useCallback(
 		async (quiet = false) => {
+			if (todoSaveInFlight.current) return;
 			const requestSequence = ++todoRequestSequence.current;
 			const bridge = getRhyzaBridge();
 			if (!bridge || typeof bridge.workspaceTodos !== "function") {
@@ -96,10 +100,51 @@ export const KnowledgePane = () => {
 
 	useEffect(() => {
 		if (!isOpen || store.rightPaneView !== "todo") return;
+		setTodos(null);
+		setTodoSaveError(null);
 		void loadTodos();
 		const interval = window.setInterval(() => void loadTodos(true), 4_000);
-		return () => window.clearInterval(interval);
+		return () => {
+			window.clearInterval(interval);
+			++todoRequestSequence.current;
+		};
 	}, [isOpen, loadTodos, store.rightPaneView]);
+
+	const toggleTodo = async (filePath: string, node: WorkspaceTodoNode) => {
+		if (!todos || todoSaveInFlight.current) return;
+		const bridge = getRhyzaBridge();
+		if (!bridge || typeof bridge.workspaceTodoUpdate !== "function") {
+			setTodoSaveError("Restart Electron to load the workspace TODO editing bridge.");
+			return;
+		}
+		const requestSequence = ++todoRequestSequence.current;
+		todoSaveInFlight.current = true;
+		setSavingTodoId(node.id);
+		setTodoSaveError(null);
+		try {
+			const result = await bridge.workspaceTodoUpdate({
+				frontendSessionId: store.activeSessionId ?? undefined,
+				workspacePath: todos.workspacePath,
+				path: filePath,
+				line: node.line,
+				text: node.text,
+				expectedCompleted: node.completed,
+				completed: !node.completed,
+			});
+			if (requestSequence !== todoRequestSequence.current) return;
+			setTodos(result);
+			setTodoError(null);
+		} catch (error) {
+			if (requestSequence !== todoRequestSequence.current) return;
+			setTodoSaveError(
+				error instanceof Error ? error.message : "Could not save the workspace TODO.",
+			);
+		} finally {
+			todoSaveInFlight.current = false;
+			setSavingTodoId(null);
+			setTodoLoading(false);
+		}
+	};
 
 	return (
 		<>
@@ -136,8 +181,13 @@ export const KnowledgePane = () => {
 						<TodoChecklistPanel
 							todos={todos}
 							loading={todoLoading}
-							error={todoError}
-							onRefresh={() => void loadTodos()}
+							error={todoSaveError ?? todoError}
+							savingTodoId={savingTodoId}
+							onToggle={(filePath, node) => void toggleTodo(filePath, node)}
+							onRefresh={() => {
+								setTodoSaveError(null);
+								void loadTodos();
+							}}
 							onClose={store.closeRightPane}
 						/>
 					))}
@@ -150,12 +200,16 @@ function TodoChecklistPanel({
 	todos,
 	loading,
 	error,
+	savingTodoId,
+	onToggle,
 	onRefresh,
 	onClose,
 }: {
 	todos: WorkspaceTodosResponse | null;
 	loading: boolean;
 	error: string | null;
+	savingTodoId: string | null;
+	onToggle: (filePath: string, node: WorkspaceTodoNode) => void;
 	onRefresh: () => void;
 	onClose: () => void;
 }) {
@@ -174,7 +228,7 @@ function TodoChecklistPanel({
 						type="button"
 						title="刷新待办事项"
 						aria-label="刷新工作区待办事项"
-						disabled={loading}
+						disabled={loading || savingTodoId !== null}
 						onClick={onRefresh}
 					>
 						<RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
@@ -224,7 +278,11 @@ function TodoChecklistPanel({
 								{file.completed}/{file.total}
 							</small>
 						</summary>
-						<TodoTree nodes={file.nodes} />
+						<TodoTree
+							nodes={file.nodes}
+							savingTodoId={savingTodoId}
+							onToggle={(node) => onToggle(file.path, node)}
+						/>
 					</details>
 				))}
 			</div>
@@ -232,22 +290,52 @@ function TodoChecklistPanel({
 	);
 }
 
-function TodoTree({ nodes, level = 1 }: { nodes: WorkspaceTodoNode[]; level?: number }) {
+function TodoTree({
+	nodes,
+	level = 1,
+	savingTodoId,
+	onToggle,
+}: {
+	nodes: WorkspaceTodoNode[];
+	level?: number;
+	savingTodoId: string | null;
+	onToggle: (node: WorkspaceTodoNode) => void;
+}) {
 	return (
 		<ul className="workspace-todo-tree" role={level === 1 ? "tree" : "group"}>
 			{nodes.map((node) => (
 				<li key={node.id} role="treeitem" aria-level={level} aria-checked={node.completed}>
-					<div className={clsx("workspace-todo-node", node.completed && "is-complete")}>
-						{node.completed ? (
+					<button
+						type="button"
+						role="checkbox"
+						aria-checked={node.completed}
+						aria-label={
+							savingTodoId === node.id
+								? `正在保存：${node.text}`
+								: `${node.completed ? "标记为未完成" : "标记为已完成"}：${node.text}`
+						}
+						aria-busy={savingTodoId === node.id}
+						disabled={savingTodoId !== null}
+						className={clsx("workspace-todo-node", node.completed && "is-complete")}
+						onClick={() => onToggle(node)}
+					>
+						{savingTodoId === node.id ? (
+							<RefreshCw size={16} className="animate-spin" aria-hidden="true" />
+						) : node.completed ? (
 							<CheckCircle2 size={16} aria-hidden="true" />
 						) : (
 							<Circle size={16} aria-hidden="true" />
 						)}
 						<span>{node.text}</span>
-						<small className="workspace-todo-status">{node.completed ? "已完成" : "未完成"}</small>
-						<small className="workspace-todo-line">L{node.line}</small>
-					</div>
-					{node.children.length > 0 && <TodoTree nodes={node.children} level={level + 1} />}
+					</button>
+					{node.children.length > 0 && (
+						<TodoTree
+							nodes={node.children}
+							level={level + 1}
+							savingTodoId={savingTodoId}
+							onToggle={onToggle}
+						/>
+					)}
 				</li>
 			))}
 		</ul>

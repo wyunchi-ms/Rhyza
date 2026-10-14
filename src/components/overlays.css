@@ -110,6 +110,11 @@ html[data-theme]
 	vertical-align: middle;
 }
 
+.ui-select:has(> .field) {
+	display: grid;
+	width: 100%;
+}
+
 html[data-theme] .ui-select-trigger {
 	display: flex;
 	align-items: center;
@@ -127,6 +132,12 @@ html[data-theme] .ui-select-trigger {
 	font-weight: 500;
 	text-align: start;
 	cursor: pointer;
+}
+
+html[data-theme] .ui-select-trigger:where(.field) {
+	padding: 0.65rem 0.75rem;
+	font-size: 0.875rem;
+	font-weight: inherit;
 }
 
 .ui-select-trigger > span {
