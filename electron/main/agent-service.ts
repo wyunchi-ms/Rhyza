@@ -18,7 +18,6 @@ import type {
 	SummaryRequest,
 	SummaryResponse,
 	PathSummaryRequest,
-	WorkspaceTodosResponse,
 } from "../../src/shared/ipc.js";
 import { errorToMessage, isRecord } from "../../src/shared/value.js";
 import {
@@ -43,7 +42,6 @@ import { runCodexAgent } from "./codex-agent.js";
 import { runClaudeAgent } from "./claude-agent.js";
 import { getNativeProviderStatus } from "./native-provider-status.js";
 import { collectHtmlPreviews } from "./html-preview-service.js";
-import { readWorkspaceTodos } from "./todo-service.js";
 import type { PathSummaryCompletion } from "./path-summary.js";
 
 interface ProviderSessionState {
@@ -124,7 +122,7 @@ export class AgentService extends PiService {
 				request.writable === true,
 			);
 			this.nativeWorkspaces.set(request.frontendSessionId, workspace.path);
-			const writable = request.writable === true && workspace.isolated;
+			const writable = request.writable === true && workspace.writable;
 			const { context, sourceRefs } = await this.readAttachedContext(request, workspacePath);
 			const guidance = [
 				workspaceExplorationGuidance,
@@ -317,14 +315,14 @@ export class AgentService extends PiService {
 		}
 	}
 
-	override async getWorkspaceTodos(
+	protected override getTodoWorkspacePath(
 		frontendSessionId: string | undefined,
 		workspacePath: string,
-	): Promise<WorkspaceTodosResponse> {
+	): string {
 		const nativeWorkspace = frontendSessionId && this.nativeWorkspaces.get(frontendSessionId);
 		return nativeWorkspace
-			? readWorkspaceTodos(nativeWorkspace)
-			: super.getWorkspaceTodos(frontendSessionId, workspacePath);
+			? nativeWorkspace
+			: super.getTodoWorkspacePath(frontendSessionId, workspacePath);
 	}
 
 	protected runNative(

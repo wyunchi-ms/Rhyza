@@ -31,6 +31,6 @@
 
 `PiService` 为主聊天显式加载 SDK MCP 与 Tool Search extensions；辅助标题、摘要和提取会话保留原工具边界。`McpService` 管理独立的设置会话和各聊天的连接、SDK OAuth 命令、连接事件与资源预览，不调用私有 SDK 模块。设置会话只加载宿主的两个 extensions，不加载项目或用户插件。
 
-`McpConfigStore` 合并用户和显式信任的项目配置，按原 Workspace 保存信任与精确工具授权；聊天程序的相对 cwd 则解析到实际 Session Workspace / Worktree。服务器身份指纹约束授权与每次调用，write 工具额外要求可写、隔离成功。服务器 annotations 不授予权限；资源访问也检查当前服务器身份。未配置的 extension-only 服务器不连接，避免绕开宿主审核。
+`McpConfigStore` 合并用户和显式信任的项目配置，按原 Workspace 保存信任与精确工具授权；聊天程序的相对 cwd 则解析到实际 Session Workspace / Worktree。服务器身份指纹约束授权与每次调用，write 工具额外要求有效可写权限：Git 目录须成功隔离，非 Git 目录直接使用所选目录；Git 探测或隔离失败不放开写入。服务器 annotations 不授予权限；资源访问也检查当前服务器身份。未配置的 extension-only 服务器不连接，避免绕开宿主审核。
 
 配置变更或信任撤销关闭相关 transport 并增加 Workspace revision。下一次聊天恢复原持久化 Pi Session，重新连接并恢复仍可见的工具；设置刷新和下一轮请求会检测外部配置文件修改。`rhyza.mcp-loadout` 按前端 Assistant turn 保存加载状态，新分支只复制选定父 turn 的快照。OAuth 凭据由 SDK 保存，Renderer 只收到状态、授权 URL 和隐藏了凭据的编辑草稿。MCP 程序及远程服务并非沙箱，Worktree 不隔离外部副作用。

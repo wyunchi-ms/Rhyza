@@ -58,6 +58,7 @@ export class BackendService {
 			getModelRequestHistory: method("getModelRequestHistory"),
 			getWorkspaceDiff: method("getWorkspaceDiff"),
 			getWorkspaceTodos: method("getWorkspaceTodos"),
+			updateWorkspaceTodo: method("updateWorkspaceTodo"),
 			generateSummary: method("generateSummary"),
 			extractKnowledge: method("extractKnowledge"),
 			cancelAuxiliaryRequest: method("cancelAuxiliaryRequest"),

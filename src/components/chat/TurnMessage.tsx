@@ -35,6 +35,7 @@ import { createPortal, flushSync } from "react-dom";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
+import { useTranslation } from "../../i18n";
 import { useAppStore } from "../../store";
 import { parseReferences } from "../../utils/composerInput";
 import type { Diagram, Entity, Relation, Turn, TurnActivity } from "../../types";
@@ -671,6 +672,7 @@ interface MarkdownRenderContextValue {
 	htmlPreviews?: HtmlPreviewDocument[];
 	compact: boolean;
 	finalized: boolean;
+	renderMarkdownFences: boolean;
 	references: KnowledgeReference[];
 	onEntityClick?: (id: string) => void;
 	onDiagramClick?: (id: string) => void;
@@ -679,6 +681,7 @@ interface MarkdownRenderContextValue {
 const MarkdownRenderContext = React.createContext<MarkdownRenderContextValue>({
 	compact: false,
 	finalized: true,
+	renderMarkdownFences: true,
 	references: emptyKnowledgeReferences,
 });
 
@@ -753,8 +756,16 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>
 		);
 	},
 	pre: ({ children }) => <>{children}</>,
-	code: function MarkdownCode({ className, children, ...props }) {
-		const { compact, finalized, htmlPreviews } = React.useContext(MarkdownRenderContext);
+	code: function MarkdownCode({ node: _node, className, children, ...props }) {
+		const {
+			compact,
+			finalized,
+			htmlPreviews,
+			renderMarkdownFences,
+			references,
+			onEntityClick,
+			onDiagramClick,
+		} = React.useContext(MarkdownRenderContext);
 		const rawSource = String(children);
 		const source = rawSource.replace(/\n$/, "");
 		if (!compact && isMermaidCodeBlock(className, source)) {
@@ -766,12 +777,29 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>
 			);
 		}
 		const isBlock = Boolean(className) || rawSource.includes("\n");
+		const renderMarkdown =
+			renderMarkdownFences && /(?:^|\s)language-(?:md|markdown)(?:\s|$)/i.test(className ?? "");
 		return isBlock ? (
-			<pre>
-				<code className={className} {...props}>
-					{children}
-				</code>
-			</pre>
+			<MarkdownSourceBlock source={source} rendered={renderMarkdown}>
+				{renderMarkdown ? (
+					<MarkdownContent
+						content={source}
+						compact={compact}
+						finalized={finalized}
+						htmlPreviews={htmlPreviews}
+						references={references}
+						onEntityClick={onEntityClick}
+						onDiagramClick={onDiagramClick}
+						renderMarkdownFences={false}
+					/>
+				) : (
+					<pre>
+						<code className={className} {...props}>
+							{children}
+						</code>
+					</pre>
+				)}
+			</MarkdownSourceBlock>
 		) : (
 			<code className={className} {...props}>
 				{children}
@@ -793,11 +821,69 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>
 	},
 };
 
+function MarkdownSourceBlock({
+	source,
+	rendered,
+	children,
+}: {
+	source: string;
+	rendered: boolean;
+	children: React.ReactNode;
+}) {
+	const { t } = useTranslation();
+	const [copyResult, setCopyResult] = useState<{ source: string; failed: boolean } | null>(null);
+	const currentResult = copyResult?.source === source ? copyResult : null;
+	useEffect(() => {
+		if (!copyResult || copyResult.failed) return;
+		const timeout = window.setTimeout(() => setCopyResult(null), 1_500);
+		return () => window.clearTimeout(timeout);
+	}, [copyResult]);
+	const copySource = async () => {
+		try {
+			await navigator.clipboard.writeText(source);
+			setCopyResult({ source, failed: false });
+		} catch (error) {
+			console.warn("Could not copy code block source", error);
+			setCopyResult({ source, failed: true });
+		}
+	};
+	const copied = currentResult !== null && !currentResult.failed;
+	return (
+		<div className={clsx("markdown-source-block", rendered && "is-markdown-preview")}>
+			<button
+				type="button"
+				className="markdown-source-copy"
+				title={t("Copy source")}
+				aria-label={t("Copy source")}
+				onMouseUp={(event) => event.stopPropagation()}
+				onClick={(event) => {
+					event.stopPropagation();
+					void copySource();
+				}}
+			>
+				{copied ? (
+					<CheckCircle2 size={14} aria-hidden="true" />
+				) : (
+					<Copy size={14} aria-hidden="true" />
+				)}
+				<span aria-live="polite">{copied ? t("Copied") : t("Copy source")}</span>
+			</button>
+			{rendered ? <div className="markdown-fence-preview">{children}</div> : children}
+			{currentResult?.failed && (
+				<p className="markdown-source-copy-error" role="alert">
+					{t("Copy failed. Try again.")}
+				</p>
+			)}
+		</div>
+	);
+}
+
 const MarkdownContent = memo(function MarkdownContent({
 	htmlPreviews,
 	content,
 	compact = false,
 	finalized = true,
+	renderMarkdownFences = true,
 	references,
 	onEntityClick,
 	onDiagramClick,
@@ -809,6 +895,7 @@ const MarkdownContent = memo(function MarkdownContent({
 	content: string;
 	compact?: boolean;
 	finalized?: boolean;
+	renderMarkdownFences?: boolean;
 	references?: KnowledgeReference[];
 	onEntityClick?: (id: string) => void;
 	onDiagramClick?: (id: string) => void;
@@ -904,12 +991,21 @@ const MarkdownContent = memo(function MarkdownContent({
 		() => ({
 			compact,
 			finalized,
+			renderMarkdownFences,
 			htmlPreviews,
 			references: knowledgeReferences,
 			onEntityClick,
 			onDiagramClick,
 		}),
-		[compact, finalized, htmlPreviews, knowledgeReferences, onDiagramClick, onEntityClick],
+		[
+			compact,
+			finalized,
+			renderMarkdownFences,
+			htmlPreviews,
+			knowledgeReferences,
+			onDiagramClick,
+			onEntityClick,
+		],
 	);
 	return (
 		<MarkdownRenderContext.Provider value={renderContext}>

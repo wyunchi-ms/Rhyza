@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -19,6 +19,49 @@ class FakeAgentService extends AgentService {
 		return { assistantText: this.reply };
 	}
 }
+
+test("native TODO reads and user edits share the session-bound workspace", async (t) => {
+	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-native-todo-"));
+	const workspace = path.join(directory, "workspace");
+	const isolated = path.join(directory, "isolated");
+	t.mock.method(WorktreeService.prototype, "resolveSessionWorkspace", async () => ({
+		path: isolated,
+		isolated: true,
+		writable: true,
+	}));
+	const service = new FakeAgentService(directory, undefined, undefined, path.join(directory, "pi"));
+	try {
+		await Promise.all([mkdir(workspace), mkdir(isolated)]);
+		await Promise.all([
+			writeFile(path.join(workspace, "TODO.md"), "- [ ] Original task\n"),
+			writeFile(path.join(isolated, "TODO.md"), "- [ ] Isolated task\n"),
+		]);
+		const request = { ...prompt("claude-code"), writable: true };
+		assert.equal((await service.promptAgent(request, workspace)).ok, true);
+		const todos = await service.getWorkspaceTodos(request.frontendSessionId, workspace);
+		assert.equal(todos.workspacePath, isolated);
+		assert.equal(todos.files[0].nodes[0].text, "Isolated task");
+		const update = {
+			frontendSessionId: request.frontendSessionId,
+			workspacePath: isolated,
+			path: "TODO.md",
+			line: 1,
+			text: "Isolated task",
+			expectedCompleted: false,
+			completed: true,
+		};
+		assert.equal((await service.updateWorkspaceTodo(update, workspace)).completed, 1);
+		assert.equal(await readFile(path.join(isolated, "TODO.md"), "utf8"), "- [x] Isolated task\n");
+		assert.equal(await readFile(path.join(workspace, "TODO.md"), "utf8"), "- [ ] Original task\n");
+		await assert.rejects(
+			service.updateWorkspaceTodo({ ...update, workspacePath: workspace }, workspace),
+			/workspace changed/,
+		);
+	} finally {
+		await service.dispose();
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 function prompt(providerId: ProviderId, frontendSessionId = "session"): AgentPromptRequest {
 	return {
@@ -79,11 +122,12 @@ test("Claude Code routes chat, titles and knowledge through its native default m
 	}
 });
 
-test("native writable tools are disabled unless Git isolation succeeded", async (t) => {
+test("native writable tools stay disabled after a Git isolation failure", async (t) => {
 	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-provider-permissions-"));
 	t.mock.method(WorktreeService.prototype, "resolveSessionWorkspace", async () => ({
 		path: directory,
 		isolated: false,
+		writable: false,
 	}));
 	try {
 		const service = new FakeAgentService(
@@ -101,6 +145,39 @@ test("native writable tools are disabled unless Git isolation succeeded", async 
 		assert.equal(firstPart.type, "text");
 		if (firstPart.type === "text") assert.match(firstPart.text, /read-only session/);
 	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("native non-Git conversations can edit directly while read-only requests stay read-only", async () => {
+	const directory = await mkdtemp(path.join(tmpdir(), "rhyza-native-directory-write-"));
+	const workspace = path.join(directory, "notes");
+	const service = new FakeAgentService(directory, undefined, undefined, path.join(directory, "pi"));
+	try {
+		await mkdir(workspace);
+		const writable = await service.promptAgent(
+			{ ...prompt("claude-code"), writable: true },
+			workspace,
+		);
+		assert.equal(writable.ok, true, writable.error);
+		assert.equal(writable.workspacePath, workspace);
+		assert.equal(writable.isolated, false);
+		assert.equal(service.requests[0].writable, true);
+		assert.equal(service.requests[0].workspacePath, workspace);
+		const firstPart = service.requests[0].parts[0];
+		assert.equal(firstPart.type, "text");
+		if (firstPart.type === "text") {
+			assert.match(firstPart.text, /Read an existing TODO.md/);
+			assert.doesNotMatch(firstPart.text, /read-only session/);
+		}
+		const readOnly = await service.promptAgent(
+			{ ...prompt("claude-code"), writable: false },
+			workspace,
+		);
+		assert.equal(readOnly.ok, true, readOnly.error);
+		assert.equal(service.requests[1].writable, false);
+	} finally {
+		await service.dispose();
 		await rm(directory, { recursive: true, force: true });
 	}
 });

@@ -61,7 +61,7 @@ if (!process.versions.electron) {
 			if (await host(code)) return;
 			await sleep(50);
 		}
-		throw new Error(`Timed out: ${label}`);
+		throw new Error(`Timed out: ${label}\n${rendererErrors.join("\n")}`);
 	};
 	const settle = async () => {
 		await host(
@@ -233,6 +233,221 @@ if (!process.versions.electron) {
 			"Knowledge surfaces adapt to the active theme.",
 		);
 		await seedContent();
+	}
+
+	async function checkStackedFields(selector, label) {
+		const fields = await host(`(() => [...document.querySelectorAll(${JSON.stringify(selector)})]
+			.flatMap(field => {
+				const control = field.querySelector(":scope > .field, :scope > .ui-select > .ui-select-trigger");
+				if (!control || !control.getClientRects().length) return [];
+				const caption = [...field.childNodes].find(node =>
+					node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+					|| node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("ui-select"));
+				const range = document.createRange();
+				range.selectNodeContents(caption);
+				const captionRect = range.getBoundingClientRect();
+				const fieldRect = field.getBoundingClientRect();
+				const rect = control.getBoundingClientRect();
+				return [{
+					caption: caption.textContent.trim(),
+					left: Math.abs(rect.left - fieldRect.left),
+					width: Math.abs(rect.width - fieldRect.width),
+					gap: rect.top - captionRect.bottom,
+					height: rect.height,
+					textarea: control instanceof HTMLTextAreaElement,
+					associated: field.control === control
+				}];
+			}))()`);
+		assert.ok(fields.length > 0, `${label}: visible form fields`);
+		for (const field of fields) {
+			const message = `${label}: ${field.caption}`;
+			assert.ok(field.left <= 1, `${message}: control shares the label's left edge`);
+			assert.ok(field.width <= 1, `${message}: control fills the field`);
+			assert.ok(
+				field.gap >= 2 && field.gap <= 12,
+				`${message}: label above control (${field.gap}px)`,
+			);
+			assert.equal(field.associated, true, `${message}: label names the visible control`);
+		}
+		const heights = fields.filter((field) => !field.textarea).map((field) => field.height);
+		assert.ok(
+			Math.max(...heights) - Math.min(...heights) <= 1,
+			`${label}: text inputs and selects share the same height (${heights.join(", ")})`,
+		);
+	}
+
+	async function checkFormAlignment() {
+		await seedContent();
+		await host(`(() => {
+			const state = window.uiStore.getState();
+			window.uiStore.setState({
+				entities: [...state.entities, { ...state.entities[0], id: "ui-related-entity", name: "Shared context" }],
+				diagrams: [{
+					id: "ui-form-diagram",
+					name: "Conversation flow",
+					type: "workflow",
+					nodes: [{ id: "question", label: "A question with a long descriptive label" }],
+					edges: [],
+					mermaidSource: "flowchart LR\\n  question[Question]",
+					version: 1,
+					versions: [],
+					updatedAt: "2026-09-18T10:24:00.000Z"
+				}]
+			});
+		})()`);
+		for (const language of ["en", "zh-CN"]) {
+			for (const theme of ["light", "dark"]) {
+				await setAppearance(theme, { language });
+				for (const width of [1440, 375]) {
+					browser.setContentSize(width, 960);
+					const label = `${language} ${theme} ${width}`;
+					await navigate("/knowledge", ".knowledge-page-header h1");
+					await host('document.querySelector(".entity-preview-heading button").click()');
+					await until('Boolean(document.querySelector(".entity-center-editor"))', "entity form");
+					await checkStackedFields(".entity-center-editor label.form-label", `${label} entity`);
+					await host('document.querySelector(".entity-center-editor .ui-select-trigger").click()');
+					await until('Boolean(document.querySelector(".ui-select-popup"))', "confidence dropdown");
+					assert.ok(
+						await host(`(() => {
+						const rect = document.querySelector(".ui-select-popup").getBoundingClientRect();
+						return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight;
+					})()`),
+						`${label}: confidence popup remains inside the window`,
+					);
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "End" });
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
+					await until(
+						'!document.querySelector(".ui-select-popup")',
+						"confidence keyboard selection",
+					);
+					assert.equal(
+						await host(
+							'document.querySelector(".entity-center-editor .ui-select-trigger").dataset.value',
+						),
+						"disputed",
+						`${label}: keyboard changes confidence`,
+					);
+					await host('document.querySelector(".entity-center-editor button[type=button]").click()');
+					await host('document.querySelector("[aria-label=添加关联]").click()');
+					await settle();
+					await checkStackedFields(".entity-relation-form label", `${label} relation`);
+					await host('document.querySelector(".entity-relation-form-header button").click()');
+					await host('document.querySelector("#knowledge-diagrams-tab").click()');
+					await settle();
+					await checkStackedFields(
+						".knowledge-inspector-content label.form-label",
+						`${label} diagram`,
+					);
+					await host('document.querySelector("[aria-label=关联实体]").click()');
+					await settle();
+					await checkStackedFields(".entity-relation-form label", `${label} diagram links`);
+					await host('document.querySelector(".entity-relation-form-header button").click()');
+					await navigate("/changes", ".page-title");
+					const history = await host(`(() => {
+						const input = document.querySelector("[aria-label='Filter knowledge history']").getBoundingClientRect();
+						const select = document.querySelector(".knowledge-change-list .ui-select-trigger").getBoundingClientRect();
+						return {
+							height: Math.abs(input.height - select.height),
+							top: Math.abs(input.top - select.top),
+							stackedGap: select.top - input.bottom,
+							left: Math.abs(input.left - select.left),
+							width: select.width
+						};
+					})()`);
+					assert.ok(
+						history.height <= 1 &&
+							(width === 375
+								? history.left <= 1 && Math.abs(history.stackedGap - 8) <= 1
+								: history.top <= 1),
+						`${label}: history filter controls align (${JSON.stringify(history)})`,
+					);
+					assert.ok(
+						Math.abs(history.width - 160) <= 1,
+						`${label}: history selector keeps its compact width`,
+					);
+					await navigate("/settings", ".settings-section:not([hidden]) h1");
+					for (const section of [
+						"language-heading",
+						"provider-heading",
+						"knowledge-heading",
+						"accessibility-heading",
+						"appearance-heading",
+						"plugins-heading",
+					]) {
+						const button = `.settings-navigation [data-section="${section}"]`;
+						await host(`document.querySelector(${JSON.stringify(button)}).click()`);
+						await settle();
+						assert.ok(
+							await host(`(() => [...document.querySelectorAll(".settings-section:not([hidden]) .settings-row--field > .ui-select")]
+							.every(root => {
+								const rect = root.getBoundingClientRect();
+								const control = root.querySelector(".ui-select-trigger").getBoundingClientRect();
+								return Math.abs(rect.left - control.left) <= 1
+									&& Math.abs(rect.width - control.width) <= 1
+									&& control.height >= 40;
+							}))()`),
+							`${label}: ${section} controls fill their grid column`,
+						);
+					}
+				}
+			}
+		}
+		await setAppearance("light", { language: "en" });
+		await host(`window.rhyza = {
+			pluginList: async () => [],
+			mcpList: async () => ({
+				workspacePath: "C:\\\\demo\\\\form-layout",
+				projectTrusted: true,
+				projectConfigExists: false,
+				errors: [],
+				servers: [{
+					name: "form_fixture", scope: "user", source: "fixture", transport: "stdio",
+					enabled: true, exposure: "deferred", state: "connected", oauth: false,
+					authenticated: false, connections: 1,
+					tools: [{ name: "fixture_read", description: "Read fixture data", exposure: "deferred", permission: "read" }]
+				}]
+			}),
+			onMcpEvent: () => () => {}
+		}; undefined;`);
+		try {
+			for (const language of ["en", "zh-CN"]) {
+				for (const theme of ["light", "dark"]) {
+					await setAppearance(theme, { language });
+					for (const width of [1440, 375]) {
+						browser.setContentSize(width, 960);
+						await host('document.querySelector("[data-section=mcp-heading]").click()');
+						await until('Boolean(document.querySelector(".mcp-server"))', "MCP fixture");
+						await host('document.querySelector(".mcp-toolbar .command-button").click()');
+						await until('Boolean(document.querySelector(".mcp-editor"))', "MCP editor");
+						await settle();
+						const label = `${language} ${theme} ${width} MCP`;
+						await checkStackedFields(".mcp-editor label", `${label} editor`);
+						await host('document.querySelector(".mcp-editor .ui-select-trigger").click()');
+						await until('Boolean(document.querySelector(".ui-select-popup"))', "modal select");
+						assert.ok(
+							await host(
+								'document.querySelector(".mcp-dialog").contains(document.querySelector(".ui-select-popup"))',
+							),
+							`${label}: dropdown stays inside the modal`,
+						);
+						browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+						await until('!document.querySelector(".ui-select-popup")', "close modal select");
+						await host('document.querySelector(".mcp-editor header button").click()');
+						await host('document.querySelector(".mcp-tools-action").click()');
+						await until('Boolean(document.querySelector(".mcp-details"))', "MCP tool controls");
+						await settle();
+						await checkStackedFields(".mcp-tool label", `${label} tools`);
+						await host('document.querySelector(".mcp-details header button").click()');
+					}
+				}
+			}
+		} finally {
+			await host("delete window.rhyza;");
+			await navigate("/knowledge", ".knowledge-page-header h1");
+			await host("window.uiStore.setState({ diagrams: [] });");
+			await setAppearance("light", { language: "en" });
+			await seedContent();
+		}
 	}
 
 	async function screenshot(name) {
@@ -1667,6 +1882,7 @@ if (!process.versions.electron) {
 		await host('window.uiStore.getState().updateSettings({ language: "en" })');
 		await seedContent();
 		await checkOverlayControls();
+		await checkFormAlignment();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
 			await navigate("/", ".chat-topbar h1");

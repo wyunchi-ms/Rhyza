@@ -600,7 +600,9 @@ export class McpRuntime {
 				`Permission blocked for MCP ${current.name}/${owner.tool}. Approve this exact tool in Settings > MCP servers.`,
 			);
 		if (permission === "write" && !this.writable())
-			throw new Error(`MCP ${current.name}/${owner.tool} requires a writable, isolated session.`);
+			throw new Error(
+				`MCP ${current.name}/${owner.tool} requires a writable session (Git workspaces must be isolated).`,
+			);
 	}
 
 	private transport(...args: Parameters<McpTransportFactory>): McpTransport {

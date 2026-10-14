@@ -19,6 +19,7 @@
 | Conversation | 节点状态与恢复          | Available | 区分 queued、retrieving、running、complete、error 等活动状态                  |
 | Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F`                                                                 |
 | Conversation | 图片输入                | Available | Composer 可附加图片，由所选 Provider/模型决定是否支持；Azure OpenAI 当前仅支持文本                                   |
+| Conversation | Markdown 代码块预览     | Available | `markdown` / `md` 围栏渲染为正文，悬停或聚焦显示复制源码；其他代码块保留代码显示，待办状态仅供展示 |
 | Conversation | 并发调度                | Available | 全局 1–10；同一 Conversation 严格有序                                         |
 | Conversation | Token/费用展示          | Partial   | 展示 Provider 返回的 usage；字段完整性取决于 Provider                         |
 | Agent        | Codex Provider          | Available | 通过官方 `codex app-server` 复用 Codex Desktop/CLI 登录与模型目录             |
@@ -44,12 +45,13 @@
 | Diagram      | Archify 交互图表        | Available | 作为可选 Pi extension 安装，不内置到宿主                                      |
 | Workspace    | 按路径隔离状态          | Available | 规范化 Workspace Path 映射独立 state/source 文件                              |
 | Workspace    | 历史列表切换            | Available | Workspace 页展示最近工作区，历史全局持久化；添加目录时才打开系统选择器          |
-| Workspace    | Git Worktree 隔离       | Partial   | 可写 Session 会尝试创建；失败时回退原 Workspace                               |
+| Workspace    | Git Worktree 隔离       | Partial   | Git 可写 Session 创建隔离 Worktree，失败时只读回退；非 Git 目录跳过创建并直接读写 |
 | Workspace    | Diff 与 patch 导出      | Available | Changes 页读取当前 Session 绑定目录                                           |
+| Workspace    | TODO 清单勾选与同步     | Available | 右侧 Workspace TODOs 可点击切换完成状态，写回面板显示目录中的原始清单；保留其他内容，冲突和保存失败明确提示 |
 | Settings     | Light/Dark              | Available | App 与 HTML/Diagram 预览同步主题                                              |
 | Settings     | 无障碍设置              | Available | 减少动画、高对比度、字体缩放                                                  |
 | Extension    | Pi package 管理         | Available | 支持 npm、Git 和本地来源；界面面向 GitHub Copilot，Claude Code 不加载 Pi 插件 |
-| Extension    | 通用 MCP 接入           | Available | 用户/受信任项目配置、stdio / Streamable HTTP、OAuth、连接操作和资源预览；默认拒绝新工具，write 要求可写且隔离 |
+| Extension    | 通用 MCP 接入           | Available | 用户/受信任项目配置、stdio / Streamable HTTP、OAuth、连接操作和资源预览；默认拒绝新工具，write 要求有效可写权限，Git 目录必须隔离 |
 | Extension    | 工具按需发现            | Available | Tool Search、direct / deferred / hidden exposure；加载状态随会话及选定父回答恢复，不启用 Codemode |
 | Distribution | Windows 安装包/签名     | Planned   | 当前只支持源码开发运行                                                        |
 | Distribution | macOS/Linux 验证        | Planned   | 尚未完成平台验证                                                              |
@@ -130,9 +132,9 @@ MCP 不是沙箱；用户审核为 read 的工具仍需信任其实现，Worktre
 
 ## 5. Workspace、Worktree 与 Changes
 
-Workspace Path 是所有本地状态的隔离键。Git Workspace 中，可写 Session 首次运行时会尝试基于当前 `HEAD` 创建 detached Worktree。若 Git 命令失败，会明确回退到原 Workspace；这保证聊天仍可运行，但不再具备修改隔离。
+Workspace Path 是所有本地状态的隔离键。Git Workspace 中，可写 Session 首次运行时会尝试基于当前 `HEAD` 创建 detached Worktree。若 Git 命令失败，会记录错误并只读回退到原 Workspace。非 Git 文件夹跳过 Worktree 创建，可写 Session 直接修改所选目录，不自动初始化 Git。
 
-回退后的权限有 Provider 差异：Copilot 的内置修改工具和 Claude Code 的可写工具要求成功隔离；Codex App Server 根据请求的可写标记选择 sandbox，不以隔离成功为前提。Pi 扩展可以当前用户权限执行代码，不能用 Worktree 状态推断它们的权限。
+Copilot、Claude Code、Codex App Server 与宿主 MCP 共用有效可写权限：Git 目录必须成功隔离，非 Git 目录可直接写入；只读请求始终不开放写入。Git 探测错误、损坏的 Git 元数据或 Worktree 创建失败不视为普通非 Git 目录。Pi 扩展可以当前用户权限执行代码，不能用 Worktree 状态推断它们的权限。
 
 Changes 页提供：
 

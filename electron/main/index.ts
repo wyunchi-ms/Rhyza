@@ -26,6 +26,7 @@ import {
 	validateAuxiliaryRequestCancelRequest,
 	validateModelRequestHistoryRequest,
 	validateWorkspaceTodosRequest,
+	validateWorkspaceTodoUpdateRequest,
 	validateModelCatalogRequest,
 	validateProviderLoginRequest,
 	validateProviderLogoutRequest,
@@ -478,6 +479,14 @@ function registerIpcHandlers(): void {
 				await settingsStore.requireWorkspacePath(),
 			);
 		}),
+	);
+	ipcMain.handle(ipcChannels.workspaceTodoUpdate, async (event, payload) =>
+		withValidSender(event, async () =>
+			piService.updateWorkspaceTodo(
+				validateWorkspaceTodoUpdateRequest(payload),
+				await settingsStore.requireWorkspacePath(),
+			),
+		),
 	);
 	ipcMain.handle(ipcChannels.generateSummary, async (event, payload) =>
 		withValidSender(event, async () => {

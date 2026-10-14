@@ -109,7 +109,7 @@ Pi 插件的设置入口面向 GitHub Copilot。Codex 和 Azure OpenAI 当前复
 
 Pi 1.0 的 Provider 收到规范化的 `TranscriptContext`；系统提示词与工具声明保存在 system messages 中，适配器使用 `getCurrentSystemPrompt()` / `getCurrentTools()` 读取。模型请求快照同时保留完整 transcript 和解析后的当前提示词、工具，兼容现有诊断界面。
 
-主聊天显式加载宿主 MCP 和 Tool Search，使用用户及受信任的原 Workspace 配置。工具默认拒绝，逐次校验精确授权；write 额外要求可写且成功隔离。主聊天用 defaultTools / excludeTools 保留内置工具边界，而不使用会限制动态发现的 tools allowlist。按需加载的工具按前端 turn 持久化，分支只继承选定 turn 的快照。配置变更关闭旧连接，辅助会话不因这一接入获得 MCP。详见[架构边界](architecture.md#mcp-边界)和[使用操作](user-guide.md#mcp-servers)。
+主聊天显式加载宿主 MCP 和 Tool Search，使用用户及受信任的原 Workspace 配置。工具默认拒绝，逐次校验精确授权；write 额外要求有效可写权限：Git 目录须成功隔离，非 Git 目录可直接写入。主聊天用 defaultTools / excludeTools 保留内置工具边界，而不使用会限制动态发现的 tools allowlist。按需加载的工具按前端 turn 持久化，分支只继承选定 turn 的快照。配置变更关闭旧连接，辅助会话不因这一接入获得 MCP。详见[架构边界](architecture.md#mcp-边界)和[使用操作](user-guide.md#mcp-servers)。
 
 不启用 Codemode、PowerShell、路由、分类或出图。主聊天、标题生成和知识提取都将会话 settings 的 `getCacheWarmingMode()` 固定返回 `"off"`，因为 SDK 的保活读取只看全局设置、不接受 `applyOverrides`。该宿主策略跨 reload 保持关闭，不改用户的 Pi 全局设置。后续接入与费用统计的 TODO 见 [Pi SDK 待办](TODO-pi-sdk.md)。
 
@@ -274,7 +274,7 @@ npm run format:check
 - 性能诊断只记录分类、计数和耗时；请求快照可能含对话和检索代码，不能作为匿名日志公开分享。
 - 不得把 Pi package 描述为沙箱插件；它可以当前用户权限执行代码。
 - MCP 程序也以当前 OS 账号运行；精确工具授权不验证工具的实际行为，Worktree 不能隔离外部服务。配置文件可能含字面量凭据，日志和编辑草稿必须隐藏凭据。
-- Worktree 失败回退时必须区分 Provider 权限；当前 Codex sandbox 根据请求的可写标记选择，不能统一宣称回退后只读。
+- 非 Git 目录跳过 Worktree，按请求的可写标记直接读写原目录；Git Worktree 失败或 Git 探测错误则禁用宿主写工具，Codex sandbox 也使用有效权限而非仅看请求标记。`isolated: false` 本身不能判断是否可写，应使用 `SessionWorkspace.writable`。
 
 ## 8. 可观测性
 

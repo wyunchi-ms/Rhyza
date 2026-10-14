@@ -1101,7 +1101,7 @@ function McpDetails({
 				)}
 				<p className="mcp-notice">
 					{t(
-						"Server annotations are hints, not permissions. Approve only tools you have reviewed. Read access can expose local or remote data; write access requires a writable isolated chat, but remote changes are not isolated.",
+						"Server annotations are hints, not permissions. Approve only tools you have reviewed. Read access can expose local or remote data; write access requires a writable chat. Git workspaces must be isolated; non-Git folders are edited directly. Remote changes are not isolated.",
 					)}
 				</p>
 				{server.tools.length === 0 && (

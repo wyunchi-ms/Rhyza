@@ -37,6 +37,7 @@ export type BackendApi = Pick<
 	| "getModelRequestHistory"
 	| "getWorkspaceDiff"
 	| "getWorkspaceTodos"
+	| "updateWorkspaceTodo"
 	| "generateSummary"
 	| "extractKnowledge"
 	| "cancelAuxiliaryRequest"

@@ -46,6 +46,7 @@ export const ipcChannels = {
 	agentPrompt: "rhyza:agent-prompt",
 	modelRequestHistory: "rhyza:model-request-history",
 	workspaceTodos: "rhyza:workspace-todos",
+	workspaceTodoUpdate: "rhyza:workspace-todo-update",
 	generateSummary: "rhyza:generate-summary",
 	generatePathSummary: "rhyza:generate-path-summary",
 	pathSummaryEvent: "rhyza:path-summary-event",
@@ -612,6 +613,14 @@ export interface WorkspaceTodoFile {
 export interface WorkspaceTodosRequest {
 	frontendSessionId?: string;
 }
+export interface WorkspaceTodoUpdateRequest extends WorkspaceTodosRequest {
+	workspacePath: string;
+	path: string;
+	line: number;
+	text: string;
+	expectedCompleted: boolean;
+	completed: boolean;
+}
 export interface WorkspaceTodosResponse {
 	workspacePath: string;
 	completed: number;
@@ -690,6 +699,7 @@ export interface RhyzaBridge {
 	agentPrompt(request: AgentPromptRequest): Promise<AgentPromptResponse>;
 	modelRequestHistory(request: ModelRequestHistoryRequest): Promise<ModelRequestHistoryResponse>;
 	workspaceTodos(request?: WorkspaceTodosRequest): Promise<WorkspaceTodosResponse>;
+	workspaceTodoUpdate(request: WorkspaceTodoUpdateRequest): Promise<WorkspaceTodosResponse>;
 	generateSummary(request: SummaryRequest): Promise<SummaryResponse>;
 	generatePathSummary(request: PathSummaryRequest): Promise<PathSummaryResponse>;
 	onPathSummaryEvent(listener: (event: PathSummaryProgress) => void): () => void;
@@ -842,6 +852,36 @@ export function validateWorkspaceTodosRequest(value: unknown): WorkspaceTodosReq
 	return typeof value.frontendSessionId === "string" && value.frontendSessionId.trim()
 		? { frontendSessionId: value.frontendSessionId.slice(0, 180) }
 		: {};
+}
+
+export function validateWorkspaceTodoUpdateRequest(value: unknown): WorkspaceTodoUpdateRequest {
+	if (
+		!isRecord(value) ||
+		typeof value.workspacePath !== "string" ||
+		!value.workspacePath.trim() ||
+		typeof value.path !== "string" ||
+		!value.path.trim() ||
+		typeof value.line !== "number" ||
+		!Number.isSafeInteger(value.line) ||
+		value.line < 1 ||
+		typeof value.text !== "string" ||
+		!value.text.trim() ||
+		typeof value.expectedCompleted !== "boolean" ||
+		typeof value.completed !== "boolean" ||
+		(value.frontendSessionId !== undefined &&
+			(typeof value.frontendSessionId !== "string" || !value.frontendSessionId.trim()))
+	) {
+		throw new Error("Invalid workspace TODO update request.");
+	}
+	return {
+		...validateWorkspaceTodosRequest(value),
+		workspacePath: value.workspacePath,
+		path: value.path,
+		line: value.line,
+		text: value.text,
+		expectedCompleted: value.expectedCompleted,
+		completed: value.completed,
+	};
 }
 
 export function validateAppStateSaveRequest(value: unknown): AppStateSaveRequest {
