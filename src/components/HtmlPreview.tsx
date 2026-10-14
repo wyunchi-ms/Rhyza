@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Expand, X } from "lucide-react";
+import { useModalDialog } from "../hooks/useModalDialog";
 import {
 	htmlPreviewReferenceKey,
 	parseHtmlPreviewReference,
@@ -116,14 +117,7 @@ export function HtmlPreview({
 	title?: string;
 }) {
 	const [expanded, setExpanded] = useState(false);
-	useEffect(() => {
-		if (!expanded) return;
-		const close = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setExpanded(false);
-		};
-		window.addEventListener("keydown", close);
-		return () => window.removeEventListener("keydown", close);
-	}, [expanded]);
+	const dialogRef = useModalDialog(expanded, () => setExpanded(false));
 	const download = () => {
 		const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
 		const anchor = document.createElement("a");
@@ -173,8 +167,9 @@ export function HtmlPreview({
 							if (event.target === event.currentTarget) setExpanded(false);
 						}}
 					>
-						<section
-							className="html-preview-dialog"
+						<dialog
+							ref={dialogRef}
+							className="ui-modal-dialog html-preview-dialog"
 							role="dialog"
 							aria-modal="true"
 							aria-label={title}
@@ -185,14 +180,13 @@ export function HtmlPreview({
 									type="button"
 									className="icon-button"
 									aria-label="Close HTML preview"
-									autoFocus
 									onClick={() => setExpanded(false)}
 								>
 									<X size={18} />
 								</button>
 							</header>
 							<HtmlPreviewFrame html={html} title={title} />
-						</section>
+						</dialog>
 					</div>,
 					document.body,
 				)}

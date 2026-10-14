@@ -6,9 +6,8 @@ import {
 	Settings,
 	Slash,
 	Brain,
-	Check,
-	ChevronDown,
 	Cloud,
+	ChevronDown,
 	Database,
 	Gauge,
 	ImagePlus,
@@ -25,6 +24,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
 import type {
@@ -35,7 +35,7 @@ import type {
 	ProviderId,
 } from "../../shared/ipc";
 import type { Diagram, Entity } from "../../types";
-import { useTranslation } from "../../i18n";
+import { useTranslation, type MessageKey } from "../../i18n";
 import {
 	composeInput,
 	stripReferences,
@@ -58,13 +58,15 @@ import { refreshCacheClock } from "../../hooks/useCacheClock";
 import { lastCacheRequest } from "../../utils/cacheStatus";
 import { measurePerformance, recordPerformanceTiming } from "../../utils/performanceMarks";
 import { createBrowserInputDiagnostics } from "../../utils/inputDiagnostics";
+import { Select } from "../Select";
+import { navigateMenu, useFloatingMenu } from "../../hooks/useFloatingMenu";
 
 const maxPromptImageBytes = 4_500_000;
-const composerMaxHeight = 136;
 export type ComposerImage = AgentPromptImage & { id: string; preview: string };
 export type ComposerDraftHandle = {
 	getSnapshot: () => { input: string; images: ComposerImage[] };
 	clear: () => void;
+	setSnapshot: (input: string, images: AgentPromptImage[]) => void;
 };
 
 type ComposerItem = {
@@ -79,7 +81,7 @@ type ComposerItem = {
 	reference?: ComposerReference;
 	action?: () => void;
 };
-type RuntimeMenu = "provider" | "model" | "thinking" | "context" | null;
+type RuntimeMenu = "model" | "context" | null;
 type MenuState = ComposerTrigger & {
 	activeIndex: number;
 	page?: "model" | "thinking" | "provider";
@@ -118,6 +120,17 @@ export function ChatComposer({
 			clear: () => {
 				onInputChange("");
 				onImagesChange([]);
+			},
+			setSnapshot: (text, attachments) => {
+				onInputChange(text);
+				onImagesChange(
+					attachments.map((image) => ({
+						...image,
+						id: crypto.randomUUID(),
+						preview: `data:${image.mimeType};base64,${image.data}`,
+					})),
+				);
+				textareaRef.current?.focus({ preventScroll: true });
 			},
 		}),
 		[input, images],
@@ -392,10 +405,14 @@ export function ChatComposer({
 		const startedAt = performance.now();
 		textarea.style.height = "auto";
 		const scrollHeight = textarea.scrollHeight;
-		setMultiline(scrollHeight > 58);
-		const nextHeight = Math.min(composerMaxHeight, Math.max(42, scrollHeight));
+		const style = getComputedStyle(textarea);
+		const singleLineHeight =
+			parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+		const maxHeight = parseFloat(style.maxHeight);
+		setMultiline(scrollHeight > singleLineHeight + 1);
+		const nextHeight = Math.min(maxHeight, Math.max(singleLineHeight, scrollHeight));
 		textarea.style.height = `${nextHeight}px`;
-		textarea.style.overflowY = scrollHeight > composerMaxHeight ? "auto" : "hidden";
+		textarea.style.overflowY = scrollHeight > maxHeight ? "auto" : "hidden";
 		recordPerformanceTiming("composer-textarea-layout", performance.now() - startedAt);
 	}, [draft]);
 	useLayoutEffect(() => {
@@ -755,20 +772,86 @@ function ComposerRuntimeControls({
 	onModelChange: (model: string) => void;
 	onThinkingChange: (thinking: "off" | "low" | "medium" | "high") => void;
 }) {
+	const { t } = useTranslation();
 	const controlsRef = useRef<HTMLDivElement | null>(null);
+	const [contextAnchor, setContextAnchor] = useState({ x: 0, y: 0 });
+	const [contextOpen, setContextOpen] = useState(false);
+	const contextRing = useRef<HTMLButtonElement>(null);
+	const contextHovered = useRef(false);
+	const contextCloseTimer = useRef<number | undefined>(undefined);
+	const contextTooltipId = useId();
+	const [modelAnchor, setModelAnchor] = useState({ x: 0, y: 0 });
+	const modelMenuId = useId();
 	const provider = getProviderInfo(providerId);
 	const model = models.find((item) => item.id === selectedModel);
-	const selectedModelLabel = (model?.name ?? selectedModel) || "Provider default";
+	const selectedModelLabel = (model?.name ?? selectedModel) || t("Provider default");
+	const thinkingLabel = t(
+		thinking === "off"
+			? "Off"
+			: thinking === "low"
+				? "Low"
+				: thinking === "high"
+					? "High"
+					: "Medium",
+	);
 	const estimated = contextRequest ? analyzeContextComposition(contextRequest).total : 0;
 	const used = contextRequest ? (residentInputTokens(contextRequest.usage) ?? estimated) : 0;
 	const windowSize = model?.contextWindow ?? contextRequest?.contextWindow ?? 0;
 	const percent = windowSize > 0 ? Math.min(100, Math.round((used / windowSize) * 100)) : 0;
+	const usageKnown = Boolean(contextRequest) && windowSize > 0;
+	const keepContextOpen = () => {
+		if (contextCloseTimer.current !== undefined) {
+			window.clearTimeout(contextCloseTimer.current);
+			contextCloseTimer.current = undefined;
+		}
+	};
+	const showContext = () => {
+		if (openMenu === "model" || !contextRing.current) return;
+		keepContextOpen();
+		const bounds = contextRing.current.getBoundingClientRect();
+		setContextAnchor({ x: bounds.left + bounds.width / 2, y: bounds.top });
+		setContextOpen(true);
+	};
+	const scheduleContextClose = () => {
+		keepContextOpen();
+		contextCloseTimer.current = window.setTimeout(() => {
+			contextCloseTimer.current = undefined;
+			if (!contextHovered.current && document.activeElement !== contextRing.current)
+				setContextOpen(false);
+		}, 100);
+	};
 	useEffect(() => {
-		if (!openMenu) return;
+		return () => {
+			if (contextCloseTimer.current !== undefined) window.clearTimeout(contextCloseTimer.current);
+		};
+	}, []);
+	useEffect(() => {
+		if (openMenu === "model") setContextOpen(false);
+		if (openMenu === "context") {
+			showContext();
+			setOpenMenu(null);
+		}
+	}, [openMenu]);
+	useEffect(() => {
+		if (!openMenu && !contextOpen) return;
 		const close = (event: MouseEvent | KeyboardEvent) => {
-			if (event instanceof KeyboardEvent && event.key === "Escape") setOpenMenu(null);
-			if (event instanceof MouseEvent && !controlsRef.current?.contains(event.target as Node))
+			if (event instanceof KeyboardEvent && event.key === "Escape" && !event.defaultPrevented) {
 				setOpenMenu(null);
+				setContextOpen(false);
+			}
+			if (
+				event instanceof MouseEvent &&
+				!controlsRef.current?.contains(event.target as Node) &&
+				!(
+					event.target instanceof Element &&
+					event.target.closest(
+						".composer-model-settings, .composer-model-menu, .composer-context-popover",
+					)
+				)
+			) {
+				setOpenMenu(null);
+				setContextOpen(false);
+			}
 		};
 		document.addEventListener("mousedown", close);
 		document.addEventListener("keydown", close);
@@ -776,221 +859,108 @@ function ComposerRuntimeControls({
 			document.removeEventListener("mousedown", close);
 			document.removeEventListener("keydown", close);
 		};
-	}, [openMenu]);
-	const thinkingOptions = [
-		{ value: "off" as const, label: "Off", detail: "Fastest · no extended reasoning" },
-		{ value: "low" as const, label: "Low", detail: "Quick reasoning for simple tasks" },
-		{ value: "medium" as const, label: "Medium", detail: "Balanced speed and depth" },
-		{ value: "high" as const, label: "High", detail: "Deeper reasoning for hard tasks" },
-	];
+	}, [openMenu, contextOpen]);
 	return (
 		<div className="composer-runtime-controls flex-wrap" ref={controlsRef}>
-			<div className="composer-runtime-control">
-				<button
-					type="button"
-					className="composer-runtime-trigger"
+			<div className="composer-runtime-control" onPointerDownCapture={() => setOpenMenu(null)}>
+				<Select
+					showIcon={false}
+					showOptionIcons={false}
+					triggerClassName="composer-runtime-trigger"
+					popupClassName="composer-runtime-menu"
 					title="选择服务提供方"
 					aria-label={`Provider: ${provider.label}`}
-					aria-haspopup="listbox"
-					aria-expanded={openMenu === "provider"}
-					onClick={() => setOpenMenu((current) => (current === "provider" ? null : "provider"))}
+					value={providerId}
+					onChange={(event) => {
+						const selected = providers.find((item) => item.id === event.target.value);
+						if (selected) onProviderChange(selected.id);
+						setOpenMenu(null);
+					}}
 				>
-					<Cloud size={13} aria-hidden="true" />
-					<span>{provider.label}</span>
-					<ChevronDown size={12} aria-hidden="true" />
-				</button>
-				{openMenu === "provider" && (
-					<div className="composer-runtime-menu" role="listbox" aria-label="新消息使用的服务提供方">
-						<header>
-							<div>
-								<strong>服务提供方</strong>
-								<span>更换服务提供方会重置模型选择</span>
-							</div>
-						</header>
-						<div className="composer-runtime-menu-scroll">
-							{providers.map((item) => (
-								<button
-									type="button"
-									role="option"
-									aria-selected={item.id === providerId}
-									className={item.id === providerId ? "is-selected" : ""}
-									key={item.id}
-									onClick={() => {
-										onProviderChange(item.id);
-										setOpenMenu(null);
-									}}
-								>
-									<Cloud size={16} aria-hidden="true" />
-									<span>
-										<strong>{item.label}</strong>
-										<small>{item.externalAuth ? "Uses local CLI sign-in" : "Uses Pi"}</small>
-									</span>
-									<span className="composer-menu-check">
-										{item.id === providerId && <Check size={13} />}
-									</span>
-								</button>
-							))}
-						</div>
-					</div>
-				)}
+					{providers.map((item) => (
+						<option
+							key={item.id}
+							value={item.id}
+							title={item.externalAuth ? "Uses local CLI sign-in" : "Uses Pi"}
+						>
+							{item.label}
+						</option>
+					))}
+				</Select>
 			</div>
 			<div className="composer-runtime-control">
 				<button
 					type="button"
-					className="composer-runtime-trigger"
-					title="选择模型"
-					aria-haspopup="listbox"
+					className="composer-runtime-trigger composer-model-trigger"
+					title={t("Model and thinking")}
+					aria-label={`${t("Model and thinking")}: ${selectedModelLabel}, ${thinkingLabel}`}
+					aria-busy={modelsLoading}
+					aria-haspopup="menu"
 					aria-expanded={openMenu === "model"}
-					onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
+					aria-controls={openMenu === "model" ? modelMenuId : undefined}
+					onClick={(event) => {
+						const bounds = event.currentTarget.getBoundingClientRect();
+						setModelAnchor({ x: bounds.left, y: bounds.top });
+						setOpenMenu((current) => (current === "model" ? null : "model"));
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+						event.preventDefault();
+						const bounds = event.currentTarget.getBoundingClientRect();
+						setModelAnchor({ x: bounds.left, y: bounds.top });
+						setOpenMenu("model");
+					}}
 				>
-					<Gauge size={13} aria-hidden="true" />
-					<span>{selectedModelLabel}</span>
+					<span className="composer-model-name">{selectedModelLabel}</span>
+					<span className="composer-effort-label" data-effort={thinking}>
+						{thinkingLabel}
+					</span>
 					<ChevronDown size={12} aria-hidden="true" />
 				</button>
 				{openMenu === "model" && (
-					<div
-						className="composer-runtime-menu composer-model-menu"
-						role="listbox"
-						aria-label="新消息使用的模型"
-					>
-						<header>
-							<div>
-								<strong>{provider.label} model</strong>
-								<span>用于新消息</span>
-							</div>
-							<small>{modelsLoading ? "正在加载…" : `${models.length + 1} 个可用`}</small>
-						</header>
-						{modelError && (
-							<p role="status" className="px-3 py-2 text-xs text-red-600">
-								{modelError}
-							</p>
-						)}
-						<div className="composer-runtime-menu-scroll">
-							<button
-								type="button"
-								role="option"
-								aria-selected={!selectedModel}
-								className={!selectedModel ? "is-selected" : ""}
-								onClick={() => {
-									onModelChange("");
-									setOpenMenu(null);
-								}}
-							>
-								<Settings size={16} aria-hidden="true" />
-								<span>
-									<strong>服务提供方默认值</strong>
-									<small>Let {provider.label} choose</small>
-								</span>
-								<span className="composer-menu-check">{!selectedModel && <Check size={13} />}</span>
-							</button>
-							{selectedModel && !model && (
-								<button
-									type="button"
-									role="option"
-									aria-selected="true"
-									className="is-selected"
-									onClick={() => setOpenMenu(null)}
-								>
-									<Gauge size={16} aria-hidden="true" />
-									<span>
-										<strong>{selectedModel}</strong>
-										<small>当前模型</small>
-									</span>
-									<span className="composer-menu-check">
-										<Check size={13} />
-									</span>
-								</button>
-							)}
-							{models.map((item) => (
-								<button
-									type="button"
-									role="option"
-									aria-selected={item.id === selectedModel}
-									className={item.id === selectedModel ? "is-selected" : ""}
-									key={item.id}
-									onClick={() => {
-										onModelChange(item.id);
-										setOpenMenu(null);
-									}}
-								>
-									<Gauge size={16} aria-hidden="true" />
-									<span>
-										<strong>{item.name}</strong>
-										<small>
-											{formatCompactTokens(item.contextWindow)} context
-											{item.reasoning ? " · reasoning" : ""}
-										</small>
-									</span>
-									<span className="composer-menu-check">
-										{item.id === selectedModel && <Check size={13} />}
-									</span>
-								</button>
-							))}
-						</div>
-					</div>
+					<ComposerModelPopover
+						id={modelMenuId}
+						anchor={modelAnchor}
+						models={models}
+						selectedModel={selectedModel}
+						selectedModelLabel={selectedModelLabel}
+						providerLabel={provider.label}
+						thinking={thinking}
+						onModelChange={onModelChange}
+						onThinkingChange={onThinkingChange}
+						onClose={() => setOpenMenu(null)}
+					/>
 				)}
-			</div>
-			<div className="composer-runtime-control">
-				<button
-					type="button"
-					className="composer-runtime-trigger"
-					title="选择思考强度"
-					aria-haspopup="listbox"
-					aria-expanded={openMenu === "thinking"}
-					onClick={() => setOpenMenu((current) => (current === "thinking" ? null : "thinking"))}
-				>
-					<Brain size={13} aria-hidden="true" />
-					<span>Thinking {thinking}</span>
-					<ChevronDown size={12} aria-hidden="true" />
-				</button>
-				{openMenu === "thinking" && (
-					<div
-						className="composer-runtime-menu composer-thinking-menu"
-						role="listbox"
-						aria-label="新消息使用的思考强度"
-					>
-						<header>
-							<div>
-								<strong>思考强度</strong>
-								<span>新消息的推理强度</span>
-							</div>
-						</header>
-						<div className="composer-runtime-menu-scroll">
-							{thinkingOptions.map((item) => (
-								<button
-									type="button"
-									role="option"
-									aria-selected={item.value === thinking}
-									className={item.value === thinking ? "is-selected" : ""}
-									key={item.value}
-									onClick={() => {
-										onThinkingChange(item.value);
-										setOpenMenu(null);
-									}}
-								>
-									<Brain size={16} aria-hidden="true" />
-									<span>
-										<strong>{item.label}</strong>
-										<small>{item.detail}</small>
-									</span>
-									<span className="composer-menu-check">
-										{item.value === thinking && <Check size={13} />}
-									</span>
-								</button>
-							))}
-						</div>
-					</div>
+				{modelsLoading && (
+					<span className="sr-only" role="status">
+						Loading models…
+					</span>
+				)}
+				{modelError && (
+					<p role="alert" className="field-error text-xs">
+						{modelError}
+					</p>
 				)}
 			</div>
 			<div className="composer-context-window">
 				<button
+					ref={contextRing}
 					type="button"
 					className="composer-context-ring"
-					title={`Context window: ${percent}% used`}
-					aria-label={`View context window usage, ${percent}% used`}
-					aria-haspopup="dialog"
-					aria-expanded={openMenu === "context"}
-					onClick={() => setOpenMenu((current) => (current === "context" ? null : "context"))}
+					aria-label={`${t("Context window")}: ${usageKnown ? `${percent}%` : t("Not recorded")}`}
+					aria-describedby={contextOpen ? contextTooltipId : undefined}
+					onPointerEnter={(event) => {
+						if (event.pointerType === "touch") return;
+						contextHovered.current = true;
+						showContext();
+					}}
+					onPointerLeave={() => {
+						contextHovered.current = false;
+						scheduleContextClose();
+					}}
+					onFocus={showContext}
+					onBlur={scheduleContextClose}
+					onClick={showContext}
 				>
 					<svg viewBox="0 0 24 24" aria-hidden="true">
 						<circle className="composer-context-ring-track" cx="12" cy="12" r="8.5" />
@@ -1004,43 +974,183 @@ function ComposerRuntimeControls({
 						/>
 					</svg>
 				</button>
-				{openMenu === "context" && (
-					<div className="composer-context-popover" role="dialog" aria-label="上下文窗口用量">
+				{contextOpen && (
+					<ComposerContextPopover
+						id={contextTooltipId}
+						anchor={contextAnchor}
+						onPointerEnter={() => {
+							contextHovered.current = true;
+							keepContextOpen();
+						}}
+						onPointerLeave={() => {
+							contextHovered.current = false;
+							scheduleContextClose();
+						}}
+					>
 						<header>
 							<div>
-								<strong>上下文窗口</strong>
-								<span>最近一次请求</span>
+								<strong>{t("Context window")}</strong>
+								<span>{t("Most recent request")}</span>
 							</div>
-							<b>{percent}%</b>
+							<b>{usageKnown ? `${percent}%` : t("Not recorded")}</b>
 						</header>
 						<div className="composer-context-progress">
 							<span style={{ width: `${percent}%` }} />
 						</div>
 						<dl>
 							<div>
-								<dt>当前输入</dt>
-								<dd>{formatComposerTokens(used)}</dd>
+								<dt>{t("Current input")}</dt>
+								<dd>{contextRequest ? formatComposerTokens(used) : t("Not recorded")}</dd>
 							</div>
 							<div>
-								<dt>窗口大小</dt>
-								<dd>{windowSize ? formatComposerTokens(windowSize) : "Unknown"}</dd>
+								<dt>{t("Window size")}</dt>
+								<dd>{windowSize ? formatComposerTokens(windowSize) : t("Unknown")}</dd>
 							</div>
 							<div>
-								<dt>统计方式</dt>
+								<dt>{t("Measurement")}</dt>
 								<dd>
 									{contextRequest?.usage
-										? "API reported"
+										? t("API reported")
 										: contextRequest
-											? "Estimated"
-											: "暂无请求"}
+											? t("Estimated")
+											: t("No request")}
 								</dd>
 							</div>
 						</dl>
-						<p>根据此对话最近一次模型请求统计。</p>
-					</div>
+					</ComposerContextPopover>
 				)}
 			</div>
 		</div>
+	);
+}
+
+function ComposerModelPopover({
+	id,
+	anchor,
+	models,
+	selectedModel,
+	selectedModelLabel,
+	providerLabel,
+	thinking,
+	onModelChange,
+	onThinkingChange,
+	onClose,
+}: {
+	id: string;
+	anchor: { x: number; y: number };
+	models: ModelInfo[];
+	selectedModel: string;
+	selectedModelLabel: string;
+	providerLabel: string;
+	thinking: "off" | "low" | "medium" | "high";
+	onModelChange: (model: string) => void;
+	onThinkingChange: (thinking: "off" | "low" | "medium" | "high") => void;
+	onClose: () => void;
+}) {
+	const { t } = useTranslation();
+	const { ref, position } = useFloatingMenu(anchor, true, "above");
+	const levels: { value: typeof thinking; label: MessageKey; detail: MessageKey }[] = [
+		{ value: "off", label: "Off", detail: "Fastest · no extended reasoning" },
+		{ value: "low", label: "Low", detail: "Quick reasoning for simple tasks" },
+		{ value: "medium", label: "Medium", detail: "Balanced speed and depth" },
+		{ value: "high", label: "High", detail: "Deeper reasoning for hard tasks" },
+	];
+	return createPortal(
+		<div
+			ref={ref}
+			id={id}
+			style={position}
+			className="composer-model-settings"
+			role="menu"
+			aria-label={t("Model and thinking")}
+			onKeyDown={(event) => {
+				if (!event.defaultPrevented) navigateMenu(event, onClose);
+			}}
+		>
+			<div className="composer-model-picker" role="none">
+				<span className="composer-model-picker-label">{t("Select model")}</span>
+				<Select
+					showIcon={false}
+					showOptionIcons={false}
+					triggerClassName="composer-model-entry"
+					popupClassName="composer-runtime-menu composer-model-menu"
+					aria-label={`${t("Select model")}: ${selectedModelLabel}`}
+					value={selectedModel}
+					onChange={(event) => {
+						onModelChange(event.target.value);
+						onClose();
+					}}
+				>
+					<option value="" title={`${t("Provider default")} · ${providerLabel}`}>
+						{t("Provider default")}
+					</option>
+					{selectedModel && !models.some((model) => model.id === selectedModel) && (
+						<option value={selectedModel}>{selectedModel}</option>
+					)}
+					{models.map((model) => (
+						<option
+							key={model.id}
+							value={model.id}
+							title={`${formatCompactTokens(model.contextWindow)} ${t("context")}${model.reasoning ? ` · ${t("reasoning")}` : ""}`}
+						>
+							{model.name}
+						</option>
+					))}
+				</Select>
+			</div>
+			<div role="group" aria-label={t("Thinking level")}>
+				<span className="composer-model-picker-label">{t("Thinking level")}</span>
+				<div className="composer-effort-options">
+					{levels.map((level) => (
+						<button
+							key={level.value}
+							type="button"
+							role="menuitemradio"
+							aria-checked={thinking === level.value}
+							data-effort={level.value}
+							title={t(level.detail)}
+							onClick={() => {
+								onThinkingChange(level.value);
+								onClose();
+							}}
+						>
+							{t(level.label)}
+						</button>
+					))}
+				</div>
+			</div>
+		</div>,
+		document.body,
+	);
+}
+
+function ComposerContextPopover({
+	id,
+	anchor,
+	onPointerEnter,
+	onPointerLeave,
+	children,
+}: {
+	id: string;
+	anchor: { x: number; y: number };
+	onPointerEnter: () => void;
+	onPointerLeave: () => void;
+	children: React.ReactNode;
+}) {
+	const { ref, position } = useFloatingMenu(anchor, false, "above-center");
+	return createPortal(
+		<div
+			ref={ref}
+			id={id}
+			style={position}
+			className="composer-context-popover"
+			role="tooltip"
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
+		>
+			{children}
+		</div>,
+		document.body,
 	);
 }
 

@@ -188,9 +188,23 @@ const Changes = () => {
 									onClick={() => void exportPatch()}
 									className="secondary-button"
 									disabled={!workspace || diffLoading || exporting}
+									title={
+										!workspace
+											? t("Open and run a session before viewing its worktree diff.")
+											: diffLoading
+												? t("Loading code changes…")
+												: exporting
+													? t("Exporting…")
+													: t("Export patch")
+									}
 								>
 									<Download size={14} /> {exporting ? t("Exporting…") : t("Export patch")}
 								</button>
+								{!workspace && (
+									<span className="text-xs text-secondary">
+										{t("Open and run a session before viewing its worktree diff.")}
+									</span>
+								)}
 							</div>
 						</div>
 						{exportFeedback && (

@@ -211,10 +211,11 @@ if (!process.versions.electron) {
 			const outline = document.querySelector(".answer-outline").getBoundingClientRect();
 			const answer = document.querySelector("#turn-answer-one").getBoundingClientRect();
 			const composer = document.querySelector(".composer-shell").getBoundingClientRect();
-			return { outlineLeft: outline.left, outlineRight: outline.right, answerLeft: answer.left, width: answer.width, outlineBottom: outline.bottom, composerTop: composer.top };
+			return { outlineLeft: outline.left, outlineRight: outline.right, answerLeft: answer.left, outlineWidth: outline.width, width: answer.width, outlineBottom: outline.bottom, composerTop: composer.top };
 		})()`);
 		assert.ok(geometry.outlineLeft >= 0);
 		assert.ok(geometry.outlineRight < geometry.answerLeft);
+		assert.ok(geometry.outlineWidth > 192, "wide gutters allow a wider answer outline");
 		assert.ok(geometry.outlineBottom <= geometry.composerTop);
 		assert.equal(geometry.width, 960, "the outline must not squeeze the transcript");
 		const navigator = await host(`(() => {

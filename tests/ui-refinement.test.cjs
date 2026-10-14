@@ -55,7 +55,15 @@ if (!process.versions.electron) {
 	let browser;
 	const rendererErrors = [];
 	const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-	const host = (code) => browser.webContents.executeJavaScript(code);
+	const host = async (code) => {
+		try {
+			return await browser.webContents.executeJavaScript(code);
+		} catch (error) {
+			throw new Error(`${error.message}\nScript: ${code}\n${rendererErrors.join("\n")}`, {
+				cause: error,
+			});
+		}
+	};
 	const until = async (code, label) => {
 		for (let attempt = 0; attempt < 300; attempt++) {
 			if (await host(code)) return;
@@ -305,6 +313,26 @@ if (!process.versions.electron) {
 					await host('document.querySelector(".entity-preview-heading button").click()');
 					await until('Boolean(document.querySelector(".entity-center-editor"))', "entity form");
 					await checkStackedFields(".entity-center-editor label.form-label", `${label} entity`);
+					const fieldSurface = await host(`(() => {
+						const input = document.querySelector(".entity-center-editor input.field");
+						input.focus();
+						const style = getComputedStyle(input);
+						return {
+							borderWidth: style.borderWidth,
+							borderRadius: style.borderRadius,
+							background: style.backgroundColor
+						};
+					})()`);
+					assert.equal(fieldSurface.borderWidth, "0px", `${label}: text input has no hard border`);
+					assert.ok(
+						Number.parseFloat(fieldSurface.borderRadius) > 0,
+						`${label}: input surface stays soft`,
+					);
+					assert.notEqual(
+						fieldSurface.background,
+						"rgba(0, 0, 0, 0)",
+						`${label}: input surface remains visually distinct`,
+					);
 					await host('document.querySelector(".entity-center-editor .ui-select-trigger").click()');
 					await until('Boolean(document.querySelector(".ui-select-popup"))', "confidence dropdown");
 					assert.ok(
@@ -596,6 +624,9 @@ if (!process.versions.electron) {
 				".page-title, .page-subtitle, .chat-topbar h1, .chat-empty p, .chat-empty-hint, " +
 				".settings-section:not([hidden]) .settings-section-header h1, .command-button:not(:disabled), " +
 				".settings-navigation-group-heading, .settings-navigation nav button, " +
+				".global-search-input-row input, .global-search-result-copy strong, .global-search-result-copy small, " +
+				".global-search-section-label, .global-search-dialog footer, " +
+				".pi-plugin-badges .status-badge, " +
 				".markdown-body details > summary, " +
 				".session-filter-label, .session-filter-hint, .session-filter-count, " +
 				".text-selection-actions button[type=submit]:not(:disabled), .analyze-context-button"
@@ -825,6 +856,1076 @@ if (!process.versions.electron) {
 			})})`,
 		);
 		await settle();
+	}
+
+	async function checkComposerModelMenu() {
+		await navigate("/", ".chat-topbar h1");
+		const previousSettings = await host("window.uiStore.getState().settings");
+		await host(`window.uiPreviousBridge = window.rhyza;
+			window.rhyza = {
+				isElectron: true,
+				windowThemeSet: async () => ({ ok: true }),
+				modelCatalog: async () => ({
+					models: Array.from({ length: 40 }, (_, index) => ({
+						id: "ui-model-" + index,
+						name: "Model " + String(index).padStart(2, "0"),
+						contextWindow: 128000,
+						reasoning: true
+					}))
+				})
+			}; undefined;`);
+		try {
+			await host('window.uiStore.getState().updateSettings({ provider: "codex" })');
+			await settle();
+			await host('window.uiStore.getState().updateSettings({ provider: "github-copilot" })');
+			await settle();
+			await host('window.uiStore.getState().updateSettings({ defaultModel: "ui-model-12" })');
+			await until(
+				'document.querySelector(".composer-model-trigger")?.textContent.includes("Model 12")',
+				"model catalog fixture",
+			);
+			for (const theme of ["light", "dark"]) {
+				for (const width of [1024, 375]) {
+					browser.setContentSize(width, 800);
+					await setAppearance(theme, {
+						fontScale: width === 375 ? 1.35 : 1,
+						highContrast: width === 375,
+					});
+					await host(`document.querySelector(".composer-model-trigger").focus();
+						document.querySelector(".composer-model-trigger").click();`);
+					await until(
+						'Boolean(document.querySelector(".composer-model-settings"))',
+						"combined model and effort menu",
+					);
+					await settle();
+					const layout = await host(`(() => {
+						const trigger = document.querySelector(".composer-model-trigger");
+						const bounds = trigger.getBoundingClientRect();
+						const menu = document.querySelector(".composer-model-settings").getBoundingClientRect();
+						return {
+							pill: parseFloat(getComputedStyle(trigger).borderRadius) >= bounds.height / 2,
+							height: bounds.height,
+							icons: trigger.querySelectorAll("svg").length,
+							efforts: [...document.querySelectorAll(".composer-effort-options button")].map(button => ({
+								surface: getComputedStyle(button).backgroundColor,
+								checked: button.getAttribute("aria-checked")
+							})),
+							inViewport: menu.left >= 0 && menu.right <= innerWidth && menu.top >= 0 && menu.bottom <= innerHeight,
+							labelFits: trigger.scrollWidth <= trigger.clientWidth
+						};
+					})()`);
+					assert.equal(layout.pill, true, `${theme} ${width}: compact pill trigger`);
+					assert(layout.height <= 42, "model control remains compact with enlarged text");
+					assert.equal(layout.icons, 1, "trigger only retains the disclosure chevron");
+					assert.equal(layout.efforts.length, 4);
+					assert.equal(
+						new Set(layout.efforts.map((item) => item.surface)).size,
+						4,
+						"effort levels have distinct theme surfaces",
+					);
+					assert.equal(layout.efforts.filter((item) => item.checked === "true").length, 1);
+					assert.equal(layout.inViewport, true);
+					assert.equal(layout.labelFits, true);
+					await checkContrast(`${theme} ${width} model settings`);
+					await host('document.querySelector(".composer-model-entry").click()');
+					await until(
+						'Boolean(document.querySelector(".composer-model-menu"))',
+						"second-level model list",
+					);
+					await settle();
+					const list = await host(`(() => {
+						const menu = document.querySelector(".composer-model-menu");
+						const bounds = menu.getBoundingClientRect();
+						return {
+							options: menu.querySelectorAll('[role="option"]').length,
+							icons: menu.querySelectorAll("svg").length,
+							optionHeight: menu.querySelector('[data-value="ui-model-0"]').getBoundingClientRect().height,
+							scrollable: menu.scrollHeight > menu.clientHeight,
+							initialScroll: menu.scrollTop,
+							inViewport: bounds.left >= 0 && bounds.right <= innerWidth && bounds.top >= 0 && bounds.bottom <= innerHeight
+						};
+					})()`);
+					assert.equal(list.options, 41);
+					assert.equal(
+						list.icons,
+						1,
+						"only the selected model has a check; no repeated leading icons",
+					);
+					assert(
+						list.optionHeight <= 46 * (width === 375 ? 1.35 : 1),
+						`${theme} ${width}: two-line model rows remain compact at the selected text scale (${list.optionHeight}px)`,
+					);
+					assert.equal(list.scrollable, true);
+					assert(list.initialScroll > 0, "opening reveals the selected model");
+					assert.equal(list.inViewport, true);
+					await host(`(() => {
+						const menu = document.querySelector(".composer-model-menu");
+						menu.scrollTop = 17;
+					})()`);
+					await settle();
+					const hoverScroll = await host(`(() => {
+						const menu = document.querySelector(".composer-model-menu");
+						const bounds = menu.getBoundingClientRect();
+						const partial = [...menu.querySelectorAll('[role="option"]')].find(option => {
+							const item = option.getBoundingClientRect();
+							return item.top < bounds.bottom && item.bottom > bounds.bottom;
+						});
+						partial.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, movementY: 1 }));
+						return menu.scrollTop;
+					})()`);
+					await settle();
+					assert.equal(
+						await host('document.querySelector(".composer-model-menu").scrollTop'),
+						hoverScroll,
+						"hovering a partially visible row does not pull the list",
+					);
+					await host(`(() => {
+						const trigger = document.querySelector(".composer-model-entry");
+						const measure = trigger.getBoundingClientRect.bind(trigger);
+						window.uiModelMeasurements = 0;
+						trigger.getBoundingClientRect = () => { window.uiModelMeasurements++; return measure(); };
+					})()`);
+					const wheelPoint = await host(`(() => {
+						const bounds = document.querySelector(".composer-model-menu").getBoundingClientRect();
+						return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + 40) };
+					})()`);
+					const backgroundScroll = await host('document.querySelector(".chat-scroll").scrollTop');
+					browser.webContents.sendInputEvent({ type: "mouseMove", ...wheelPoint });
+					await settle();
+					const positions = [
+						await host('document.querySelector(".composer-model-menu").scrollTop'),
+					];
+					for (let index = 0; index < 4; index++) {
+						browser.webContents.sendInputEvent({
+							type: "mouseWheel",
+							...wheelPoint,
+							deltaX: 0,
+							deltaY: -80,
+							canScroll: true,
+						});
+						await sleep(100);
+						positions.push(await host('document.querySelector(".composer-model-menu").scrollTop'));
+					}
+					assert(
+						positions.at(-1) - positions[0] >= 200,
+						`native wheel scrolling progresses: ${positions.join(", ")}`,
+					);
+					assert(
+						positions.every((value, index) => index === 0 || value >= positions[index - 1]),
+						"scrolling never snaps backwards",
+					);
+					assert.equal(
+						await host("window.uiModelMeasurements"),
+						0,
+						"internal scrolling does not reposition the list",
+					);
+					assert.equal(
+						await host('document.querySelector(".chat-scroll").scrollTop'),
+						backgroundScroll,
+						"model scrolling does not move the reading area",
+					);
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "End" });
+					await settle();
+					assert(
+						await host(`(() => {
+						const menu = document.querySelector(".composer-model-menu");
+						const option = document.getElementById(menu.getAttribute("aria-activedescendant"));
+						const bounds = menu.getBoundingClientRect();
+						const item = option.getBoundingClientRect();
+						return option.dataset.value === "ui-model-39" && item.top >= bounds.top && item.bottom <= bounds.bottom;
+					})()`),
+						"keyboard navigation still reveals the last model",
+					);
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+					await until(
+						'!document.querySelector(".composer-model-menu")',
+						"Escape closes only the model list",
+					);
+					assert(
+						await host('Boolean(document.querySelector(".composer-model-settings"))'),
+						"first-level menu remains open",
+					);
+					assert.equal(
+						await host('document.activeElement?.classList.contains("composer-model-entry")'),
+						true,
+					);
+					await host(
+						'document.querySelector(".composer-effort-options [data-effort=high]").click()',
+					);
+					await until(
+						'!document.querySelector(".composer-model-settings")',
+						"choosing effort closes the menu",
+					);
+					assert.equal(await host("window.uiStore.getState().settings.thinkingLevel"), "high");
+					assert.equal(
+						await host('document.activeElement?.classList.contains("composer-model-trigger")'),
+						true,
+						"focus returns to the combined trigger",
+					);
+				}
+			}
+			browser.setContentSize(1024, 800);
+			await host('document.querySelector(".composer-model-trigger").click()');
+			await until(
+				'Boolean(document.querySelector(".composer-model-entry"))',
+				"model picker reopens",
+			);
+			await host('document.querySelector(".composer-model-entry").click()');
+			await until('Boolean(document.querySelector(".composer-model-menu"))', "model list reopens");
+			await settle();
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Home" });
+			await settle();
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Down" });
+			await settle();
+			assert.deepEqual(
+				await host(`(() => {
+					const menu = document.querySelector(".composer-model-menu");
+					return {
+						focus: document.activeElement?.getAttribute("role"),
+						value: document.getElementById(menu.getAttribute("aria-activedescendant"))?.dataset.value
+					};
+				})()`),
+				{ focus: "listbox", value: "ui-model-0" },
+				"ArrowDown after Home targets the first explicit model",
+			);
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
+			await until(
+				'!document.querySelector(".composer-model-settings")',
+				"model selection closes both levels",
+			);
+			assert.equal(await host("window.uiStore.getState().settings.defaultModel"), "ui-model-0");
+			assert.equal(
+				await host("window.uiStore.getState().settings.thinkingLevel"),
+				"high",
+				"model selection preserves effort",
+			);
+		} finally {
+			await host(`window.rhyza = window.uiPreviousBridge;
+				delete window.uiPreviousBridge;
+				delete window.uiModelMeasurements;
+				window.uiStore.getState().updateSettings(${JSON.stringify(previousSettings)});`);
+			await settle();
+		}
+	}
+
+	async function checkComposerInputAndContext() {
+		await navigate("/", ".chat-topbar h1");
+		const previousSettings = await host("window.uiStore.getState().settings");
+		try {
+			for (const theme of ["light", "dark"]) {
+				for (const width of [1024, 375]) {
+					browser.setContentSize(width, 800);
+					await setAppearance(theme, {
+						fontScale: width === 375 ? 1.35 : 1,
+						highContrast: width === 375,
+					});
+					await setInput(".composer-input", "A short draft");
+					await host('document.querySelector(".composer-input").focus()');
+					await settle();
+					const input = await host(`(() => {
+						const input = document.querySelector(".composer-input");
+						const style = getComputedStyle(input);
+						return {
+							height: input.getBoundingClientRect().height,
+							lineHeight: parseFloat(style.lineHeight),
+							paddingBottom: parseFloat(style.paddingBottom),
+							maxHeight: parseFloat(style.maxHeight),
+							border: parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth),
+							borderStyle: style.borderTopStyle,
+							shadow: style.boxShadow,
+							outline: style.outlineStyle,
+							background: style.backgroundColor
+						};
+					})()`);
+					assert.equal(input.border, 0, "the editing area has no nested border");
+					assert.equal(
+						input.borderStyle,
+						"none",
+						"no other theme selector can draw a textarea rectangle",
+					);
+					assert.equal(input.shadow, "none", "focused editing does not add an inner focus frame");
+					assert.equal(input.outline, "none");
+					assert.equal(input.background, "rgba(0, 0, 0, 0)");
+					assert(
+						input.paddingBottom >= input.lineHeight,
+						"a spare text line separates input from controls",
+					);
+					await setInput(".composer-input", "First line\nSecond line\nThird line");
+					const threeLines = await host(
+						'document.querySelector(".composer-input").getBoundingClientRect().height',
+					);
+					assert(
+						Math.abs(threeLines - Math.min(input.maxHeight, input.height + input.lineHeight * 2)) <=
+							2,
+						"multiline input grows while preserving the spare line",
+					);
+					await setInput(
+						".composer-input",
+						Array.from({ length: 20 }, (_, index) => `Line ${index + 1}`).join("\n"),
+					);
+					assert(
+						await host(`(() => {
+						const input = document.querySelector(".composer-input");
+						const controls = document.querySelector(".composer-runtime-controls").getBoundingClientRect();
+						return getComputedStyle(input).overflowY === "auto"
+							&& input.scrollHeight > input.clientHeight
+							&& input.getBoundingClientRect().height <= ${input.maxHeight}
+							&& controls.bottom <= innerHeight;
+					})()`),
+						"long drafts scroll inside the editor without displacing controls",
+					);
+					await setInput(".composer-input", "Keep this draft while checking context");
+					await host('document.querySelector(".composer-input").focus()');
+					const ringPoint = await host(`(() => {
+						const bounds = document.querySelector(".composer-context-ring").getBoundingClientRect();
+						return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) };
+					})()`);
+					browser.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+					browser.webContents.sendInputEvent({ type: "mouseMove", ...ringPoint });
+					await until(
+						'Boolean(document.querySelector(".composer-context-popover"))',
+						"context tooltip opens on hover without a click",
+					);
+					await settle();
+					assert.equal(
+						await host('document.activeElement?.classList.contains("composer-input")'),
+						true,
+						"hover never steals typing focus",
+					);
+					const tooltip = await host(`(() => {
+						const tooltip = document.querySelector(".composer-context-popover");
+						const bounds = tooltip.getBoundingClientRect();
+						const ring = document.querySelector(".composer-context-ring");
+						return {
+							role: tooltip.getAttribute("role"),
+							described: ring.getAttribute("aria-describedby") === tooltip.id,
+							buttons: tooltip.querySelectorAll("button").length,
+							footer: tooltip.querySelectorAll("p").length,
+							gap: ring.getBoundingClientRect().top - bounds.bottom,
+							inViewport: bounds.left >= 0 && bounds.right <= innerWidth && bounds.top >= 0 && bounds.bottom <= innerHeight,
+							point: { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) }
+						};
+					})()`);
+					assert.equal(tooltip.role, "tooltip");
+					assert.equal(tooltip.described, true);
+					assert.equal(tooltip.buttons, 0, "hover feedback has no redundant close button");
+					assert.equal(tooltip.footer, 0, "hover feedback has no redundant explanatory footer");
+					assert(
+						Math.abs(tooltip.gap - 8) <= 1,
+						`measured tooltip gap stays close to the ring: ${tooltip.gap}`,
+					);
+					assert.equal(tooltip.inViewport, true);
+					assert.match(
+						await host('document.querySelector(".composer-context-popover").textContent'),
+						/Not recorded/,
+					);
+					browser.webContents.sendInputEvent({ type: "mouseMove", ...tooltip.point });
+					await sleep(150);
+					assert(
+						await host('Boolean(document.querySelector(".composer-context-popover"))'),
+						"the pointer can cross into the tooltip without flicker",
+					);
+					browser.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+					await until(
+						'!document.querySelector(".composer-context-popover")',
+						"context tooltip hides on pointer exit",
+					);
+					// Offscreen Chromium changes activeElement without delivering native focus events.
+					await host(`(() => {
+						const ring = document.querySelector(".composer-context-ring");
+						ring.focus();
+						ring.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+					})()`);
+					await settle();
+					const focusedTooltip = await host(`({
+							focused: document.activeElement?.classList.contains("composer-context-ring"),
+							open: Boolean(document.querySelector(".composer-context-popover"))
+						})`);
+					assert(
+						focusedTooltip.focused && focusedTooltip.open,
+						`${theme} ${width}: keyboard focus reveals context: ${JSON.stringify(focusedTooltip)}`,
+					);
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+					await until(
+						'!document.querySelector(".composer-context-popover")',
+						"Escape dismisses the focused tooltip",
+					);
+					assert.equal(
+						await host('document.activeElement?.classList.contains("composer-context-ring")'),
+						true,
+					);
+					await host(
+						'document.querySelector(".composer-context-ring").blur(); document.querySelector(".composer-context-ring").click();',
+					);
+					await until(
+						'Boolean(document.querySelector(".composer-context-popover"))',
+						"click fallback works for touch",
+					);
+					browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+					await until(
+						'!document.querySelector(".composer-context-popover")',
+						"touch fallback dismisses",
+					);
+					assert.equal(
+						await host('document.querySelector(".composer-input").value'),
+						"Keep this draft while checking context",
+					);
+				}
+			}
+		} finally {
+			await setInput(".composer-input", "");
+			await host(`window.uiStore.getState().updateSettings(${JSON.stringify(previousSettings)})`);
+			await settle();
+		}
+	}
+
+	async function checkSettingsIconActions() {
+		await navigate("/", ".chat-topbar h1");
+		await host(`window.uiPluginCalls = [];
+			window.uiPlugins = [
+				{ source: "npm:ui-package", scope: "user", installed: true },
+				{ source: "npm:workspace-package", scope: "project", installed: false }
+			];
+			window.rhyza = {
+				isElectron: true,
+				getWorkspace: async () => ({ path: null }),
+				pluginList: async () => window.uiPlugins,
+				pluginInstall: async request => {
+					window.uiPluginCalls.push(["install", request.source]);
+					return { plugins: window.uiPlugins };
+				},
+				pluginRemove: request => {
+					window.uiPluginCalls.push(["remove", request.source]);
+					return new Promise(resolve => { window.uiResolveRemove = resolve; });
+				},
+				pluginSelectLocal: async () => ({ source: null }),
+				openExternal: async () => { window.uiPluginCalls.push(["browse"]); },
+				providerStatus: async () => ({ providerId: "github-copilot", configured: true, source: "fixture" }),
+				modelCatalog: async () => ({ models: [] }),
+				providerLogin: async () => ({ ok: true, status: { configured: true } }),
+				providerLogout: async () => ({ ok: true, status: { configured: false } }),
+				onAuthEvent: () => () => {},
+				windowThemeSet: async () => ({ ok: true })
+			}; undefined;`);
+		try {
+			await navigate("/settings", ".settings-section:not([hidden]) h1");
+			await until(
+				'!document.querySelector(".provider-auth-action").disabled',
+				"provider fixture ready",
+			);
+			for (const language of ["en", "zh-CN", "zh-TW"]) {
+				for (const theme of ["light", "dark"]) {
+					await setAppearance(theme, { language });
+					for (const width of [1024, 375]) {
+						browser.setContentSize(width, 960);
+						await host('document.querySelector("[data-section=provider-heading]").click()');
+						await settle();
+						await checkIconButtons(
+							".settings-provider-connection .settings-icon-action",
+							`${language} ${theme} ${width} provider`,
+							2,
+						);
+						await host('document.querySelector("[data-section=plugins-heading]").click()');
+						await until(
+							'Boolean(document.querySelector(".pi-plugin-remove"))',
+							"package fixture ready",
+						);
+						await settle();
+						await checkIconButtons(
+							".pi-plugins-card .settings-icon-action",
+							`${language} ${theme} ${width} packages`,
+							5,
+						);
+						assert.equal(await host('document.querySelectorAll("[data-plugin-scope]").length'), 2);
+						assert.equal(await host('document.querySelectorAll("[data-plugin-status]").length'), 2);
+						const colors =
+							await host(`["[data-plugin-scope=user]", "[data-plugin-status=installed]", "[data-plugin-status=missing]"].map(selector => {
+							const style = getComputedStyle(document.querySelector(selector));
+							return [style.backgroundColor, style.color].join("/");
+						})`);
+						assert.equal(
+							new Set(colors).size,
+							3,
+							`${language} ${theme}: scope, installed and missing have separate semantic colors`,
+						);
+						await checkContrast(`${language} ${theme} package badges`);
+					}
+				}
+			}
+			await setAppearance("light", { language: "en" });
+			await setInput("#pi-plugin-source", "npm:another-ui-package");
+			await host('document.querySelector(".pi-plugin-install-action").click()');
+			await until('window.uiPluginCalls.some(call => call[0] === "install")', "install icon works");
+			await host('document.querySelector(".pi-plugin-browse-action").click()');
+			await until('window.uiPluginCalls.some(call => call[0] === "browse")', "browse icon works");
+			await host(
+				'document.querySelector(".pi-plugin-remove").focus(); document.querySelector(".pi-plugin-remove").click()',
+			);
+			await until(
+				'document.querySelector(".confirmation-dialog")?.open',
+				"package removal confirmation",
+			);
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			await until('!document.querySelector(".confirmation-dialog")', "package removal canceled");
+			assert.equal(
+				await host('window.uiPluginCalls.some(call => call[0] === "remove")'),
+				false,
+				"cancel leaves package configuration intact",
+			);
+			await host('document.querySelector(".pi-plugin-remove").click()');
+			await until(
+				'document.querySelector(".confirmation-dialog")?.open',
+				"package removal reopens",
+			);
+			await host('document.querySelector(".confirmation-submit").click()');
+			await until(
+				'document.querySelector(".pi-plugin-remove").getAttribute("aria-busy") === "true"',
+				"package removal busy",
+			);
+			assert.equal(await host('document.querySelector(".pi-plugin-remove").disabled'), true);
+			await host("window.uiPlugins = []; window.uiResolveRemove({ plugins: [] });");
+			await until('!document.querySelector(".pi-plugin-remove")', "package removal completes");
+		} finally {
+			await host(
+				"delete window.rhyza; delete window.uiPluginCalls; delete window.uiPlugins; delete window.uiResolveRemove;",
+			);
+			await navigate("/", ".chat-topbar h1");
+			await setAppearance("light", { language: "en" });
+		}
+	}
+
+	async function checkIconButtons(selector, label, count) {
+		const actions =
+			await host(`(() => [...document.querySelectorAll(${JSON.stringify(selector)})].map(button => {
+			const bounds = button.getBoundingClientRect();
+			return {
+				text: button.textContent.trim(),
+				icon: Boolean(button.querySelector("svg[aria-hidden=true]")),
+				title: button.title,
+				name: button.getAttribute("aria-label"),
+				square: Math.abs(bounds.width - bounds.height) < 1,
+				inViewport: bounds.left >= 0 && bounds.right <= innerWidth
+			};
+		}))()`);
+		assert.equal(actions.length, count, `${label}: action count`);
+		for (const action of actions) {
+			assert.equal(action.text, "", `${label}: action is icon-only`);
+			assert.equal(action.icon, true, `${label}: decorative icon`);
+			assert.ok(action.title && action.name, `${label}: tooltip and accessible name`);
+			assert.equal(action.square, true, `${label}: consistent square geometry`);
+			assert.equal(action.inViewport, true, `${label}: action is not clipped`);
+		}
+	}
+
+	async function checkRecoveryButtonLayout() {
+		await seedContent();
+		await navigate("/", ".chat-topbar h1");
+		await host('window.uiStore.getState().updateTurn("ui-answer", { status: "interrupted" })');
+		for (const language of ["en", "zh-CN", "zh-TW"]) {
+			for (const theme of ["light", "dark"]) {
+				await setAppearance(theme, { language, fontScale: 1.35 });
+				for (const width of [1024, 375]) {
+					browser.setContentSize(width, 812);
+					await settle();
+					await checkIconButtons(
+						"#turn-ui-answer .turn-recovery-action",
+						`${language} ${theme} ${width} recovery`,
+						2,
+					);
+					const names = await host(
+						'[...document.querySelectorAll("#turn-ui-answer .turn-recovery-action")].map(button => button.getAttribute("aria-label"))',
+					);
+					assert.deepEqual(
+						names,
+						language === "en"
+							? ["Retry", "Edit and retry"]
+							: language === "zh-CN"
+								? ["重试", "编辑后重试"]
+								: ["重試", "編輯後重試"],
+					);
+					if (width === 375) await screenshot(`recovery-${language}-${theme}`);
+				}
+			}
+		}
+		await setAppearance("light", { language: "en", fontScale: 1 });
+		await seedContent();
+	}
+
+	async function checkDesignContracts() {
+		browser.setContentSize(1024, 800);
+		await seedContent();
+		await setAppearance("dark", { language: "en", autoExtract: false, reduceMotion: true });
+		await navigate("/", ".chat-topbar h1");
+		await host(`document.querySelector(".composer-input").focus();
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, shiftKey: true, bubbles: true }));`);
+		await until(
+			'document.querySelector(".global-search-dialog")?.matches(":modal")',
+			"search native modal",
+		);
+		await checkContrast("dark global search");
+		await host('document.querySelector(".composer-input").focus()');
+		assert.equal(
+			await host(
+				'document.activeElement.closest("dialog")?.classList.contains("global-search-dialog")',
+			),
+			true,
+			"background cannot steal search focus",
+		);
+		for (let index = 0; index < 8; index++)
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Tab" });
+		await settle();
+		assert.equal(
+			await host(
+				'document.activeElement.closest("dialog")?.classList.contains("global-search-dialog")',
+			),
+			true,
+			"Tab stays within the modal",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until('!document.querySelector(".global-search-dialog")', "native search Escape");
+		assert.equal(
+			await host('document.activeElement.classList.contains("composer-input")'),
+			true,
+			"search restores input focus",
+		);
+		await host('document.querySelector(".composer-context-ring").click()');
+		await until(
+			'Boolean(document.querySelector(".composer-context-popover"))',
+			"context usage popup",
+		);
+		await settle();
+		assert.match(
+			await host('document.querySelector(".composer-context-popover").textContent'),
+			/Not recorded/,
+		);
+		assert.equal(
+			await host(`(() => {
+			const bounds = document.querySelector(".composer-context-popover").getBoundingClientRect();
+			return bounds.left >= 0 && bounds.right <= innerWidth && bounds.top >= 0 && bounds.bottom <= innerHeight;
+		})()`),
+			true,
+			`context popup fits the viewport: ${await host('JSON.stringify(document.querySelector(".composer-context-popover").getBoundingClientRect())')}`,
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until('!document.querySelector(".composer-context-popover")', "context dismissal");
+		await host(`(() => {
+			const trigger = document.querySelector("#turn-ui-answer .turn-detail-trigger");
+			trigger.focus();
+			trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+		})()`);
+		await settle();
+		const turnTooltip = await host(`(() => {
+			const trigger = document.querySelector("#turn-ui-answer .turn-detail-trigger");
+			const popover = document.querySelector(".turn-detail-popover");
+			const bounds = popover.getBoundingClientRect();
+			const triggerBounds = trigger.getBoundingClientRect();
+			return {
+				title: trigger.title,
+				description: trigger.getAttribute("aria-describedby") === popover.id,
+				controls: trigger.getAttribute("aria-controls") === popover.id,
+				role: popover.getAttribute("role"),
+				content: popover.textContent.includes("Token breakdown"),
+				titleArea: Boolean(popover.querySelector("header")),
+				modal: Boolean(document.querySelector(".turn-detail-dialog, .turn-detail-backdrop")),
+				inViewport: bounds.left >= 0 && bounds.right <= innerWidth
+					&& bounds.top >= 0 && bounds.bottom <= innerHeight,
+				placement: popover.classList.contains("turn-detail-popover-bottom") ? "bottom" : "top",
+				expectedPlacement: triggerBounds.top + triggerBounds.height / 2 > innerHeight / 2
+					? "bottom"
+					: "top",
+				rightInset: innerWidth - bounds.right,
+				verticalInset: popover.classList.contains("turn-detail-popover-bottom")
+					? innerHeight - bounds.bottom
+					: bounds.top,
+				distinctSurface: getComputedStyle(popover).backgroundColor
+					!== getComputedStyle(document.querySelector(".chat-pane")).backgroundColor
+			};
+		})()`);
+		assert.equal(turnTooltip.title, "", "turn details no longer use the browser tooltip");
+		assert.equal(turnTooltip.description, true, "usage popover describes its trigger");
+		assert.equal(turnTooltip.controls, true, "trigger identifies its usage popover");
+		assert.equal(turnTooltip.role, "tooltip");
+		assert.equal(turnTooltip.content, true, "the hover surface contains the full usage details");
+		assert.equal(turnTooltip.titleArea, false, "the details title area is removed");
+		assert.equal(turnTooltip.modal, false, "turn details no longer opens a modal");
+		assert.equal(turnTooltip.inViewport, true, "usage popover stays inside the viewport");
+		assert.equal(
+			turnTooltip.placement,
+			turnTooltip.expectedPlacement,
+			"usage popover chooses the upper or lower right corner based on the trigger position",
+		);
+		assert.equal(turnTooltip.rightInset <= 16, true, "usage popover stays close to the right edge");
+		assert.equal(
+			turnTooltip.verticalInset,
+			turnTooltip.placement === "bottom" ? 16 : 48,
+			"usage popover uses the appropriate upper or lower edge",
+		);
+		assert.equal(
+			turnTooltip.distinctSurface,
+			true,
+			"usage popover contrasts with the chat surface",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		browser.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+		await until(
+			'!document.querySelector(".turn-detail-popover")',
+			"Escape closes focused usage popover",
+		);
+		await host(`(() => {
+			const trigger = document.querySelector("#turn-ui-answer .turn-detail-trigger");
+			trigger.getBoundingClientRect = () => ({
+				top: innerHeight - 48,
+				bottom: innerHeight - 24,
+				height: 24,
+				left: 100,
+				right: 124,
+				width: 24
+			});
+			trigger.focus();
+			trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+		})()`);
+		await settle();
+		await until(
+			'Boolean(document.querySelector(".turn-detail-popover"))',
+			"lower-right usage popover",
+		);
+		assert.equal(
+			await host(
+				'document.querySelector(".turn-detail-popover")?.classList.contains("turn-detail-popover-bottom")',
+			),
+			true,
+			"usage popover moves to the lower-right corner for a lower trigger",
+		);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until(
+			'!document.querySelector(".turn-detail-popover")',
+			"Escape closes lower-right usage popover",
+		);
+		await host(
+			`delete document.querySelector("#turn-ui-answer .turn-detail-trigger").getBoundingClientRect`,
+		);
+		const detailPoint = await host(`(() => {
+			const bounds = document.querySelector("#turn-ui-answer .turn-detail-trigger").getBoundingClientRect();
+			return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) };
+		})()`);
+		browser.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+		browser.webContents.sendInputEvent({
+			type: "mouseMove",
+			x: detailPoint.x,
+			y: detailPoint.y,
+		});
+		await until('Boolean(document.querySelector(".turn-detail-popover"))', "hover usage popover");
+		const popoverPoint = await host(`(() => {
+			const bounds = document.querySelector(".turn-detail-popover").getBoundingClientRect();
+			return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) };
+		})()`);
+		browser.webContents.sendInputEvent({
+			type: "mouseMove",
+			x: popoverPoint.x,
+			y: popoverPoint.y,
+		});
+		await settle();
+		assert.equal(
+			await host('Boolean(document.querySelector(".turn-detail-popover"))'),
+			true,
+			"moving the pointer from the icon into the details panel keeps it open",
+		);
+		browser.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+		await until('!document.querySelector(".turn-detail-popover")', "hover usage popover closes");
+		await setInput(".composer-input", "Keep this unsent draft");
+		await host(`(() => {
+			const data = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII="), char => char.charCodeAt(0));
+			const files = new DataTransfer();
+			files.items.add(new File([data], "draft.png", { type: "image/png" }));
+			const input = document.querySelector('.chat-composer input[type="file"]');
+			input.files = files.files;
+			input.dispatchEvent(new Event("change", { bubbles: true }));
+		})()`);
+		await until('Boolean(document.querySelector(".composer-attachment"))', "draft attachment");
+		await host(`window.uiRequests = [];
+			window.rhyza = {
+				sourceSearch: async () => [],
+				agentPrompt: async request => {
+					window.uiRequests.push(request);
+					return { ok: false, error: "Fixture request failed." };
+				}
+			};
+			(() => {
+				document.activeElement.blur();
+				const paragraph = document.querySelector("#turn-ui-answer .markdown-body p");
+				const range = document.createRange();
+				range.selectNodeContents(paragraph);
+				const selection = window.getSelection();
+				selection.removeAllRanges();
+				selection.addRange(range);
+				paragraph.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+			})();`);
+		try {
+			await until('Boolean(document.querySelector(".text-selection-menu"))', "selection actions");
+			await host('document.querySelectorAll(".text-selection-menu button")[1].click()');
+			await until(
+				'window.uiRequests.length === 1 && Boolean(document.querySelector(".turn-execution-error"))',
+				"selection failure",
+			);
+			assert.equal(
+				await host('document.querySelector(".composer-input").value'),
+				"Keep this unsent draft",
+				"Explain preserves normal draft",
+			);
+			assert.deepEqual(
+				await host("window.uiRequests[0].images"),
+				[],
+				"selection request does not inherit composer attachments",
+			);
+			assert.equal(
+				await host('document.querySelectorAll(".composer-attachment").length'),
+				1,
+				"Explain preserves attachments",
+			);
+			await host(`(() => {
+				const original = window.uiStore.getState().turns.filter(turn => turn.role === "user").at(-1);
+				window.uiStore.getState().updateTurn(original.id, { images: [{ mimeType: "image/png", data: "original-image" }] });
+				const answer = window.uiStore.getState().turns.filter(turn => turn.role === "assistant").at(-1);
+				window.uiStore.getState().updateTurn(answer.id, { content: "Partial response from failed attempt" });
+			})()`);
+			const retryIdentity = await host(`(() => {
+				const turns = window.uiStore.getState().turns;
+				return {
+					count: turns.length,
+					questionId: turns.filter(turn => turn.role === "user").at(-1).id,
+					questionContent: turns.filter(turn => turn.role === "user").at(-1).content,
+					answerId: turns.filter(turn => turn.role === "assistant").at(-1).id
+				};
+			})()`);
+			const clickRecovery = async (label) => {
+				await host(
+					`[...document.querySelectorAll(".turn-actions button")].find(button => button.getAttribute("aria-label") === ${JSON.stringify(label)}).click()`,
+				);
+				await settle();
+			};
+			await clickRecovery("Retry");
+			await until("window.uiRequests.length === 2", "retry request");
+			assert.equal(
+				await host("window.uiRequests[1].prompt === window.uiRequests[0].prompt"),
+				true,
+				"Retry retains selected passage",
+			);
+			assert.deepEqual(
+				await host("window.uiRequests[1].images"),
+				[{ mimeType: "image/png", data: "original-image" }],
+				"Retry restores original attachments, not current draft",
+			);
+			await until(
+				'window.uiStore.getState().turns.filter(turn => turn.role === "assistant").at(-1)?.content === "Fixture request failed."',
+				"retry replaces partial response",
+			);
+			assert.equal(
+				await host("window.uiStore.getState().turns.length"),
+				retryIdentity.count,
+				"Retry reuses the original user and assistant turns",
+			);
+			assert.equal(
+				await host("window.uiRequests[1].frontendTurnId === window.uiRequests[0].frontendTurnId"),
+				true,
+				"Retry keeps the original assistant turn identity",
+			);
+			assert.equal(
+				await host(
+					`window.uiStore.getState().turns.filter(turn => turn.id === ${JSON.stringify(retryIdentity.questionId)}).length`,
+				),
+				1,
+				"Retry does not duplicate the original question",
+			);
+			assert.equal(
+				await host(
+					`window.uiStore.getState().turns.find(turn => turn.id === ${JSON.stringify(retryIdentity.questionId)}).content`,
+				),
+				retryIdentity.questionContent,
+				"Retry preserves the original question text",
+			);
+			assert.equal(
+				await host('document.querySelector(".composer-input").value'),
+				"Keep this unsent draft",
+			);
+			await clickRecovery("Edit and retry");
+			await until(
+				'document.querySelector(".confirmation-dialog")?.open',
+				"draft replacement confirmation",
+			);
+			browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			await until('!document.querySelector(".confirmation-dialog")', "draft replacement canceled");
+			assert.equal(
+				await host('document.querySelector(".composer-input").value'),
+				"Keep this unsent draft",
+			);
+			await clickRecovery("Edit and retry");
+			await until(
+				'document.querySelector(".confirmation-dialog")?.open',
+				"draft replacement reopens",
+			);
+			await host('document.querySelector(".confirmation-submit").click()');
+			await until(
+				'Boolean(document.querySelector(".composer-retry-quote"))',
+				"edit retry retains quote",
+			);
+			assert.match(
+				await host('document.querySelector(".composer-attachment img").src'),
+				/original-image/,
+			);
+			await setInput(".composer-input", "Explain with more detail");
+			await host('document.querySelector(".composer-send").click()');
+			await until("window.uiRequests.length === 3", "edited retry request");
+			assert.equal(
+				await host("window.uiStore.getState().turns.length"),
+				retryIdentity.count,
+				"Edit and retry updates the original turn pair",
+			);
+			assert.equal(
+				await host("window.uiRequests[2].frontendTurnId === window.uiRequests[0].frontendTurnId"),
+				true,
+				"Edit and retry keeps the original assistant turn identity",
+			);
+			assert.equal(
+				await host(
+					'window.uiStore.getState().turns.filter(turn => turn.role === "user" && turn.content === "Explain with more detail").length',
+				),
+				1,
+				"Edit and retry replaces rather than duplicates the question",
+			);
+			assert.match(
+				await host("window.uiRequests[2].prompt"),
+				/Selected passage:[\s\S]*User question:\nExplain with more detail/,
+			);
+			await until('!document.querySelector(".composer-retry-quote")', "sent quote cleared");
+		} finally {
+			await host("delete window.rhyza; delete window.uiRequests;");
+		}
+		await host(`window.uiScrollCalls = [];
+			window.uiOriginalScrollTo = Element.prototype.scrollTo;
+			Element.prototype.scrollTo = function(options) {
+				window.uiScrollCalls.push(options);
+			};
+			document.querySelector('[aria-label="Open turn navigator"]').click();`);
+		await until('Boolean(document.querySelector(".turn-navigator-option"))', "turn navigator");
+		await host('document.querySelector(".turn-navigator-option").click()');
+		assert.equal(
+			await host("window.uiScrollCalls.at(-1)?.behavior"),
+			"auto",
+			"reduced motion disables explicit smooth navigation",
+		);
+		await host(
+			"Element.prototype.scrollTo = window.uiOriginalScrollTo; delete window.uiOriginalScrollTo; delete window.uiScrollCalls;",
+		);
+		await seedContent();
+		await navigate("/knowledge", ".knowledge-page-header h1");
+		await host(`window.uiStore.setState({ diagrams: [{
+			id: "ui-draft-diagram", name: "Editable diagram", type: "flowchart",
+			nodes: [], edges: [], mermaidSource: "flowchart TD\\n A-->B",
+			version: 1, versions: [], updatedAt: "2026-09-18T00:00:00Z"
+		}] });`);
+		await host('document.querySelector("#knowledge-diagrams-tab").click()');
+		await until(
+			'Boolean(document.querySelector(".knowledge-inspector-content textarea"))',
+			"diagram editor",
+		);
+		await setInput(".knowledge-inspector-content textarea", "flowchart TD\n A-->C");
+		await host(
+			`window.uiStore.setState(state => ({ diagrams: state.diagrams.map(diagram => ({ ...diagram, name: "Background refresh" })) }))`,
+		);
+		await settle();
+		assert.equal(
+			await host('document.querySelector(".knowledge-inspector-content textarea").value'),
+			"flowchart TD\n A-->C",
+			"background updates preserve unsaved source",
+		);
+		await setInput(".knowledge-inspector-content textarea", "not a diagram");
+		await host('document.querySelector("form.knowledge-inspector-content").requestSubmit()');
+		await until(
+			'Boolean(document.querySelector("#diagram-source-error"))',
+			"invalid diagram feedback",
+		);
+		assert.equal(
+			await host("window.uiStore.getState().diagrams[0].version"),
+			1,
+			"invalid source not saved",
+		);
+		await setInput(".knowledge-inspector-content textarea", 'pie\n "A": 1\n "B": 2');
+		await host('document.querySelector("form.knowledge-inspector-content").requestSubmit()');
+		await until("window.uiStore.getState().diagrams[0].version === 2", "supported diagram save");
+		assert.equal(
+			await host("window.uiStore.getState().diagrams[0].name"),
+			"Background refresh",
+			"saving source retains unedited refreshed fields",
+		);
+		await setInput(".knowledge-inspector-content textarea", "flowchart TD\n A-->B");
+		await host('document.querySelector("form.knowledge-inspector-content").requestSubmit()');
+		await until("window.uiStore.getState().diagrams[0].version === 3", "flowchart save");
+		await until(
+			'Boolean(document.querySelector(".mermaid-diagram-canvas .node rect"))',
+			"diagram rendering",
+		);
+		const darkFill = await host(
+			'getComputedStyle(document.querySelector(".mermaid-diagram-canvas .node rect")).fill',
+		);
+		await setAppearance("light");
+		await until(
+			'Boolean(document.querySelector(".mermaid-diagram-canvas .node rect"))',
+			"light diagram rendering",
+		);
+		assert.notEqual(
+			await host(
+				'getComputedStyle(document.querySelector(".mermaid-diagram-canvas .node rect")).fill',
+			),
+			darkFill,
+			"theme change updates cached diagram node surfaces",
+		);
+		await host(
+			'document.querySelector(".diagram-export button").focus(); document.querySelector(".diagram-export button").click()',
+		);
+		await until('Boolean(document.querySelector(".diagram-export-menu"))', "export menu");
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "End" });
+		await settle();
+		assert.match(await host("document.activeElement.textContent"), /PNG/);
+		browser.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		await until('!document.querySelector(".diagram-export-menu")', "export menu dismissal");
+		assert.equal(
+			await host('document.activeElement.getAttribute("aria-label")'),
+			"Download diagram",
+			"export restores focus",
+		);
+		await navigate("/", ".chat-topbar h1");
+		await host(`window.uiSourceFails = true;
+			window.rhyza = {
+				getWorkspace: async () => ({ path: null }),
+				sourceList: async () => {
+					if (window.uiSourceFails) throw new Error("Fixture source catalog failed.");
+					return [];
+				}
+			}; undefined;`);
+		try {
+			await navigate("/sources", ".page-title");
+			await until(
+				'document.querySelector(".sources-catalog [role=alert]")?.textContent.includes("Fixture source catalog failed.")',
+				"source failure shown",
+			);
+			assert.equal(
+				await host("window.uiStore.getState().sources.length"),
+				1,
+				"catalog failure preserves sources",
+			);
+			await host(`window.uiSourceFails = false;
+				[...document.querySelectorAll(".sources-catalog button")].find(button => button.textContent.trim() === "Retry").click();`);
+			await until(
+				'!document.querySelector(".sources-catalog [role=alert]") && window.uiStore.getState().sources.length === 0',
+				"catalog retry recovers",
+			);
+		} finally {
+			await host(
+				"delete window.rhyza; delete window.uiSourceFails; window.uiStore.setState({ diagrams: [] });",
+			);
+		}
+		await seedContent();
+		await setAppearance("light", { reduceMotion: false });
 	}
 
 	async function checkInteractions() {
@@ -1823,6 +2924,22 @@ if (!process.versions.electron) {
 		server = await createServer({
 			root: projectRoot,
 			logLevel: "error",
+			plugins: [
+				{
+					name: "startup-recovery-fixture",
+					transform(code, id) {
+						if (!id.endsWith("/src/main.tsx")) return;
+						return `if (new URL(location.href).searchParams.has("startup-fixture")) {
+						let attempts = 0;
+						window.rhyza = { getWorkspace: async () => {
+							if (++attempts === 1) throw new Error("Fixture workspace failed.");
+							delete window.rhyza;
+							return { path: null };
+						} };
+					}\n${code}`;
+					},
+				},
+			],
 			server: { host: "127.0.0.1", port: 0, strictPort: false, watch: null },
 		});
 		await server.listen();
@@ -1842,8 +2959,18 @@ if (!process.versions.electron) {
 		browser.webContents.on("console-message", (event) => {
 			if (event.level === "error") rendererErrors.push(event.message);
 		});
-		await browser.loadURL(`http://127.0.0.1:${server.httpServer.address().port}/`);
+		await browser.loadURL(`http://127.0.0.1:${server.httpServer.address().port}/?startup-fixture`);
+		await until(
+			'Boolean(document.querySelector(".startup-state [role=alert]"))',
+			"startup error surface",
+		);
+		assert.match(
+			await host('document.querySelector(".startup-state").textContent'),
+			/Fixture workspace failed/,
+		);
+		await host('document.querySelector(".startup-state button").click()');
 		await until('Boolean(document.querySelector(".chat-empty"))', "initial workspace");
+		await host('history.replaceState(null, "", "/");');
 		await host(
 			'import("/src/store/index.ts").then(module => { window.uiStore = module.useAppStore; })',
 		);
@@ -1883,6 +3010,11 @@ if (!process.versions.electron) {
 		await seedContent();
 		await checkOverlayControls();
 		await checkFormAlignment();
+		await checkDesignContracts();
+		await checkRecoveryButtonLayout();
+		await checkComposerModelMenu();
+		await checkComposerInputAndContext();
+		await checkSettingsIconActions();
 		for (const theme of ["light", "dark"]) {
 			await setAppearance(theme);
 			await navigate("/", ".chat-topbar h1");

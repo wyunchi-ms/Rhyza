@@ -162,9 +162,9 @@ html[data-theme] .session-graph-node.is-summary-ancestor {
 }
 
 html[data-theme] .session-graph-node.is-summary-source:not(.is-active) {
-	outline: 3px dashed #8b5cf6;
+	outline: 3px dashed var(--ui-brand-accent);
 	outline-offset: 4px;
-	box-shadow: 0 0 0 8px rgb(139 92 246 / 12%);
+	box-shadow: 0 0 0 8px rgb(var(--ui-brand-rgb) / 12%);
 }
 
 .summary-node-badge {

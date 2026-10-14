@@ -1,5 +1,20 @@
 const strongWithTrailingWhitespace = /(\*\*|__)([^\r\n]*?\S)([ \t]+)\1/g;
 
+export function isMarkdownCodeBlock(className: string | undefined, source: string): boolean {
+	if (/(?:^|\s)language-(?:md|markdown)(?:\s|$)/i.test(className ?? "")) return true;
+	if (className?.trim() || !/^ {0,3}#{1,6}[ \t]+\S/m.test(source)) return false;
+	const lines = source.split(/\r?\n/);
+	return lines.some((line, index) => {
+		if (!index || !line.includes("|") || !lines[index - 1].includes("|")) return false;
+		const cells = line
+			.trim()
+			.replace(/^\||\|$/g, "")
+			.split("|")
+			.map((cell) => cell.trim());
+		return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+	});
+}
+
 function normalizeStrongEmphasisInProse(value: string): string {
 	return value.replace(
 		strongWithTrailingWhitespace,

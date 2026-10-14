@@ -213,6 +213,7 @@ if (!process.versions.electron) {
 			import(pathToFileURL(path.join(projectRoot, "dist-electron", ...segments)).href);
 		const { McpService } = await load("electron", "main", "mcp-service.js");
 		const { ipcChannels } = await load("src", "shared", "ipc.js");
+		ipcMain.handle(ipcChannels.windowThemeSet, () => ({ ok: true }));
 		const { validateMcpSave, validateMcpTarget, validateMcpAction, validateMcpResource } =
 			await load("src", "shared", "mcp.js");
 		const workspace = root;
@@ -647,7 +648,10 @@ if (!process.versions.electron) {
 		await click(".mcp-editor details summary");
 		await field("Configuration JSON", "{invalid");
 		await textButton("Load configuration");
-		await until('document.querySelector(".mcp-editor .mcp-error")', "invalid import");
+		await until(
+			'document.querySelector("#mcp-editor-importText-error") && document.querySelector("#mcp-editor-importText").getAttribute("aria-invalid") === "true"',
+			"invalid import is associated with its field",
+		);
 		await field(
 			"Configuration JSON",
 			JSON.stringify({
@@ -662,7 +666,7 @@ if (!process.versions.electron) {
 		);
 		await textButton("Load configuration");
 		await until(
-			'document.querySelector(".mcp-editor .mcp-error")?.textContent.includes("Enter the server name")',
+			'document.querySelector("#mcp-editor-importName-error")?.textContent.includes("Enter the server name")',
 			"multiple server import requires selection",
 		);
 		await field("Server name to import", "imported");

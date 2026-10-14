@@ -87,6 +87,27 @@ html[data-theme] .settings-page .mcp-settings .field:focus-visible {
 	box-shadow: 0 0 0 2px var(--ui-brand-ink);
 }
 
+html[data-theme]
+	.settings-page
+	.mcp-settings
+	:is(
+		input.field:not(.field-with-icon):not([type="checkbox"]):not([type="radio"]),
+		textarea.field
+	) {
+	min-height: 2.75rem;
+}
+
+html[data-theme]
+	.settings-page
+	.mcp-settings
+	:is(
+		input.field:not(.field-with-icon):not([type="checkbox"]):not([type="radio"]),
+		textarea.field
+	):focus-visible {
+	border: 0;
+	box-shadow: inset 0 -2px 0 var(--ui-brand-accent);
+}
+
 html[data-theme] .settings-page .mcp-settings textarea.field {
 	font-family: var(--font-mono, monospace);
 	resize: vertical;

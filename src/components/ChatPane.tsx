@@ -4,9 +4,10 @@ import appIcon from "../../resources/branding/icon.png";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getRhyzaBridge, isElectronRuntime } from "../hooks/useRhyzaBridge";
 import { useAppStore } from "../store";
-import type { KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
+import type { AgentPromptImage, KnowledgeExtractionResponse, SummaryResponse } from "../shared/ipc";
 import type { Turn } from "../types";
 import { requestScheduler } from "../utils/requestScheduler";
+import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { useKnowledgePreviewActions } from "../hooks/useKnowledgePreview";
 import { useAgentEventStream } from "../hooks/useAgentEventStream";
 import { useConversationNavigation } from "../hooks/useConversationNavigation";
@@ -41,8 +42,15 @@ import { conversationTurnTitle } from "../utils/conversationTitle";
 import { AnswerOutline } from "./chat/AnswerOutline";
 import { useTranslation } from "../i18n";
 import { usePathSummarySelection } from "./PathSummarySelection";
+import { confirmAction } from "./ConfirmationDialog";
 
 const auxiliaryRequestTimeoutMs = 30_000;
+
+type RetryTarget = {
+	sessionId: string;
+	userTurnId: string;
+	assistantTurnId: string;
+};
 
 export const ChatPane: React.FC = () => {
 	const { t } = useTranslation();
@@ -52,10 +60,19 @@ export const ChatPane: React.FC = () => {
 	const composerDraftRef = useRef<ComposerDraftHandle>(null);
 	const [pendingRequests, setPendingRequests] = useState(0);
 	const [sendError, setSendError] = useState<string | null>(null);
+	const [draftQuote, setDraftQuote] = useState<{
+		sessionId: string;
+		quote: NonNullable<Turn["quote"]>;
+	} | null>(null);
+	const [editRetryTarget, setEditRetryTarget] = useState<RetryTarget | null>(null);
 	const [selection, setSelection] = useState<TextSelectionAnchor | null>(null);
 	const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
 	const [turnContextMenu, setTurnContextMenu] = useState<TurnContextMenuState | null>(null);
 	const activeSessionId = store.activeSessionId;
+	useEffect(() => {
+		setDraftQuote(null);
+		setEditRetryTarget(null);
+	}, [activeSessionId]);
 	const isSending = pendingRequests > 0;
 	const activeSession = store.sessions.find((session) => session.id === activeSessionId);
 	const { registerStreamingTurn, unregisterStreamingTurn } = useAgentEventStream();
@@ -111,11 +128,47 @@ export const ChatPane: React.FC = () => {
 		selectedText?: string;
 		quotedTurnId?: string;
 		question?: string;
+		images?: AgentPromptImage[];
+		retryTarget?: RetryTarget;
 	}) => {
-		const { input, images } = composerDraftRef.current?.getSnapshot() ?? { input: "", images: [] };
+		const snapshot = composerDraftRef.current?.getSnapshot() ?? { input: "", images: [] };
+		const input = snapshot.input;
+		const images = options?.question !== undefined ? (options.images ?? []) : snapshot.images;
 		const prompt = (options?.question ?? input).trim();
 		const targetSessionId = options?.sessionId ?? activeSessionId;
+		const selectedText =
+			options?.selectedText ??
+			(options?.question === undefined && draftQuote?.sessionId === targetSessionId
+				? draftQuote.quote.text
+				: undefined);
+		const quotedTurnId =
+			options?.quotedTurnId ??
+			(options?.question === undefined && draftQuote?.sessionId === targetSessionId
+				? draftQuote.quote.turnId
+				: undefined);
 		if ((!prompt && images.length === 0) || !targetSessionId) return;
+		const retryTarget =
+			options?.retryTarget ??
+			(options?.question === undefined && editRetryTarget?.sessionId === targetSessionId
+				? editRetryTarget
+				: undefined);
+		const retryQuestion = retryTarget
+			? useAppStore.getState().turns.find((turn) => turn.id === retryTarget.userTurnId)
+			: undefined;
+		const retryAnswer = retryTarget
+			? useAppStore.getState().turns.find((turn) => turn.id === retryTarget.assistantTurnId)
+			: undefined;
+		if (
+			retryTarget &&
+			(retryTarget.sessionId !== targetSessionId ||
+				retryQuestion?.sessionId !== targetSessionId ||
+				retryQuestion?.role !== "user" ||
+				retryAnswer?.sessionId !== targetSessionId ||
+				retryAnswer?.role !== "assistant")
+		) {
+			setSendError("The original question could not be found.");
+			return;
+		}
 		if (
 			store.turns.some((turn) => turn.sessionId === targetSessionId && turn.pathSummary) &&
 			store.turns.some(
@@ -128,48 +181,72 @@ export const ChatPane: React.FC = () => {
 			setSendError(t("Wait for the summary to finish before continuing."));
 			return;
 		}
-		const promptImages = images.map(({ id: _id, preview: _preview, ...image }) => image);
+		const promptImages = images.map(({ mimeType, data }) => ({ mimeType, data }));
 		const referenceContext = buildComposerReferenceContext(prompt, store);
 		const lightweightGreeting = isLightweightGreeting(prompt, {
 			hasImages: promptImages.length > 0,
-			hasSelection: Boolean(options?.selectedText),
+			hasSelection: Boolean(selectedText),
 		});
-		const agentPrompt = options?.selectedText
-			? `Answer the user's question using the selected passage as the primary focus. The selected passage identifies what the user is asking about and is explicit evidence of a learning gap; extract any durable concept it names into the knowledge base. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${options.selectedText}\n\nUser question:\n${prompt}`
+		const agentPrompt = selectedText
+			? `Answer the user's question using the selected passage as the primary focus. The selected passage identifies what the user is asking about and is explicit evidence of a learning gap; extract any durable concept it names into the knowledge base. Prefer linking or updating existing knowledge-base entities instead of creating duplicates.\n\nSelected passage:\n${selectedText}\n\nUser question:\n${prompt}`
 			: prompt;
-		composerDraftRef.current?.clear();
+		if (options?.question === undefined) {
+			composerDraftRef.current?.clear();
+			setDraftQuote(null);
+		}
+		if (retryTarget) setEditRetryTarget(null);
 		setSendError(null);
 		const now = new Date().toISOString();
-		const userTurnId = createId("turn");
-		const assistantTurnId = createId("turn");
+		const userTurnId = retryTarget?.userTurnId ?? createId("turn");
+		const assistantTurnId = retryTarget?.assistantTurnId ?? createId("turn");
+		const previousRetryUsage = retryAnswer?.usage;
 		const quote =
-			options?.selectedText && options.quotedTurnId
-				? { turnId: options.quotedTurnId, text: options.selectedText }
-				: undefined;
+			selectedText && quotedTurnId ? { turnId: quotedTurnId, text: selectedText } : undefined;
 		const promptSummary = prompt
 			? summarize(conversationTurnTitle({ content: prompt, quote }))
 			: "";
-		store.addManualTurn({
-			id: userTurnId,
-			sessionId: targetSessionId,
-			role: "user",
-			content: prompt,
-			status: "complete",
-			summary: promptSummary,
-			images: promptImages,
-			quote,
-			createdAt: now,
-		});
-		store.addManualTurn({
-			id: assistantTurnId,
-			sessionId: targetSessionId,
-			role: "assistant",
-			content: "",
-			status: "queued",
-			summary: "Queued behind the previous message",
-			activities: startTurnActivity(undefined, "queue", "Waiting for the previous message", now),
-			createdAt: now,
-		});
+		if (retryTarget) {
+			store.updateTurn(userTurnId, {
+				content: prompt,
+				summary: promptSummary,
+				images: promptImages,
+				quote,
+			});
+			store.updateTurn(assistantTurnId, {
+				content: "",
+				reasoning: undefined,
+				tools: [],
+				activities: startTurnActivity(undefined, "queue", "Waiting for the previous message", now),
+				status: "queued",
+				summary: "Queued behind the previous message",
+				htmlPreviews: undefined,
+				entities: undefined,
+				changeSetId: undefined,
+				completedAt: undefined,
+			});
+		} else {
+			store.addManualTurn({
+				id: userTurnId,
+				sessionId: targetSessionId,
+				role: "user",
+				content: prompt,
+				status: "complete",
+				summary: promptSummary,
+				images: promptImages,
+				quote,
+				createdAt: now,
+			});
+			store.addManualTurn({
+				id: assistantTurnId,
+				sessionId: targetSessionId,
+				role: "assistant",
+				content: "",
+				status: "queued",
+				summary: "Queued behind the previous message",
+				activities: startTurnActivity(undefined, "queue", "Waiting for the previous message", now),
+				createdAt: now,
+			});
+		}
 		store.setSessionStatus(targetSessionId, "running");
 		setPendingRequests((count) => count + 1);
 
@@ -262,7 +339,13 @@ export const ChatPane: React.FC = () => {
 						result.ok ? undefined : result.error,
 					),
 				});
-				if (result.usage) store.updateTurn(assistantTurnId, { usage: result.usage });
+				if (result.usage) {
+					store.updateTurn(assistantTurnId, {
+						usage: retryTarget
+							? addUsage(previousRetryUsage ?? emptyUsage(), result.usage)
+							: result.usage,
+					});
+				}
 				if (!result.ok) throw new Error(result.error || `${provider.label} request failed.`);
 				const response = result.assistantText || `${provider.label} completed without text output.`;
 				const streamedReasoning = useAppStore
@@ -387,6 +470,69 @@ export const ChatPane: React.FC = () => {
 			setPendingRequests((count) => Math.max(0, count - 1));
 		}
 	};
+
+	const recoverTurn = async (answer: Turn, edit: boolean) => {
+		const turns = useAppStore
+			.getState()
+			.turns.filter((turn) => turn.sessionId === answer.sessionId);
+		const index = turns.findIndex((turn) => turn.id === answer.id);
+		const question = turns
+			.slice(0, index)
+			.reverse()
+			.find((turn) => turn.role === "user");
+		if (!question) {
+			setSendError("The original question could not be found.");
+			return;
+		}
+		if (edit) {
+			const draft = composerDraftRef.current?.getSnapshot();
+			if (
+				(draft?.input || draft?.images.length) &&
+				!(await confirmAction({
+					title: "Replace the current draft?",
+					description:
+						"Load the original question and attachments into the composer. This replaces your unsent draft.",
+					confirmLabel: "Replace draft",
+					tone: "warning",
+				}))
+			)
+				return;
+			composerDraftRef.current?.setSnapshot(question.content, question.images ?? []);
+			setDraftQuote(
+				question.quote ? { sessionId: question.sessionId, quote: question.quote } : null,
+			);
+			setEditRetryTarget({
+				sessionId: answer.sessionId,
+				userTurnId: question.id,
+				assistantTurnId: answer.id,
+			});
+			setSendError(null);
+			return;
+		}
+		void handleSend({
+			sessionId: answer.sessionId,
+			question: question.content,
+			images: question.images,
+			selectedText: question.quote?.text,
+			quotedTurnId: question.quote?.turnId,
+			retryTarget: {
+				sessionId: answer.sessionId,
+				userTurnId: question.id,
+				assistantTurnId: answer.id,
+			},
+		});
+	};
+
+	const recoveryRef = useRef(recoverTurn);
+	useLayoutEffect(() => {
+		recoveryRef.current = recoverTurn;
+	});
+	const handleRetry = useCallback((answer: Turn) => {
+		void recoveryRef.current(answer, false);
+	}, []);
+	const handleEditRetry = useCallback((answer: Turn) => {
+		void recoveryRef.current(answer, true);
+	}, []);
 
 	const handleFork = useCallback(async (turn: Turn) => {
 		const store = useAppStore.getState();
@@ -526,11 +672,25 @@ export const ChatPane: React.FC = () => {
 			if (target?.closest?.(".text-selection-popover")) return;
 			dismissSelectionMenu();
 		};
+		const escape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				dismissSelectionMenu();
+			}
+		};
+		const selectionChanged = () => {
+			if (document.activeElement?.closest(".text-selection-popover")) return;
+			if (window.getSelection()?.isCollapsed) setSelection(null);
+		};
+		window.addEventListener("keydown", escape);
+		document.addEventListener("selectionchange", selectionChanged);
 		window.addEventListener("pointerdown", close);
 		window.addEventListener("blur", dismissSelectionMenu);
 		window.addEventListener("resize", dismissSelectionMenu);
 		window.addEventListener("scroll", closeOnScroll, true);
 		return () => {
+			window.removeEventListener("keydown", escape);
+			document.removeEventListener("selectionchange", selectionChanged);
 			window.removeEventListener("pointerdown", close);
 			window.removeEventListener("blur", dismissSelectionMenu);
 			window.removeEventListener("resize", dismissSelectionMenu);
@@ -607,6 +767,9 @@ export const ChatPane: React.FC = () => {
 						onDiagramClick={openDiagramPreview}
 						onTextSelection={handleTextSelection}
 						onOpenContextMenu={handleOpenContextMenu}
+						onRetry={handleRetry}
+						onEditRetry={handleEditRetry}
+						recoveryDisabled={isSessionRunning(store.turns, turn.sessionId)}
 					/>
 				))}
 				{sessionTurns.length === 0 && (
@@ -660,6 +823,16 @@ export const ChatPane: React.FC = () => {
 			)}
 			{sessionTurns.length > 1 && (
 				<TurnNavigator turns={sessionTurns} scrollContainerRef={scrollContainerRef} />
+			)}
+			{draftQuote?.sessionId === activeSessionId && (
+				<div className="composer-retry-quote">
+					<span>
+						{t("Quoted passage")}: {draftQuote.quote.text}
+					</span>
+					<button type="button" className="secondary-button" onClick={() => setDraftQuote(null)}>
+						{t("Remove quote")}
+					</button>
+				</div>
 			)}
 			{summaryPending ? (
 				<div className="path-summary-composer-pending" role="status">

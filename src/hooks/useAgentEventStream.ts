@@ -58,10 +58,10 @@ export function useAgentEventStream() {
 		if (!bridge) return;
 		return bridge.onAgentEvent((event) => {
 			if (!event.frontendSessionId) return;
-			const state = useAppStore.getState();
+			const initialState = useAppStore.getState();
 			const turnId =
 				streamingTurns.current.get(event.frontendSessionId) ??
-				[...state.turns]
+				[...initialState.turns]
 					.reverse()
 					.find(
 						(turn) =>
@@ -70,6 +70,17 @@ export function useAgentEventStream() {
 							isTurnActive(turn),
 					)?.id;
 			if (!turnId) return;
+			if (
+				event.type === "provider_status" &&
+				/retrying its API request/i.test(event.message ?? "")
+			) {
+				flushPendingText();
+				const retryingTurn = useAppStore.getState().turns.find((turn) => turn.id === turnId);
+				if (retryingTurn?.status === "running") {
+					useAppStore.getState().updateTurn(turnId, { content: "", reasoning: undefined });
+				}
+			}
+			const state = useAppStore.getState();
 			const current = state.turns.find((turn) => turn.id === turnId);
 			const statusPatch = current ? providerStatusActivityPatch(current, event) : undefined;
 			if (statusPatch) state.updateTurn(turnId, statusPatch);

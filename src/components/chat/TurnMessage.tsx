@@ -17,9 +17,10 @@ import {
 	GitFork,
 	Info,
 	LoaderCircle,
+	Pencil,
 	Quote,
+	RotateCcw,
 	Sparkles,
-	X,
 } from "lucide-react";
 import React, {
 	memo,
@@ -44,7 +45,11 @@ import { formatChatTimestamp, formatFullChatTimestamp } from "../../utils/chatTi
 import { formatDuration } from "../../utils/common";
 import { toolLabel } from "../../utils/toolLabel";
 import { isMermaidCodeBlock } from "../../utils/mermaidSource";
-import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../../utils/markdown";
+import {
+	isMarkdownCodeBlock,
+	normalizeMarkdownEmphasis,
+	normalizeMarkdownMathDelimiters,
+} from "../../utils/markdown";
 import { markdownRehypePlugins } from "../../utils/markdownHtml";
 import {
 	markdownHeadingSelector,
@@ -54,7 +59,8 @@ import {
 	revealMarkdownDetails,
 } from "../../utils/markdownSections";
 import { MermaidDiagram } from "../MermaidDiagram";
-import { isTurnActive } from "../../utils/sessionRuntime";
+import { isTurnActive, isTurnFailed, turnExecutionLabel } from "../../utils/sessionRuntime";
+import { errorToMessage } from "../../shared/value";
 import { recordPerformanceTiming } from "../../utils/performanceMarks";
 import { PathSummarySources } from "../PathSummarySources";
 import "./markdownSections.css";
@@ -72,6 +78,9 @@ export const TurnMessage = memo(function TurnMessage({
 	onTextSelection,
 	onOpenContextMenu,
 	isFocused,
+	onRetry,
+	onEditRetry,
+	recoveryDisabled = false,
 }: {
 	turn: Turn;
 	sessionNodeId: string;
@@ -85,7 +94,11 @@ export const TurnMessage = memo(function TurnMessage({
 	onTextSelection: (turnId: string, text: string, rect: DOMRect) => void;
 	onOpenContextMenu: (turnId: string, position: { x: number; y: number }) => void;
 	isFocused: boolean;
+	onRetry?: (turn: Turn) => void;
+	onEditRetry?: (turn: Turn) => void;
+	recoveryDisabled?: boolean;
 }) {
+	const { t } = useTranslation();
 	const renderStartedAt = performance.now();
 	useLayoutEffect(() => {
 		recordPerformanceTiming("chat-turn-render-commit", performance.now() - renderStartedAt);
@@ -101,15 +114,65 @@ export const TurnMessage = memo(function TurnMessage({
 	const fullTimestamp = formatFullChatTimestamp(turn.createdAt);
 	const [collapsed, setCollapsed] = useState(false);
 	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [detailsPinned, setDetailsPinned] = useState(false);
+	const [detailsPlacement, setDetailsPlacement] = useState<"top" | "bottom">("top");
+	const detailsTrigger = useRef<HTMLButtonElement>(null);
+	const detailsCloseTimer = useRef<number | null>(null);
+	const [copyState, setCopyState] = useState<string | null>(null);
 	const revealResponse = useCallback(() => setCollapsed(false), []);
+	const updateDetailsPlacement = useCallback(() => {
+		const bounds = detailsTrigger.current?.getBoundingClientRect();
+		if (bounds) {
+			setDetailsPlacement(
+				bounds.top + bounds.height / 2 > window.innerHeight / 2 ? "bottom" : "top",
+			);
+		}
+	}, []);
+	const openDetailsPopover = useCallback(() => {
+		if (detailsCloseTimer.current !== null) window.clearTimeout(detailsCloseTimer.current);
+		detailsCloseTimer.current = null;
+		updateDetailsPlacement();
+		setDetailsOpen(true);
+	}, [updateDetailsPlacement]);
+	const scheduleDetailsClose = useCallback(() => {
+		if (detailsPinned) return;
+		if (detailsCloseTimer.current !== null) window.clearTimeout(detailsCloseTimer.current);
+		detailsCloseTimer.current = window.setTimeout(() => {
+			detailsCloseTimer.current = null;
+			setDetailsOpen(false);
+		}, 650);
+	}, [detailsPinned]);
+	useEffect(
+		() => () => {
+			if (detailsCloseTimer.current !== null) window.clearTimeout(detailsCloseTimer.current);
+		},
+		[],
+	);
 	useEffect(() => {
 		if (!detailsOpen) return;
-		const close = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setDetailsOpen(false);
+		const dismiss = (event: KeyboardEvent | PointerEvent) => {
+			if (event instanceof KeyboardEvent && event.key === "Escape") {
+				setDetailsPinned(false);
+				setDetailsOpen(false);
+				detailsTrigger.current?.blur();
+			}
+			if (
+				detailsPinned &&
+				event instanceof PointerEvent &&
+				event.target instanceof Element &&
+				!event.target.closest(".turn-detail-popover-anchor, .turn-detail-popover")
+			) {
+				setDetailsPinned(false);
+				setDetailsOpen(false);
+			}
 		};
-		window.addEventListener("keydown", close);
-		return () => window.removeEventListener("keydown", close);
-	}, [detailsOpen]);
+		document.addEventListener("keydown", dismiss);
+		document.addEventListener("pointerdown", dismiss);
+		return () => {
+			document.removeEventListener("keydown", dismiss);
+			document.removeEventListener("pointerdown", dismiss);
+		};
+	}, [detailsOpen, detailsPinned]);
 	return (
 		<article
 			id={`turn-${turn.id}`}
@@ -185,25 +248,93 @@ export const TurnMessage = memo(function TurnMessage({
 						type="button"
 						title="Copy"
 						aria-label="Copy"
-						onClick={() => void navigator.clipboard.writeText(turn.content)}
+						onClick={async () => {
+							try {
+								await navigator.clipboard.writeText(turn.content);
+								setCopyState("Copied");
+							} catch (error) {
+								setCopyState(`Could not copy: ${errorToMessage(error)}`);
+							}
+						}}
 					>
 						<Copy size={14} />
 					</button>
+					{copyState && <span role="status">{copyState}</span>}
+					{!isUser && (isTurnFailed(turn) || turn.status === "interrupted") && onRetry && (
+						<div className="turn-recovery-actions">
+							<button
+								type="button"
+								className="icon-button turn-recovery-action"
+								aria-label={t("Retry")}
+								disabled={recoveryDisabled}
+								title={
+									recoveryDisabled
+										? t("Wait for this chat to finish.")
+										: t("Resend the original question and attachments")
+								}
+								onClick={() => onRetry(turn)}
+							>
+								<RotateCcw size={14} aria-hidden="true" />
+							</button>
+							<button
+								type="button"
+								className="icon-button turn-recovery-action"
+								aria-label={t("Edit and retry")}
+								disabled={recoveryDisabled}
+								title={
+									recoveryDisabled
+										? t("Wait for this chat to finish.")
+										: t("Edit the original question before resending")
+								}
+								onClick={() => onEditRetry?.(turn)}
+							>
+								<Pencil size={14} aria-hidden="true" />
+							</button>
+						</div>
+					)}
 					{turn.changeSetId && <span className="knowledge-updated">Knowledge updated</span>}
 					{!isUser && (
-						<button
-							type="button"
-							className="turn-detail-trigger"
-							title="Turn details"
-							aria-label="Show turn usage details"
-							onClick={() => setDetailsOpen(true)}
+						<span
+							className="turn-detail-popover-anchor"
+							onPointerEnter={(event) => {
+								if (event.pointerType !== "touch") openDetailsPopover();
+							}}
+							onPointerLeave={scheduleDetailsClose}
 						>
-							<Info size={14} />
-						</button>
+							<button
+								ref={detailsTrigger}
+								type="button"
+								className="turn-detail-trigger"
+								aria-label={t("Turn details")}
+								aria-describedby={`turn-detail-popover-${turn.id}`}
+								aria-controls={`turn-detail-popover-${turn.id}`}
+								aria-expanded={detailsOpen}
+								onFocus={openDetailsPopover}
+								onBlur={scheduleDetailsClose}
+								onClick={() => {
+									if (detailsPinned) {
+										setDetailsPinned(false);
+										setDetailsOpen(false);
+									} else {
+										openDetailsPopover();
+										setDetailsPinned(true);
+									}
+								}}
+							>
+								<Info size={14} />
+							</button>
+						</span>
 					)}
 				</div>
 			</div>
-			{detailsOpen && <TurnDetailsDialog turn={turn} onClose={() => setDetailsOpen(false)} />}
+			{detailsOpen && (
+				<TurnDetailsPopover
+					turn={turn}
+					placement={detailsPlacement}
+					onPointerEnter={openDetailsPopover}
+					onPointerLeave={scheduleDetailsClose}
+				/>
+			)}
 		</article>
 	);
 });
@@ -233,7 +364,7 @@ export function TurnBubbleContent({
 	const isUser = turn.role === "user";
 	return (
 		<>
-			<TurnStatus status={turn.status} />
+			<TurnStatus turn={turn} />
 			{!isUser && <TurnWorkDetails turn={turn} />}
 			{isUser && turn.quote && (
 				<blockquote className="user-message-quote" aria-label="Quoted passage">
@@ -265,6 +396,7 @@ export function TurnBubbleContent({
 }
 
 function TurnWorkDetails({ turn }: { turn: Turn }) {
+	const { t } = useTranslation();
 	const elapsedMs = Math.max(
 		0,
 		new Date(turn.completedAt ?? new Date()).getTime() - new Date(turn.createdAt).getTime(),
@@ -273,7 +405,9 @@ function TurnWorkDetails({ turn }: { turn: Turn }) {
 	return (
 		<details className="turn-work-details">
 			<summary>
-				<span>Completed in {formatDuration(elapsedMs)}</span>
+				<span>
+					{t(turnExecutionLabel(turn))} · {formatDuration(elapsedMs)}
+				</span>
 				<ChevronDown size={14} />
 			</summary>
 			<div className="turn-work-details-content">
@@ -360,8 +494,19 @@ function UserImageAttachments({ images }: { images: NonNullable<Turn["images"]> 
 	);
 }
 
-function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void }) {
-	const { usage, inherited, partial } = resolveTurnUsage(turn);
+function TurnDetailsPopover({
+	turn,
+	placement,
+	onPointerEnter,
+	onPointerLeave,
+}: {
+	turn: Turn;
+	placement: "top" | "bottom";
+	onPointerEnter: () => void;
+	onPointerLeave: () => void;
+}) {
+	const { t } = useTranslation();
+	const { usage } = resolveTurnUsage(turn);
 	const { cacheHitRate } = usageMetrics(usage);
 	const elapsedMs = Math.max(
 		0,
@@ -381,94 +526,72 @@ function TurnDetailsDialog({ turn, onClose }: { turn: Turn; onClose: () => void 
 		}, {}),
 	);
 	const toolDuration = tools.reduce((sum, tool) => sum + tool.durationMs, 0);
-	return (
+	return createPortal(
 		<div
-			className="turn-detail-backdrop"
-			role="presentation"
-			onMouseDown={(event) => {
-				if (event.target === event.currentTarget) onClose();
-			}}
+			id={`turn-detail-popover-${turn.id}`}
+			className={`turn-detail-popover turn-detail-popover-${placement}`}
+			role="tooltip"
+			aria-label={t("Turn details")}
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
 		>
-			<section
-				className="turn-detail-dialog"
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby={`turn-detail-title-${turn.id}`}
-			>
-				<header>
-					<div>
-						<h2 id={`turn-detail-title-${turn.id}`}>Turn details</h2>
-						<p>
-							{inherited
-								? "Inherited shared history · excluded from this branch total"
-								: partial && usage
-									? "Partial recorded usage for this assistant turn"
-									: usage
-										? "Usage for this assistant turn only"
-										: "Usage was not recorded for this turn"}
-						</p>
+			<div className="turn-detail-summary">
+				<DetailMetric
+					label="Tokens"
+					value={usage ? usageTokens(usage).toLocaleString() : "Not recorded"}
+				/>
+				<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
+				<DetailMetric
+					label="Cost"
+					value={
+						usage
+							? usage.cost < 0.0001 && usage.cost > 0
+								? "<$0.0001"
+								: `$${usage.cost.toFixed(4)}`
+							: "Not recorded"
+					}
+				/>
+			</div>
+			<div className="turn-detail-section">
+				<h3>Token breakdown</h3>
+				<dl className="turn-detail-grid">
+					<DetailRow label="Input" value={usage?.input} />
+					<DetailRow label="Output" value={usage?.output} />
+					<DetailRow label="Cache read" value={usage?.cacheRead} />
+					<DetailRow label="Cache write" value={usage?.cacheWrite} />
+					<DetailRow
+						label="Cache hit rate"
+						value={cacheHitRate === undefined ? undefined : formatCacheHitRate(cacheHitRate)}
+						title={cacheHitRate === undefined ? undefined : cacheHitDescription}
+					/>
+				</dl>
+			</div>
+			<div className="turn-detail-section">
+				<h3>
+					Tool calls{" "}
+					<span>
+						{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}
+					</span>
+				</h3>
+				{tools.length ? (
+					<div className="turn-tool-list">
+						{tools.map((tool) => (
+							<div key={tool.name}>
+								<strong title={tool.name}>{toolLabel(tool.name)}</strong>
+								<span>
+									{tool.count} call{tool.count === 1 ? "" : "s"}
+									{tool.errors ? ` · ${tool.errors} failed` : ""} ·{" "}
+									{formatDuration(tool.durationMs)}
+								</span>
+							</div>
+						))}
 					</div>
-					<button type="button" onClick={onClose} title="Close" aria-label="Close turn details">
-						<X size={17} />
-					</button>
-				</header>
-				<div className="turn-detail-summary">
-					<DetailMetric
-						label="Tokens"
-						value={usage ? usageTokens(usage).toLocaleString() : "Not recorded"}
-					/>
-					<DetailMetric label="Elapsed" value={formatDuration(elapsedMs)} />
-					<DetailMetric
-						label="Cost"
-						value={
-							usage
-								? usage.cost < 0.0001 && usage.cost > 0
-									? "<$0.0001"
-									: `$${usage.cost.toFixed(4)}`
-								: "Not recorded"
-						}
-					/>
-				</div>
-				<div className="turn-detail-section">
-					<h3>Token breakdown</h3>
-					<dl className="turn-detail-grid">
-						<DetailRow label="Input" value={usage?.input} />
-						<DetailRow label="Output" value={usage?.output} />
-						<DetailRow label="Cache read" value={usage?.cacheRead} />
-						<DetailRow label="Cache write" value={usage?.cacheWrite} />
-						<DetailRow
-							label="Cache hit rate"
-							value={cacheHitRate === undefined ? undefined : formatCacheHitRate(cacheHitRate)}
-							title={cacheHitRate === undefined ? undefined : cacheHitDescription}
-						/>
-					</dl>
-				</div>
-				<div className="turn-detail-section">
-					<h3>
-						Tool calls{" "}
-						<span>
-							{turn.tools?.length ?? 0} total · {formatDuration(toolDuration)}
-						</span>
-					</h3>
-					{tools.length ? (
-						<div className="turn-tool-list">
-							{tools.map((tool) => (
-								<div key={tool.name}>
-									<strong title={tool.name}>{toolLabel(tool.name)}</strong>
-									<span>
-										{tool.count} call{tool.count === 1 ? "" : "s"}
-										{tool.errors ? ` · ${tool.errors} failed` : ""} ·{" "}
-										{formatDuration(tool.durationMs)}
-									</span>
-								</div>
-							))}
-						</div>
-					) : (
-						<p className="turn-detail-empty">No tools were called.</p>
-					)}
-				</div>
-			</section>
-		</div>
+				) : (
+					<p className="turn-detail-empty">No tools were called.</p>
+				)}
+			</div>
+		</div>,
+		document.body,
 	);
 }
 
@@ -579,11 +702,32 @@ function ToolCards({ tools }: { tools: NonNullable<Turn["tools"]> }) {
 	);
 }
 
-function TurnStatus({ status }: { status: Turn["status"] }) {
+function TurnStatus({ turn }: { turn: Turn }) {
+	const { status } = turn;
+	if (isTurnFailed(turn)) {
+		return (
+			<div className="turn-execution-error" role="alert">
+				<AlertCircle size={15} /> Request failed. Retry the original question or edit it before
+				resending.
+			</div>
+		);
+	}
 	if (status === "interrupted") {
 		return (
 			<div className="mb-3 flex items-center gap-2 text-sm text-amber-700">
 				<AlertCircle size={15} /> Previous run was interrupted
+			</div>
+		);
+	}
+	if (
+		!isTurnActive(status) &&
+		(status === "complete_with_unsynced_knowledge" ||
+			turn.activities?.some((activity) => activity.status === "warning"))
+	) {
+		return (
+			<div className="turn-execution-warning" role="status">
+				<AlertCircle size={15} /> Response completed; knowledge update needs attention. See work
+				details.
 			</div>
 		);
 	}
@@ -777,8 +921,7 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof ReactMarkdown>
 			);
 		}
 		const isBlock = Boolean(className) || rawSource.includes("\n");
-		const renderMarkdown =
-			renderMarkdownFences && /(?:^|\s)language-(?:md|markdown)(?:\s|$)/i.test(className ?? "");
+		const renderMarkdown = renderMarkdownFences && isMarkdownCodeBlock(className, source);
 		return isBlock ? (
 			<MarkdownSourceBlock source={source} rendered={renderMarkdown}>
 				{renderMarkdown ? (

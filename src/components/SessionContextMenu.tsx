@@ -13,6 +13,7 @@ import { usePathSummarySelection } from "./PathSummarySelection";
 import { projectConversationGraph } from "../utils/conversationGraph";
 import { useTranslation } from "../i18n";
 import { confirmAction } from "./ConfirmationDialog";
+import { navigateMenu } from "../hooks/useFloatingMenu";
 
 export function useSessionContextMenu() {
 	const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
@@ -167,31 +168,7 @@ export function SessionContextMenu({
 				event.stopPropagation();
 			}}
 			onKeyDown={(event) => {
-				if (event.key === "Escape" || event.key === "Tab") {
-					event.preventDefault();
-					event.stopPropagation();
-					onClose();
-					return;
-				}
-				const buttons = [
-					...ref.current!.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
-				];
-				const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-				const next =
-					event.key === "ArrowDown"
-						? (index + 1) % buttons.length
-						: event.key === "ArrowUp"
-							? (index + buttons.length - 1) % buttons.length
-							: event.key === "Home"
-								? 0
-								: event.key === "End"
-									? buttons.length - 1
-									: undefined;
-				if (next !== undefined) {
-					event.preventDefault();
-					event.stopPropagation();
-					buttons[next]?.focus();
-				}
+				navigateMenu(event, onClose);
 			}}
 		>
 			<div role="group" aria-label="Node status">

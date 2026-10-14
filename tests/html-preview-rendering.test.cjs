@@ -391,6 +391,17 @@ if (!process.versions.electron) {
 
 		await host("document.querySelector('button[aria-label=\"Expand HTML preview\"]').click()");
 		await until("window.dualLoads.full === 1", "Expand loads full HTML");
+		assert.equal(
+			await host('document.querySelector(".html-preview-dialog").matches(":modal")'),
+			true,
+			"HTML enlargement uses a native modal focus boundary",
+		);
+		await host('document.querySelector(".html-preview > iframe").focus()');
+		assert.equal(
+			await host('document.querySelector(".html-preview-dialog").contains(document.activeElement)'),
+			true,
+			"inline iframe cannot steal modal focus",
+		);
 		assert.equal(await host('document.querySelectorAll("iframe").length'), 2);
 		assert.equal(
 			await host('window.compactFrame === document.querySelector(".html-preview > iframe")'),

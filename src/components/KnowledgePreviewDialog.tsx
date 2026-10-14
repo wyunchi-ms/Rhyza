@@ -1,6 +1,7 @@
 import { BookOpen, Clock3, Database, FileText, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { useModalDialog } from "../hooks/useModalDialog";
 import type { Diagram, Entity } from "../types";
 import { DiagramViewer } from "./DiagramViewer";
 
@@ -15,14 +16,7 @@ export function KnowledgePreviewDialog({
 	onClose: () => void;
 }) {
 	const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-	useEffect(() => {
-		closeButtonRef.current?.focus();
-		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", closeOnEscape);
-		return () => window.removeEventListener("keydown", closeOnEscape);
-	}, [onClose]);
+	const dialogRef = useModalDialog(true, onClose, closeButtonRef);
 
 	const item = preview.item;
 	return createPortal(
@@ -33,11 +27,12 @@ export function KnowledgePreviewDialog({
 				if (event.target === event.currentTarget) onClose();
 			}}
 		>
-			<section
+			<dialog
+				ref={dialogRef}
 				className={
 					preview.kind === "entity"
-						? "knowledge-preview-dialog knowledge-entity-preview-dialog"
-						: "knowledge-preview-dialog knowledge-diagram-preview-dialog"
+						? "ui-modal-dialog knowledge-preview-dialog knowledge-entity-preview-dialog"
+						: "ui-modal-dialog knowledge-preview-dialog knowledge-diagram-preview-dialog"
 				}
 				role="dialog"
 				aria-modal="true"
@@ -72,7 +67,7 @@ export function KnowledgePreviewDialog({
 						<DiagramViewer diagram={preview.item} showHeader={false} />
 					</div>
 				)}
-			</section>
+			</dialog>
 		</div>,
 		document.body,
 	);

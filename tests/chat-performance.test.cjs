@@ -125,6 +125,7 @@ if (!process.versions.electron) {
 		})()`);
 		await frame();
 		const before = await host(`(() => {
+			document.activeElement.blur();
 			const paragraph = chatTest.readingParagraph();
 			chatTest.readingParagraphElement = paragraph;
 			const range = document.createRange();

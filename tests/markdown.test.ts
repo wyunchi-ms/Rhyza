@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeMarkdownEmphasis, normalizeMarkdownMathDelimiters } from "../src/utils/markdown";
+import {
+	isMarkdownCodeBlock,
+	normalizeMarkdownEmphasis,
+	normalizeMarkdownMathDelimiters,
+} from "../src/utils/markdown";
+
+test("unlabelled fenced headings and tables render as Markdown without reinterpreting code languages", () => {
+	const source = "### 核心组件\n\n| 组件 | 职责 |\n|---|---|\n| `Worker` | 处理消息 |";
+	assert.equal(isMarkdownCodeBlock(undefined, source), true);
+	assert.equal(isMarkdownCodeBlock("language-markdown", "## Title"), true);
+	assert.equal(isMarkdownCodeBlock("language-MD", "## Title"), true);
+	for (const language of ["language-js", "language-python", "language-text", "language-json"]) {
+		assert.equal(isMarkdownCodeBlock(language, source), false);
+	}
+	for (const plainCode of [
+		"### Python comment\nprint('hello')",
+		"A | B\n--- | ---",
+		"### Heading only",
+		"console.log('hi')",
+	]) {
+		assert.equal(isMarkdownCodeBlock(undefined, plainCode), false);
+	}
+});
 
 test("moves trailing whitespace outside strong emphasis delimiters", () => {
 	assert.equal(

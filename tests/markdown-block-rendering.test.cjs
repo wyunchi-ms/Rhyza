@@ -80,7 +80,8 @@ if (!process.versions.electron) {
 		"[Unsafe](javascript:alert(1))",
 	].join("\n");
 	const code = "const answer = 42;";
-	const content = `# Answer\n\n\`\`\`\`markdown\n${source}\n\`\`\`\`\n\n\`\`\`js\n${code}\n\`\`\`\n\n\`\`\`MD\n### Alias heading\n\`\`\`\n\nNormal \`inline\` code.`;
+	const inferredSource = "### 核心组件\n\n| 组件 | 职责 |\n|---|---|\n| `Worker` | 处理消息 |";
+	const content = `# Answer\n\n\`\`\`\`markdown\n${source}\n\`\`\`\`\n\n\`\`\`js\n${code}\n\`\`\`\n\n\`\`\`MD\n### Alias heading\n\`\`\`\n\nNormal \`inline\` code.\n\n\`\`\`text\n${inferredSource}\n\`\`\`\n\n\`\`\`\n${inferredSource}\n\`\`\``;
 	const preview = ".is-markdown-preview > .markdown-fence-preview";
 	const copy = ".is-markdown-preview > .markdown-source-copy";
 
@@ -159,8 +160,25 @@ if (!process.versions.electron) {
 			`http://127.0.0.1:${server.httpServer.address().port}/__markdown-block-test`,
 		);
 		await until(
-			`document.querySelectorAll(${JSON.stringify(preview)}).length === 2`,
-			"both Markdown language aliases",
+			`document.querySelectorAll(${JSON.stringify(preview)}).length === 3`,
+			"Markdown language aliases and unlabelled heading/table block",
+		);
+		assert.equal(
+			await host('document.querySelector(".language-text").textContent.trim()'),
+			inferredSource,
+			"explicit text examples remain literal",
+		);
+		assert.equal(
+			await host(
+				`document.querySelectorAll(${JSON.stringify(preview)})[2].querySelector("h3").textContent`,
+			),
+			"核心组件",
+		);
+		assert.equal(
+			await host(
+				`document.querySelectorAll(${JSON.stringify(preview)})[2].querySelectorAll("table tbody tr").length`,
+			),
+			1,
 		);
 		assert.equal(
 			await host(
