@@ -20,6 +20,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import "./sessionGraphInteraction.css";
 import { useAppStore } from "../store";
+import { UnreadIndicator } from "./UnreadIndicator";
+import { isTurnUnread } from "../utils/turnReadState";
 import { useConversationFocus } from "../store/conversationFocus";
 import type { SessionNode, SessionProgressStatus } from "../types";
 import { NodeInformation } from "./NodeInformation";
@@ -535,6 +537,7 @@ function SessionGraphNode({ data }: NodeProps<SessionGraphNodeData>) {
 				<header>
 					<ProgressMarker status={data.progressStatus} active={false} />
 					<strong>{data.round.title}</strong>
+					{!data.isRunning && data.round.answers.some(isTurnUnread) && <UnreadIndicator />}
 					{sourcePaths && (
 						<span className="summary-node-badge" title={t("Summary")}>
 							<FileText size={12} /> {sourcePaths.length}

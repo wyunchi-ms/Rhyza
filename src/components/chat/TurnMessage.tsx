@@ -36,6 +36,7 @@ import { createPortal, flushSync } from "react-dom";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { getRhyzaBridge } from "../../hooks/useRhyzaBridge";
+import { useTurnReadState } from "../../hooks/useTurnReadState";
 import { useTranslation } from "../../i18n";
 import { useAppStore } from "../../store";
 import { parseReferences } from "../../utils/composerInput";
@@ -113,6 +114,7 @@ export const TurnMessage = memo(function TurnMessage({
 	const timestamp = formatChatTimestamp(turn.createdAt);
 	const fullTimestamp = formatFullChatTimestamp(turn.createdAt);
 	const [collapsed, setCollapsed] = useState(false);
+	const readRef = useTurnReadState(turn, collapsed);
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [detailsPinned, setDetailsPinned] = useState(false);
 	const [detailsPlacement, setDetailsPlacement] = useState<"top" | "bottom">("top");
@@ -213,7 +215,7 @@ export const TurnMessage = memo(function TurnMessage({
 							{turn.summary || "Assistant response"}
 						</p>
 					)}
-					<div className="turn-expanded-content" hidden={collapsed && !isUser}>
+					<div ref={readRef} className="turn-expanded-content" hidden={collapsed && !isUser}>
 						{isUser && turn.pathSummary && <PathSummarySources snapshot={turn.pathSummary} />}
 						<TurnBubbleContent
 							turn={turn}

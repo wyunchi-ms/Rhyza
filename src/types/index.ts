@@ -77,6 +77,8 @@ export interface Turn {
 	inheritedUsage?: TokenUsage;
 	createdAt: string;
 	completedAt?: string;
+	/** Completed assistant output not yet displayed in the foreground reading pane. */
+	unread?: boolean;
 }
 
 export interface TurnImage {

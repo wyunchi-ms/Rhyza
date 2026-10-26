@@ -101,6 +101,7 @@ export function cloneSessionNode(
 		id: ids.get(turn.id)!,
 		sessionId: cloneSessionId,
 		sourceTurnId: undefined,
+		unread: false,
 		changeSetId: undefined,
 		modelRequests: undefined,
 		cacheRequest: undefined,

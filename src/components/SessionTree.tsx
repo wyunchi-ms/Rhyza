@@ -18,6 +18,8 @@ import { useNavigate } from "react-router-dom";
 import { getRhyzaBridge } from "../hooks/useRhyzaBridge";
 import { providerModelSelection } from "../shared/providers";
 import { useAppStore } from "../store";
+import { UnreadIndicator } from "./UnreadIndicator";
+import { isTurnUnread } from "../utils/turnReadState";
 import { useConversationFocus } from "../store/conversationFocus";
 import {
 	allocateConversationTreeUsage,
@@ -356,6 +358,7 @@ const SessionGroup = ({
 		const children = getChildren(node.id);
 		const session = sessions.find((item) => item.id === node.sessionId);
 		const running = node.rounds.some((round) => round.answers.some(isTurnActive));
+		const unread = node.rounds.some((round) => round.answers.some(isTurnUnread));
 		const last = node.rounds[node.rounds.length - 1];
 		const status = roundMetrics(last).status;
 		const isBranchPoint = children.length > 0;
@@ -424,6 +427,7 @@ const SessionGroup = ({
 								<FileText size={13} aria-label={t("Summary")} />
 							)}
 							<SessionNodeTitle title={node.title} />
+							{!running && unread && <UnreadIndicator />}
 							{(session?.titlePending || running) && (
 								<LoaderCircle
 									size={12}
