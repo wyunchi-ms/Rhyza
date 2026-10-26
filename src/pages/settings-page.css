@@ -181,7 +181,7 @@ html[data-theme] .settings-page .settings-navigation nav button.is-active {
 }
 
 .settings-page .settings-section-header {
-	margin-bottom: 0.7rem;
+	margin-bottom: 1.25rem;
 }
 
 html[data-theme] .settings-page .settings-section-header h1 {
@@ -190,7 +190,7 @@ html[data-theme] .settings-page .settings-section-header h1 {
 	gap: 0.55rem;
 	margin: 0;
 	color: var(--color-primary);
-	font-size: 0.9375rem;
+	font-size: 1.25rem;
 	font-weight: 600;
 	letter-spacing: -0.015em;
 	line-height: 1.5;
@@ -215,12 +215,12 @@ html[data-theme] .settings-page .settings-section-header p {
 html[data-theme] .settings-page .settings-section > .settings-panel {
 	min-width: 0;
 	margin: 0;
-	border: 1px solid var(--ui-border) !important;
-	border-radius: 0.75rem !important;
-	background: var(--color-surface) !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+	background: transparent !important;
 	color: var(--color-primary);
-	box-shadow: var(--ui-shadow-sm) !important;
-	padding: 0 1.25rem;
+	box-shadow: none !important;
+	padding: 0;
 }
 
 .settings-page .settings-row {
@@ -425,7 +425,7 @@ html[data-theme] .settings-page .settings-search input:focus-visible {
 }
 
 html[data-theme] .settings-page .settings-section > .theme-settings {
-	padding: 1.25rem;
+	padding: 0;
 }
 
 .settings-page .theme-options {
@@ -462,12 +462,6 @@ html[data-theme] .settings-page .theme-options strong {
 	line-height: 1.5;
 }
 
-html[data-theme] .settings-page .theme-options small {
-	color: var(--color-secondary);
-	font-size: 0.6875rem;
-	line-height: 1.5;
-}
-
 html[data-theme] .settings-page .theme-options input {
 	flex-shrink: 0;
 	border-color: var(--color-secondary);
@@ -479,10 +473,6 @@ html[data-theme] .settings-page .theme-options input:checked {
 
 html[data-theme] .settings-page .theme-options input::before {
 	background: var(--ui-brand-ink);
-}
-
-html[data-theme] .settings-page .settings-theme-note {
-	margin-top: 0.85rem;
 }
 
 .settings-page .settings-switch,
@@ -810,10 +800,6 @@ html.high-contrast .settings-page .settings-section-header p {
 }
 
 @container settings (max-width: 28rem) {
-	html[data-theme] .settings-page .settings-section > .settings-panel {
-		padding-inline: 1rem;
-	}
-
 	.settings-page .theme-options {
 		grid-template-columns: minmax(0, 1fr);
 	}

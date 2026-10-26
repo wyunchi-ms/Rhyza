@@ -107,7 +107,6 @@ const Settings: React.FC = () => {
 						>
 							<header className="settings-section-header">
 								<h1 id="language-heading">{t("Language")}</h1>
-								<p>{t("Choose the language used throughout Rhyza.")}</p>
 							</header>
 							<div className="settings-panel">
 								<div className="settings-row settings-row--field">
@@ -152,7 +151,6 @@ const Settings: React.FC = () => {
 						>
 							<header className="settings-section-header">
 								<h1 id="mcp-heading">{t("MCP servers")}</h1>
-								<p>{t("Connect external tools and resources with explicit permissions.")}</p>
 							</header>
 							{selectedSection === "mcp-heading" && <McpSettings />}
 						</section>
@@ -166,7 +164,6 @@ const Settings: React.FC = () => {
 								<h1 id="appearance-heading">
 									<Palette size={17} aria-hidden="true" /> {t("Appearance")}
 								</h1>
-								<p>{t("Choose a comfortable environment for your workspace.")}</p>
 							</header>
 							<fieldset className="settings-panel theme-settings">
 								<legend className="sr-only">{t("App theme")}</legend>
@@ -182,7 +179,6 @@ const Settings: React.FC = () => {
 										<Sun size={18} aria-hidden="true" />
 										<span>
 											<strong>{t("Light")}</strong>
-											<small>{t("Bright surfaces and dark text")}</small>
 										</span>
 									</label>
 									<label className={clsx(settings.theme === "dark" && "is-selected")}>
@@ -196,13 +192,9 @@ const Settings: React.FC = () => {
 										<Moon size={18} aria-hidden="true" />
 										<span>
 											<strong>{t("Dark")}</strong>
-											<small>{t("Dim surfaces for low-light use")}</small>
 										</span>
 									</label>
 								</div>
-								<p className="settings-help settings-theme-note">
-									{t("Interactive diagrams follow the app theme automatically.")}
-								</p>
 							</fieldset>
 						</section>
 
@@ -215,7 +207,6 @@ const Settings: React.FC = () => {
 								<h1 id="provider-heading">
 									<Cloud size={17} aria-hidden="true" /> {t("AI provider")}
 								</h1>
-								<p>{t("Manage your connection and the model used for new requests.")}</p>
 							</header>
 							<div className="settings-panel">
 								<div className="settings-row settings-row--field">
@@ -346,15 +337,11 @@ const Settings: React.FC = () => {
 											<label htmlFor="model-select" className="settings-label">
 												{t("Default model")}
 											</label>
-											<p id="model-help" className="settings-help">
-												{t("Use the provider default or choose an available model.")}
-											</p>
 										</div>
 										<Select
 											id="model-select"
 											value={selectedModel}
 											onChange={(e) => updateSettings({ defaultModel: e.target.value })}
-											aria-describedby="model-help"
 											className="field settings-input"
 										>
 											<option value="">{t("Use provider default")}</option>
@@ -403,7 +390,6 @@ const Settings: React.FC = () => {
 								<h1 id="knowledge-heading">
 									<Brain size={17} aria-hidden="true" /> {t("Knowledge policy")}
 								</h1>
-								<p>{t("Control knowledge updates and request behavior.")}</p>
 							</header>
 							<div className="settings-panel">
 								<div className="settings-row">
@@ -543,7 +529,6 @@ const Settings: React.FC = () => {
 								<h1 id="accessibility-heading">
 									<Accessibility size={17} aria-hidden="true" /> {t("Accessibility")}
 								</h1>
-								<p>{t("Adjust motion, contrast, and text size to suit you.")}</p>
 							</header>
 							<div className="settings-panel">
 								<div className="settings-row">
@@ -551,16 +536,12 @@ const Settings: React.FC = () => {
 										<label htmlFor="reduce-motion" className="settings-label">
 											{t("Reduce motion")}
 										</label>
-										<p id="reduce-motion-help" className="settings-help">
-											{t("Limit animations and animated transitions.")}
-										</p>
 									</div>
 									<input
 										id="reduce-motion"
 										type="checkbox"
 										role="switch"
 										className="settings-switch-input"
-										aria-describedby="reduce-motion-help"
 										checked={settings.reduceMotion}
 										onChange={(event) => updateSettings({ reduceMotion: event.target.checked })}
 									/>
@@ -570,16 +551,12 @@ const Settings: React.FC = () => {
 										<label htmlFor="high-contrast" className="settings-label">
 											{t("High contrast")}
 										</label>
-										<p id="high-contrast-help" className="settings-help">
-											{t("Increase contrast for text and interface borders.")}
-										</p>
 									</div>
 									<input
 										id="high-contrast"
 										type="checkbox"
 										role="switch"
 										className="settings-switch-input"
-										aria-describedby="high-contrast-help"
 										checked={settings.highContrast}
 										onChange={(event) => updateSettings({ highContrast: event.target.checked })}
 									/>
