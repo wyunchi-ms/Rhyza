@@ -17,6 +17,7 @@
 | Conversation | 列表/节点视图           | Available | 左侧面板可切换树列表与 Session Graph                                          |
 | Conversation | 路径汇总                | Available | 列表和 Node view 共用高亮多选；去重汇总根到终点的用户/Agent 正文，生成可继续聊天的节点，来源由汇合点连线并标注在卡片内 |
 | Conversation | 节点状态与恢复          | Available | 区分 queued、retrieving、running、complete、error 等活动状态                  |
+| Conversation | 回复未读提示            | Available | 完成但未查看的回复在列表与节点视图显示黄色铃铛；前台阅读后清除，按工作区保存，共享分支历史同步 |
 | Conversation | 全局 Chat 搜索          | Available | `Ctrl+Shift+F`                                                                 |
 | Conversation | 图片输入                | Available | Composer 可附加图片，由所选 Provider/模型决定是否支持；Azure OpenAI 当前仅支持文本                                   |
 | Conversation | Markdown 代码块预览     | Available | `markdown` / `md` 围栏渲染为正文，悬停或聚焦显示复制源码；其他代码块保留代码显示，待办状态仅供展示 |

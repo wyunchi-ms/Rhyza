@@ -36,6 +36,7 @@ import {
 import { cloneSessionNode, forkSessionAtTurn, forkSessionNode } from "../utils/sessionFork";
 import { announceForkDebug, createForkDebugSnapshot } from "../utils/forkDebug";
 import { isTurnActive, syncSessionExecutionStatus } from "../utils/sessionRuntime";
+import { markTurnsRead, patchTurnReadState } from "../utils/turnReadState";
 import { addUsage, emptyUsage } from "../utils/branchUsage";
 import { errorToMessage, isRecord } from "../shared/value";
 import { normalizeProviderSettings, updateProviderSettings } from "../shared/providers";
@@ -112,6 +113,7 @@ interface AppState {
 	addTurnUsage: (id: string, usage?: import("../types").TokenUsage) => void;
 	addManualTurn: (turn: Turn) => void;
 	updateTurn: (turnId: string, patch: Partial<Turn>) => void;
+	markTurnRead: (turnId: string) => void;
 	finalizeTurn: (
 		sessionId: string,
 		turnId: string,
@@ -393,6 +395,7 @@ export const useAppStore = create<AppState>()(
 							role: "assistant",
 							content,
 							status: pending ? "running" : "complete",
+							unread: !pending,
 							createdAt: now,
 							...(!pending && { completedAt: now }),
 							usage,
@@ -420,7 +423,7 @@ export const useAppStore = create<AppState>()(
 					),
 					turns: current.turns.map((turn) =>
 						turn.sessionId === id && turn.role === "assistant"
-							? { ...turn, content, status: "complete", completedAt: now, usage }
+							? patchTurnReadState(turn, { content, status: "complete", completedAt: now, usage })
 							: turn,
 					),
 				}));
@@ -612,8 +615,15 @@ export const useAppStore = create<AppState>()(
 			addManualTurn: (turn) => set((state) => ({ turns: [...state.turns, turn] })),
 			updateTurn: (turnId, patch) =>
 				set((state) => ({
-					turns: state.turns.map((turn) => (turn.id === turnId ? { ...turn, ...patch } : turn)),
+					turns: state.turns.map((turn) =>
+						turn.id === turnId ? patchTurnReadState(turn, patch) : turn,
+					),
 				})),
+			markTurnRead: (turnId) =>
+				set((state) => {
+					const turns = markTurnsRead(state.turns, turnId);
+					return turns === state.turns ? state : { turns };
+				}),
 
 			finalizeTurn: (
 				sessionId,
@@ -629,7 +639,9 @@ export const useAppStore = create<AppState>()(
 					const completedAt = new Date().toISOString();
 					set((current) => {
 						const turns = current.turns.map((turn) =>
-							turn.id === turnId ? { ...turn, status: "complete" as const, completedAt } : turn,
+							turn.id === turnId
+								? patchTurnReadState(turn, { status: "complete", completedAt })
+								: turn,
 						);
 						return {
 							turns,
@@ -795,14 +807,13 @@ export const useAppStore = create<AppState>()(
 				set((current) => {
 					const turns = current.turns.map((turn) =>
 						turn.id === turnId
-							? {
-									...turn,
+							? patchTurnReadState(turn, {
 									content,
-									status: "complete" as const,
+									status: "complete",
 									completedAt: timestamp,
 									entities: mentions,
 									changeSetId: operations.length ? changeSetId : undefined,
-								}
+								})
 							: turn,
 					);
 					return {
