@@ -179,7 +179,6 @@ const Sources = () => {
 			<header className="page-header library-page-header">
 				<div>
 					<h1 className="page-title">{t("Workspace")}</h1>
-					<p className="page-subtitle">{t("Manage the working directory and indexed sources.")}</p>
 				</div>
 			</header>
 			<section className="sources-workspace-card" aria-labelledby="sources-workspace-heading">

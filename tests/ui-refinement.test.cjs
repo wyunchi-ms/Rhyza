@@ -2408,13 +2408,26 @@ if (!process.versions.electron) {
 	async function checkPageControls() {
 		browser.setContentSize(1440, 960);
 		await navigate("/knowledge", ".knowledge-page-header h1");
+		assert.equal(
+			await host('Boolean(document.querySelector(".knowledge-resource-pane .knowledge-search"))'),
+			true,
+			"knowledge search belongs to the list it filters, not the page toolbar",
+		);
 		await setInput(".knowledge-search input", "no-such-knowledge-entry");
 		assert.equal(
 			await host('document.querySelectorAll(".knowledge-resource-list button").length'),
 			0,
 			"knowledge filtering exposes the no-results state",
 		);
-		await setInput(".knowledge-search input", "");
+		assert.equal(
+			await host(
+				'document.querySelector(".knowledge-resource-pane [role=status]").textContent.trim()',
+			),
+			"0 of 1",
+			"filter results remain announced without duplicating the tab count",
+		);
+		await host('document.querySelector(".knowledge-search-clear").click()');
+		await settle();
 		assert.equal(
 			await host('document.querySelectorAll(".knowledge-resource-list button").length'),
 			1,
@@ -2477,6 +2490,16 @@ if (!process.versions.electron) {
 			'Boolean(document.querySelector(".changes-code-empty, [role=alert]"))',
 			"code diff state without desktop bridge",
 		);
+		assert.equal(
+			await host(`(() => {
+				const panel = document.querySelector(".changes-code-panel");
+				const guidance = "Open and run a session before viewing its worktree diff.";
+				return [...panel.querySelectorAll("p, span")]
+					.filter(element => element.textContent.trim() === guidance).length;
+			})()`),
+			1,
+			"missing-session guidance appears once, in the empty state",
+		);
 		await host('document.querySelector("#changes-knowledge-tab").click()');
 		await settle();
 
@@ -2490,6 +2513,15 @@ if (!process.versions.electron) {
 			await host('document.querySelector(".settings-content .page-header")'),
 			null,
 			"settings no longer repeats a page-level title",
+		);
+		assert.equal(
+			await host(`(() => {
+				const panel = document.querySelector(".settings-section:not([hidden]) > .settings-panel");
+				const style = getComputedStyle(panel);
+				return style.borderTopWidth === "0px" && style.boxShadow === "none";
+			})()`),
+			true,
+			"settings use aligned rows instead of an additional bordered card",
 		);
 		assert.equal(await host('document.querySelector(".app-sidebar").inert'), true);
 		assert.equal(
