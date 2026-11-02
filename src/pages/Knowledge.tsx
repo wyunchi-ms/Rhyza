@@ -137,7 +137,6 @@ const Knowledge = () => {
 		<div className="knowledge-page library-page flex-1 overflow-hidden">
 			<header className="knowledge-page-header">
 				<div>
-					<p className="knowledge-eyebrow">{t("Workspace library")}</p>
 					<h1 className="page-title">{t("Knowledge")}</h1>
 				</div>
 				<div
@@ -214,27 +213,6 @@ const Knowledge = () => {
 						/>
 						<span>{rebuildState.status === "running" ? "Rebuilding…" : "Rebuild relations"}</span>
 					</button>
-					<label className="knowledge-search">
-						<span className="sr-only">Search {mode}</span>
-						<Search size={16} />
-						<input
-							disabled={resourceCount === 0}
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder={resourceCount === 0 ? `No ${mode} to search` : `Search ${mode}`}
-						/>
-						{search && (
-							<button
-								type="button"
-								className="knowledge-search-clear"
-								onClick={() => setSearch("")}
-								aria-label="清除搜索"
-								title="清除搜索"
-							>
-								<X size={14} />
-							</button>
-						)}
-					</label>
 					{rebuildState.message && (
 						<p className={`knowledge-rebuild-feedback is-${rebuildState.status}`} role="status">
 							{rebuildState.message}
@@ -250,11 +228,31 @@ const Knowledge = () => {
 			>
 				<aside className="knowledge-resource-pane" aria-label={`${mode} list`}>
 					<div className="knowledge-resource-heading">
-						<strong>{mode === "entities" ? "All entities" : "All diagrams"}</strong>
-						<span role="status">
-							{search ? `${filteredResourceCount} of ${resourceCount}` : `${resourceCount} total`}
-						</span>
+						<label className="knowledge-search">
+							<span className="sr-only">Search {mode}</span>
+							<Search size={16} aria-hidden="true" />
+							<input
+								disabled={resourceCount === 0}
+								value={search}
+								onChange={(event) => setSearch(event.target.value)}
+								placeholder={resourceCount === 0 ? `No ${mode} to search` : `Search ${mode}`}
+							/>
+							{search && (
+								<button
+									type="button"
+									className="knowledge-search-clear"
+									onClick={() => setSearch("")}
+									aria-label={t("Clear search")}
+									title={t("Clear search")}
+								>
+									<X size={14} />
+								</button>
+							)}
+						</label>
 					</div>
+					<p className="sr-only" role="status">
+						{search ? `${filteredResourceCount} of ${resourceCount}` : `${resourceCount} total`}
+					</p>
 					<div className="knowledge-resource-list">
 						{mode === "entities"
 							? filtered.map((entity) => (

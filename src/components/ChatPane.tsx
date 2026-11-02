@@ -776,13 +776,6 @@ export const ChatPane: React.FC = () => {
 					<div className="chat-empty">
 						<img className="brand-mark large" src={appIcon} alt="" width={40} height={40} />
 						<h2>{t("What do you want to understand?")}</h2>
-						<p>
-							{t("Start with a question. Follow a new thread when an idea deserves a closer look.")}
-						</p>
-						<div className="chat-empty-hint">
-							<span>{t("Use @ to reference knowledge")}</span>
-							<span>{t("Use / for commands")}</span>
-						</div>
 					</div>
 				)}
 			</div>

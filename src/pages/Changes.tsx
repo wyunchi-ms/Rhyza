@@ -82,9 +82,6 @@ const Changes = () => {
 				<header className="page-header library-page-header">
 					<div>
 						<h1 className="page-title">{t("Changes")}</h1>
-						<p className="page-subtitle">
-							{t("Audited knowledge transactions and session code changes.")}
-						</p>
 					</div>
 					<div
 						className="segmented changes-tabs"
@@ -140,13 +137,11 @@ const Changes = () => {
 						role="tabpanel"
 						aria-labelledby="changes-knowledge-tab"
 					>
-						<div className="library-section-heading">
-							<h2>{t("Knowledge history")}</h2>
-							<span>
-								{changesets.length} {t("recorded")}
-								{proposedCount > 0 ? ` · ${proposedCount} ${t("awaiting review")}` : ""}
-							</span>
-						</div>
+						{proposedCount > 0 && (
+							<p className="changes-review-status" role="status">
+								{proposedCount} {t("awaiting review")}
+							</p>
+						)}
 						{changesets.length > 0 ? (
 							<KnowledgeChangeHistory />
 						) : (
@@ -200,11 +195,6 @@ const Changes = () => {
 								>
 									<Download size={14} /> {exporting ? t("Exporting…") : t("Export patch")}
 								</button>
-								{!workspace && (
-									<span className="text-xs text-secondary">
-										{t("Open and run a session before viewing its worktree diff.")}
-									</span>
-								)}
 							</div>
 						</div>
 						{exportFeedback && (
